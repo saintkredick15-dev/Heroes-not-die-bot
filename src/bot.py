@@ -8,25 +8,32 @@ from rich.progress import Progress
 
 log = Logger("BOT")
 
-# Load configuration
+# Завантаження конфігу
 try:
     with open("../config.json", "r", encoding="utf-8") as f:
         config = json.load(f)
 except FileNotFoundError:
-    log.error("config.json file not found")
-    exit(1)
-except json.JSONDecodeError:
-    log.error("Invalid JSON in config.json")
-    exit(1)
+    # Спробуємо знайти конфіг в поточній папці (якщо запуск з src)
+    try:
+        with open("config.json", "r", encoding="utf-8") as f:
+            config = json.load(f)
+    except:
+        log.error("config.json file not found")
+        exit(1)
 
-# Load environment variables
+# Завантаження змінних середовища
 load_dotenv("../.env")
 TOKEN = os.getenv("TOKEN")
+
+# Якщо токена немає, пробуємо шукати .env в поточній папці
+if not TOKEN:
+    load_dotenv(".env")
+    TOKEN = os.getenv("TOKEN")
+
 if not TOKEN:
     log.error("TOKEN not found in .env file")
     exit(1)
 
-# Configure bot intents
 intents = discord.Intents.default()
 intents.messages = True
 intents.guilds = True
@@ -35,7 +42,6 @@ intents.reactions = True
 intents.voice_states = True
 intents.message_content = True
 
-# Initialize bot
 bot = commands.Bot(command_prefix=config.get("prefix", "!"), intents=intents)
 
 @bot.event
@@ -48,21 +54,25 @@ async def setup_hook():
     errors = 0
     extensions = []
     
-    # Collect all extensions
-    if os.path.exists('./events'):
-        for filename in os.listdir('./events'):
+    # --- ВИПРАВЛЕННЯ ШЛЯХІВ ТУТ ---
+    
+    # 1. Шукаємо івенти в src/events
+    if os.path.exists('./src/events'):
+        for filename in os.listdir('./src/events'):
             if filename.endswith('.py') and not filename.startswith('_'):
-                extensions.append(('event', f'events.{filename[:-3]}', filename[:-3]))
+                # Важливо: додаємо 'src.' на початок
+                extensions.append(('event', f'src.events.{filename[:-3]}', filename[:-3]))
     
-    if os.path.exists('./commands'):
-        for category in os.listdir('./commands'):
-            if os.path.isdir(f'./commands/{category}'):
-                for filename in os.listdir(f'./commands/{category}'):
-                    # ВИПРАВЛЕННЯ: Ігноруємо файли, що починаються з '_'
+    # 2. Шукаємо команди в src/commands
+    if os.path.exists('./src/commands'):
+        for category in os.listdir('./src/commands'):
+            if os.path.isdir(f'./src/commands/{category}'):
+                for filename in os.listdir(f'./src/commands/{category}'):
                     if filename.endswith('.py') and not filename.startswith('_'):
-                        extensions.append(('command', f'commands.{category}.{filename[:-3]}', f'{category}.{filename[:-3]}'))
+                        # Важливо: додаємо 'src.' на початок
+                        extensions.append(('command', f'src.commands.{category}.{filename[:-3]}', f'{category}.{filename[:-3]}'))
     
-    # Load with progress bar
+    # Завантаження з прогрес-баром
     with Progress() as progress:
         task = progress.add_task("[green]Loading extensions...", total=len(extensions))
         
@@ -78,7 +88,6 @@ async def setup_hook():
     
     log.info(f"Extensions loaded: {success} success, {errors} errors")
     
-    # Sync slash commands globally
     await bot.tree.sync()
     log.info("Synced slash commands globally")
 
