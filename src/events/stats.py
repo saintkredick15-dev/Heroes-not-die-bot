@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands, tasks
 from src.modules.db import get_database
 
+
 db = get_database()
 
 class BotStats(commands.Cog):

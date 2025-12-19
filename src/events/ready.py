@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 import json
+import os
 
 class ReadyEvents(commands.Cog):
     def __init__(self, bot):
@@ -10,15 +11,12 @@ class ReadyEvents(commands.Cog):
     async def on_ready(self):
         print(f'Logged in as {self.bot.user}')
         
-        # Load guild ID from config
+        # Сінхронізація команд (щоб вони з'явилися на сервері)
         try:
-            with open("../config.json", "r", encoding="utf-8") as f:
-                config = json.load(f)
-            guild_id = config.get("guild")
-            if guild_id:
-                await self.bot.tree.sync(guild=discord.Object(id=guild_id))
-        except FileNotFoundError:
-            print("Warning: config.json not found, skipping guild sync")
+            synced = await self.bot.tree.sync()
+            print(f"Synced {len(synced)} command(s) globally.")
+        except Exception as e:
+            print(f"Failed to sync commands: {e}")
 
 async def setup(bot):
     await bot.add_cog(ReadyEvents(bot))

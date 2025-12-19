@@ -1,7 +1,8 @@
 import discord
 from discord.ext import commands, tasks
 from datetime import datetime
-from modules.db import get_database
+from src.modules.db import get_database
+
 
 db = get_database()
 
