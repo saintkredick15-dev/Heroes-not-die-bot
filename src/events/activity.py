@@ -3,7 +3,6 @@ from discord.ext import commands, tasks
 from datetime import datetime
 from src.modules.db import get_database
 
-
 db = get_database()
 
 async def get_user_data(guild_id, user_id):
@@ -22,9 +21,13 @@ async def get_user_data(guild_id, user_id):
         await db.users.insert_one(user)
     return user
 
-async def update_user_data(guild_id, user_id, update_data):
+async def update_user_data(guild_id, user: discord.Member, update_data):
+    # Додаємо збереження імені та аватару для сайту
+    update_data["username"] = user.display_name
+    update_data["avatar"] = user.display_avatar.url if user.display_avatar else None
+    
     await db.users.update_one(
-        {"guild_id": guild_id, "user_id": user_id},
+        {"guild_id": guild_id, "user_id": user.id},
         {"$set": update_data}
     )
 
@@ -37,12 +40,11 @@ async def level_up_check(message, user_data):
         user_data["xp"] -= needed_xp
         user_data["level"] += 1
         
-        await update_user_data(message.guild.id, message.author.id, {
+        # Передаємо об'єкт member, а не просто ID
+        await update_user_data(message.guild.id, message.author, {
             "xp": user_data["xp"],
             "level": user_data["level"]
         })
-        
-        # Повідомлення про підвищення рівня видалено
 
 class ActivityEvents(commands.Cog):
     def __init__(self, bot):
@@ -67,7 +69,7 @@ class ActivityEvents(commands.Cog):
         }
         
         user_data.update(update_data)
-        await update_user_data(message.guild.id, message.author.id, update_data)
+        await update_user_data(message.guild.id, message.author, update_data)
         await level_up_check(message, user_data)
 
     @commands.Cog.listener()
@@ -87,7 +89,7 @@ class ActivityEvents(commands.Cog):
             "history": history
         }
         
-        await update_user_data(reaction.message.guild.id, user.id, update_data)
+        await update_user_data(reaction.message.guild.id, user, update_data)
 
     @tasks.loop(minutes=1)
     async def update_voice_time(self):
@@ -107,7 +109,7 @@ class ActivityEvents(commands.Cog):
                             "history": history
                         }
                         
-                        await update_user_data(guild.id, member.id, update_data)
+                        await update_user_data(guild.id, member, update_data)
 
 async def setup(bot):
     await bot.add_cog(ActivityEvents(bot))
