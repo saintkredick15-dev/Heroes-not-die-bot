@@ -3,8 +3,10 @@ from discord import app_commands
 from discord.ext import commands
 from datetime import datetime
 from modules.db import get_database
+from modules.logger import Logger
 
 db = get_database()
+log = Logger("Tickets")
 
 class TicketView(discord.ui.View):
     def __init__(self):
@@ -15,58 +17,61 @@ class TicketView(discord.ui.View):
         await self.create_ticket(interaction)
 
     async def create_ticket(self, interaction: discord.Interaction):
-        # Перевірка на вже відкритий тікет
-        existing_ticket = await db.tickets.find_one({
-            "guild_id": interaction.guild.id,
-            "user_id": interaction.user.id,
-            "status": "open"
-        })
-
-        if existing_ticket:
-            channel = interaction.guild.get_channel(existing_ticket["channel_id"])
-            if channel:
-                await interaction.response.send_message(
-                    f"У вас вже є відкритий тікет: {channel.mention}",
-                    ephemeral=True
-                )
-                return
-            else:
-                # Якщо канал не знайдено (видалений вручну), оновлюємо статус в базі
-                await db.tickets.update_one(
-                    {"_id": existing_ticket["_id"]},
-                    {"$set": {"status": "closed_manually"}}
-                )
-
-        # Отримуємо конфігурацію гільдії (для ролей модераторів і категорії)
-        guild_config = await db.ticket_config.find_one({"guild_id": interaction.guild.id})
-        moderator_role_ids = guild_config.get("moderator_role_ids", []) if guild_config else []
-        
-        # Створення каналу
-        # Спробуємо знайти категорію "Tickets" або створити нову
-        category = discord.utils.get(interaction.guild.categories, name="Tickets")
-        if not category:
-            overwrites = {
-                interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
-                interaction.guild.me: discord.PermissionOverwrite(read_messages=True)
-            }
-            category = await interaction.guild.create_category("Tickets", overwrites=overwrites)
-
-        # Права доступу для тікета
-        overwrites = {
-            interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True),
-            interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True)
-        }
-
-        # Додаємо ролі модераторів
-        for role_id in moderator_role_ids:
-            role = interaction.guild.get_role(role_id)
-            if role:
-                overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
-
-        ticket_name = f"ticket-{interaction.user.name}"
+        # Одразу відповідаємо Discord, щоб уникнути "Interaction failed"
+        await interaction.response.defer(ephemeral=True)
         
         try:
+            # Перевірка на вже відкритий тікет
+            existing_ticket = await db.tickets.find_one({
+                "guild_id": interaction.guild.id,
+                "user_id": interaction.user.id,
+                "status": "open"
+            })
+
+            if existing_ticket:
+                channel = interaction.guild.get_channel(existing_ticket["channel_id"])
+                if channel:
+                    await interaction.followup.send(
+                        f"У вас вже є відкритий тікет: {channel.mention}",
+                        ephemeral=True
+                    )
+                    return
+                else:
+                    # Якщо канал не знайдено (видалений вручну), оновлюємо статус в базі
+                    await db.tickets.update_one(
+                        {"_id": existing_ticket["_id"]},
+                        {"$set": {"status": "closed_manually"}}
+                    )
+
+            # Отримуємо конфігурацію гільдії (для ролей модераторів і категорії)
+            guild_config = await db.ticket_config.find_one({"guild_id": interaction.guild.id})
+            moderator_role_ids = guild_config.get("moderator_role_ids", []) if guild_config else []
+            
+            # Створення каналу
+            # Спробуємо знайти категорію "Tickets" або створити нову
+            category = discord.utils.get(interaction.guild.categories, name="Tickets")
+            if not category:
+                overwrites = {
+                    interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                    interaction.guild.me: discord.PermissionOverwrite(read_messages=True)
+                }
+                category = await interaction.guild.create_category("Tickets", overwrites=overwrites)
+
+            # Права доступу для тікета
+            overwrites = {
+                interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True),
+                interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True)
+            }
+
+            # Додаємо ролі модераторів
+            for role_id in moderator_role_ids:
+                role = interaction.guild.get_role(role_id)
+                if role:
+                    overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+            ticket_name = f"ticket-{interaction.user.name}"
+            
             channel = await interaction.guild.create_text_channel(
                 name=ticket_name,
                 category=category,
@@ -92,10 +97,11 @@ class TicketView(discord.ui.View):
             close_view = TicketCloseView()
             await channel.send(embed=embed, view=close_view)
             
-            await interaction.response.send_message(f"Тікет створено: {channel.mention}", ephemeral=True)
+            await interaction.followup.send(f"Тікет створено: {channel.mention}", ephemeral=True)
 
         except Exception as e:
-            await interaction.response.send_message(f"Помилка при створенні тікета: {e}", ephemeral=True)
+            log.error(f"Error creating ticket: {e}")
+            await interaction.followup.send(f"Виникла помилка при створенні тікета: {e}", ephemeral=True)
 
 class TicketCloseView(discord.ui.View):
     def __init__(self):
@@ -104,12 +110,16 @@ class TicketCloseView(discord.ui.View):
     @discord.ui.button(label="Закрити", style=discord.ButtonStyle.red, custom_id="ticket_btn_close", emoji="🔒")
     async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
-        # Логіка закриття
-        await db.tickets.update_one(
-            {"channel_id": interaction.channel_id},
-            {"$set": {"status": "closed", "closed_at": datetime.now()}}
-        )
-        await interaction.channel.delete()
+        try:
+            # Логіка закриття
+            await db.tickets.update_one(
+                {"channel_id": interaction.channel_id},
+                {"$set": {"status": "closed", "closed_at": datetime.now()}}
+            )
+            await interaction.channel.delete()
+        except Exception as e:
+            log.error(f"Error closing ticket: {e}")
+            await interaction.followup.send(f"Помилка при закритті: {e}", ephemeral=True)
 
 class TicketSystems(commands.Cog):
     def __init__(self, bot):
@@ -135,9 +145,11 @@ class TicketSystems(commands.Cog):
         button_label: str = "Відкрити",
         image_url: str = None
     ):
+        await interaction.response.defer(ephemeral=True)
+        
         # Перевірка прав (тільки для адмінів)
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("Ця команда доступна тільки адміністраторам.", ephemeral=True)
+            await interaction.followup.send("Ця команда доступна тільки адміністраторам.", ephemeral=True)
             return
 
         embed = discord.Embed(
@@ -158,16 +170,10 @@ class TicketSystems(commands.Cog):
             custom_id="ticket_btn_open",
             emoji="🎫"
         )
-        # Прив'язуємо колбек з TicketView до цієї кнопки, щоб логіка була спільною
-        # Або просто використовуємо TicketView, але змінюємо кнопку в ньому
-        # Найпростіше: створити нову кнопку, але з тим самим custom_id, який слухає наш глобальний TicketView
-        
-        # Важливо: Глобальний TicketView слухає "ticket_btn_open". 
-        # Якщо ми відправимо кнопку з цим ID, глобальний лістенер її підхопить.
         view.add_item(button)
 
         await channel.send(embed=embed, view=view)
-        await interaction.response.send_message(f"Панель тікетів успішно створено в каналі {channel.mention}", ephemeral=True)
+        await interaction.followup.send(f"Панель тікетів успішно створено в каналі {channel.mention}", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(TicketSystems(bot))
