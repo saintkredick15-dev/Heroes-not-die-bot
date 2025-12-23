@@ -43,19 +43,31 @@ class TicketView(discord.ui.View):
                         {"$set": {"status": "closed_manually"}}
                     )
 
-            # Отримуємо конфігурацію гільдії (для ролей модераторів і категорії)
+            # Отримуємо конфігурацію гільдії (тепер беремо з бази збережені налаштування)
             guild_config = await db.ticket_config.find_one({"guild_id": interaction.guild.id})
-            moderator_role_ids = guild_config.get("moderator_role_ids", []) if guild_config else []
             
+            # Дефолтні значення, якщо конфіг не знайдено
+            moderator_role_ids = []
+            ticket_category_id = None
+            
+            if guild_config:
+                moderator_role_ids = guild_config.get("support_role_ids", [])  # Нове поле для ролей
+                ticket_category_id = guild_config.get("ticket_category_id")
+
             # Створення каналу
-            # Спробуємо знайти категорію "Tickets" або створити нову
-            category = discord.utils.get(interaction.guild.categories, name="Tickets")
+            category = None
+            if ticket_category_id:
+                category = interaction.guild.get_channel(ticket_category_id)
+            
+            # Якщо категорія не налаштована або видалена, шукаємо "Tickets" або створюємо
             if not category:
-                overwrites = {
-                    interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
-                    interaction.guild.me: discord.PermissionOverwrite(read_messages=True)
-                }
-                category = await interaction.guild.create_category("Tickets", overwrites=overwrites)
+                category = discord.utils.get(interaction.guild.categories, name="Tickets")
+                if not category:
+                    overwrites_cat = {
+                        interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                        interaction.guild.me: discord.PermissionOverwrite(read_messages=True)
+                    }
+                    category = await interaction.guild.create_category("Tickets", overwrites=overwrites_cat)
 
             # Права доступу для тікета
             overwrites = {
@@ -64,11 +76,11 @@ class TicketView(discord.ui.View):
                 interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True)
             }
 
-            # Додаємо ролі модераторів
+            # Додаємо ролі модераторів (підтримки)
             for role_id in moderator_role_ids:
                 role = interaction.guild.get_role(role_id)
                 if role:
-                    overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                    overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True)
 
             ticket_name = f"ticket-{interaction.user.name}"
             
@@ -88,6 +100,14 @@ class TicketView(discord.ui.View):
             })
 
             # Повідомлення в тікеті
+            mentions = [interaction.user.mention]
+            for role_id in moderator_role_ids:
+                role = interaction.guild.get_role(role_id)
+                if role:
+                    mentions.append(role.mention)
+            
+            mention_str = " ".join(mentions)
+
             embed = discord.Embed(
                 title="Тікет відкрито",
                 description=f"Привіт {interaction.user.mention}! Опишіть вашу проблему, і модератори скоро зв'яжуться з вами.",
@@ -95,7 +115,7 @@ class TicketView(discord.ui.View):
             )
             
             close_view = TicketCloseView()
-            await channel.send(embed=embed, view=close_view)
+            await channel.send(content=mention_str, embed=embed, view=close_view)
             
             await interaction.followup.send(f"Тікет створено: {channel.mention}", ephemeral=True)
 
@@ -128,9 +148,13 @@ class TicketSystems(commands.Cog):
         self.bot.add_view(TicketView())
         self.bot.add_view(TicketCloseView())
 
-    @app_commands.command(name="tickets", description="Створити панель тікетів")
+    @app_commands.command(name="tickets", description="Налаштувати та створити панель тікетів")
     @app_commands.describe(
         channel="Канал для відправки панелі",
+        category="Категорія, де будуть створюватись тікети",
+        support_role1="Роль підтримки (адміни)",
+        support_role2="Додаткова роль підтримки",
+        support_role3="Додаткова роль підтримки",
         title="Заголовок для embed повідомлення",
         description="Текст опису",
         button_label="Текст на кнопці",
@@ -140,9 +164,13 @@ class TicketSystems(commands.Cog):
         self, 
         interaction: discord.Interaction, 
         channel: discord.TextChannel, 
-        description: str,
-        title: str = "Відкрий тикет",
-        button_label: str = "Відкрити",
+        category: discord.CategoryChannel = None,
+        support_role1: discord.Role = None,
+        support_role2: discord.Role = None,
+        support_role3: discord.Role = None,
+        description: str = "Натисніть кнопку нижче, щоб відкрити тікет",
+        title: str = "Підтримка",
+        button_label: str = "Відкрити тікет",
         image_url: str = None
     ):
         await interaction.response.defer(ephemeral=True)
@@ -152,28 +180,63 @@ class TicketSystems(commands.Cog):
             await interaction.followup.send("Ця команда доступна тільки адміністраторам.", ephemeral=True)
             return
 
-        embed = discord.Embed(
-            title=title,
-            description=description,
-            color=0x2b2d31
-        )
-        embed.set_footer(text="Powered by bot")
-        
-        if image_url:
-            embed.set_image(url=image_url)
+        try:
+            # Збираємо ролі
+            roles = []
+            if support_role1: roles.append(support_role1.id)
+            if support_role2: roles.append(support_role2.id)
+            if support_role3: roles.append(support_role3.id)
 
-        # Створення кнопки з параметрами користувача
-        view = discord.ui.View(timeout=None)
-        button = discord.ui.Button(
-            label=button_label,
-            style=discord.ButtonStyle.primary,
-            custom_id="ticket_btn_open",
-            emoji="🎫"
-        )
-        view.add_item(button)
+            # Зберігаємо налаштування в базу даних
+            update_data = {}
+            if category:
+                update_data["ticket_category_id"] = category.id
+            if roles:
+                update_data["support_role_ids"] = roles
+            
+            # Якщо є що оновлювати
+            if update_data:
+                await db.ticket_config.update_one(
+                    {"guild_id": interaction.guild.id},
+                    {"$set": update_data},
+                    upsert=True
+                )
 
-        await channel.send(embed=embed, view=view)
-        await interaction.followup.send(f"Панель тікетів успішно створено в каналі {channel.mention}", ephemeral=True)
+            # Створюємо embed для панелі
+            embed = discord.Embed(
+                title=title,
+                description=description,
+                color=0x2b2d31
+            )
+            embed.set_footer(text="Powered by bot")
+            
+            if image_url:
+                embed.set_image(url=image_url)
+
+            # Створення кнопки
+            view = discord.ui.View(timeout=None)
+            button = discord.ui.Button(
+                label=button_label,
+                style=discord.ButtonStyle.primary,
+                custom_id="ticket_btn_open",
+                emoji="🎫"
+            )
+            view.add_item(button)
+
+            await channel.send(embed=embed, view=view)
+            
+            response_msg = f"✅ Панель тікетів успішно створено в каналі {channel.mention}!"
+            if category:
+                response_msg += f"\n📁 Тікети будуть створюватись в категорії: **{category.name}**"
+            if roles:
+                role_mentions = [f"<@&{rid}>" for rid in roles]
+                response_msg += f"\n🛡️ Доступ надано ролям: {', '.join(role_mentions)}"
+                
+            await interaction.followup.send(response_msg, ephemeral=True)
+
+        except Exception as e:
+            log.error(f"Error setting up tickets: {e}")
+            await interaction.followup.send(f"❌ Виникла помилка: {e}", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(TicketSystems(bot))
