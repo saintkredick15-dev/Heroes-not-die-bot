@@ -2,6 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import json
+import datetime
 from modules.db import get_database
 
 db = get_database()
@@ -88,6 +89,50 @@ class AdminCommands(commands.Cog):
         elif дія.value == "reset":
             await update_user_data(interaction.guild.id, користувач.id, {"xp": 0})
             await interaction.response.send_message(f"🔄 XP {користувач.mention} скинуто до 0.", ephemeral=True)
+
+    @app_commands.command(name="purge", description="Очистити чат")
+    @app_commands.describe(період="Період, за який видалити повідомлення")
+    @app_commands.choices(період=[
+        app_commands.Choice(name="Всі повідомлення", value="all"),
+        app_commands.Choice(name="Останні 24 години", value="1d"),
+        app_commands.Choice(name="Останні 3 дні", value="3d"),
+        app_commands.Choice(name="Останні 7 днів", value="7d"),
+        app_commands.Choice(name="Останні 14 днів", value="14d"),
+        app_commands.Choice(name="Останні 30 днів", value="30d")
+    ])
+    async def purge(self, interaction: discord.Interaction, період: app_commands.Choice[str]):
+        if not check_permissions(interaction):
+            await interaction.response.send_message("❌ Недостатньо прав.", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            if період.value == "all":
+                deleted = await interaction.channel.purge()
+                count = len(deleted)
+            else:
+                days_map = {
+                    "1d": 1,
+                    "3d": 3,
+                    "7d": 7,
+                    "14d": 14,
+                    "30d": 30
+                }
+                days = days_map.get(період.value)
+                if not days:
+                    await interaction.followup.send("❌ Невідомий період.", ephemeral=True)
+                    return
+                
+                cutoff = discord.utils.utcnow() - datetime.timedelta(days=days)
+                deleted = await interaction.channel.purge(after=cutoff)
+                count = len(deleted)
+
+            await interaction.followup.send(f"✅ Видалено {count} повідомлень.", ephemeral=True)
+        except discord.Forbidden:
+            await interaction.followup.send("❌ У мене немає прав на видалення повідомлень.", ephemeral=True)
+        except discord.HTTPException as e:
+            await interaction.followup.send(f"❌ Помилка при видаленні: {e}", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(AdminCommands(bot))
