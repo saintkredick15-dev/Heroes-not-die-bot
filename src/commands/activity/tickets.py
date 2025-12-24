@@ -76,17 +76,20 @@ class TicketSystem(commands.Cog):
         self.bot.add_view(TicketControlView())
         log.info("Ticket views registered")
 
-    @commands.command(name="setup_tickets")
-    @commands.has_permissions(administrator=True)
-    async def setup_tickets(self, ctx):
+    # Створюємо групу команд /tickets
+    tickets_group = discord.app_commands.Group(name="tickets", description="Керування системою тікетів")
+
+    @tickets_group.command(name="setup", description="Встановити панель створення тікетів")
+    @discord.app_commands.checks.has_permissions(administrator=True)
+    async def setup(self, interaction: discord.Interaction):
         """Встановлює панель створення тікетів"""
         embed = discord.Embed(
             title="🎫 Створити тікет",
             description="Натисніть кнопку нижче, щоб зв'язатися з адміністрацією.",
             color=discord.Color.blue()
         )
-        await ctx.send(embed=embed, view=TicketView())
-        await ctx.message.delete()
+        await interaction.response.send_message("Панель тікетів створено!", ephemeral=True)
+        await interaction.channel.send(embed=embed, view=TicketView())
 
 async def setup(bot):
     await bot.add_cog(TicketSystem(bot))
