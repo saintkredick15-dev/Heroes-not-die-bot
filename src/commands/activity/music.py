@@ -227,9 +227,14 @@ class MusicCommands(commands.Cog):
             self.players[ctx.guild.id] = MusicPlayer(ctx)
         return self.players[ctx.guild.id]
 
-    @app_commands.command(name="play", description="Відтворити музику (YouTube, Spotify, SoundCloud)")
-    @app_commands.describe(query="Назва пісні або посилання")
-    async def play(self, interaction: discord.Interaction, query: str):
+    @app_commands.command(name="play", description="Відтворити музику")
+    @app_commands.describe(query="Назва пісні або посилання", source="Де шукати (якщо не посилання)")
+    @app_commands.choices(source=[
+        app_commands.Choice(name="YouTube", value="ytsearch"),
+        app_commands.Choice(name="SoundCloud", value="scsearch"),
+        app_commands.Choice(name="Spotify", value="spotify")
+    ])
+    async def play(self, interaction: discord.Interaction, query: str, source: app_commands.Choice[str] = None):
         await interaction.response.defer()
         
         # Перевірка голосу
@@ -242,14 +247,14 @@ class MusicCommands(commands.Cog):
         # Підключення
         if not interaction.guild.voice_client:
             try:
-                await channel.connect()
+                # self_deaf=True щоб бот не слухав (економить трафік і виглядає як на скріні)
+                await channel.connect(self_deaf=True)
             except Exception as e:
                 await interaction.followup.send(f"❌ Не вдалося підключитися: {e}", ephemeral=True)
                 return
         
         # Створення/отримання плеєра
-        ctx = await self.bot.get_context(interaction) # Hack to pass context-like object or construct fake one
-        # Можемо просто передати interaction обгорнутий
+        ctx = await self.bot.get_context(interaction)
         class FakeContext:
             def __init__(self, bot, guild, channel, cog):
                 self.bot = bot
@@ -261,13 +266,23 @@ class MusicCommands(commands.Cog):
         
         player = self.get_player(fake_ctx)
         
-        # Пошук
-        await interaction.followup.send(f"🔎 Шукаю: `{query}`...", ephemeral=True)
-        
+        # Формування запиту
         url = query
+        search_prefix = "ytsearch" # Default
+        
+        if source:
+            if source.value == "spotify" and not (url.startswith("http")):
+                 # Якщо обрано Spotify, але введено текст -> шукаємо назву на YouTube
+                 search_prefix = "ytsearch"
+            else:
+                 search_prefix = source.value
+
         if not (url.startswith("http") or url.startswith("https")):
-            url = f"ytsearch:{query}"
-            
+            url = f"{search_prefix}:{query}"
+            await interaction.followup.send(f"🔎 Шукаю: `{query}` в {source.name if source else 'YouTube'}...", ephemeral=True)
+        else:
+             await interaction.followup.send(f"🔎 Завантажую посилання...", ephemeral=True)
+
         loop = self.bot.loop
         try:
             data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=False))
@@ -277,33 +292,25 @@ class MusicCommands(commands.Cog):
 
         tracks = []
         if 'entries' in data:
-            # Це плейлист або результат пошуку
-            if url.startswith("ytsearch"):
+            if url.startswith("ytsearch") or url.startswith("scsearch"):
                  # Результат пошуку - беремо перший
                  tracks.append(data['entries'][0])
             else:
                 # Плейлист
-                if 'entries' in data:
-                     # Додаємо всі
-                     # Але це може бути довго для великих плейлистів. 
-                     # Візьмемо топ 20 для безпеки або запитаємо. 
-                     # Для простоти - додаємо всі.
-                     for entry in data['entries']:
-                         tracks.append(entry)
-                else:
-                    tracks.append(data)
+                for entry in data['entries']:
+                    tracks.append(entry)
         else:
             tracks.append(data)
 
         # Додавання в чергу
         added = 0
         for track in tracks:
-            if track: # Filter None
+            if track:
                 track['requester'] = interaction.user.id
                 player.queue.append(track)
                 added += 1
                 
-        # Тригернути плеєр якщо він чекає
+        # Тригернути плеєр
         if not player.current_track and len(player.queue) > 0 and not player.next_event.is_set():
              player.next_event.set()
 
@@ -312,56 +319,6 @@ class MusicCommands(commands.Cog):
             await interaction.followup.send(f"✅ Додано в чергу: **{track.get('title', 'Unknown')}**")
         else:
             await interaction.followup.send(f"✅ Додано {added} треків в чергу.")
-
-    @app_commands.command(name="skip", description="Пропустити поточну пісню")
-    async def skip(self, interaction: discord.Interaction):
-        if not interaction.guild.voice_client or not interaction.guild.voice_client.is_playing():
-            await interaction.response.send_message("❌ Нічого не грає.", ephemeral=True)
-            return
-        interaction.guild.voice_client.stop()
-        await interaction.response.send_message("⏭️ Пропущено.")
-
-    @app_commands.command(name="stop", description="Зупинити музику і вийти")
-    async def stop(self, interaction: discord.Interaction):
-        if not interaction.guild.voice_client:
-            await interaction.response.send_message("❌ Я не в каналі.", ephemeral=True)
-            return
-            
-        if interaction.guild.id in self.players:
-            self.players[interaction.guild.id].queue.clear()
-            
-        interaction.guild.voice_client.stop()
-        await interaction.guild.voice_client.disconnect()
-        
-        # Cleanup
-        if interaction.guild.id in self.players:
-             del self.players[interaction.guild.id]
-             
-        await interaction.response.send_message("⏹️ Зупинено.", ephemeral=True)
-
-    @app_commands.command(name="queue", description="Показати чергу")
-    async def queue(self, interaction: discord.Interaction):
-        if interaction.guild.id not in self.players:
-            await interaction.response.send_message("📭 Черга пуста.", ephemeral=True)
-            return
-            
-        player = self.players[interaction.guild.id]
-        if len(player.queue) == 0:
-            await interaction.response.send_message("📭 Черга пуста.", ephemeral=True)
-            return
-
-        desc = ""
-        for i, track in enumerate(player.queue, 1):
-            desc += f"{i}. [{track.get('title', 'Unknown')}]({track.get('webpage_url', '')})\n"
-            if i >= 10:
-                desc += f"... і ще {len(player.queue) - 10} треків."
-                break
-        
-        embed = discord.Embed(title="📜 Черга відтворення", description=desc, color=0x00ff00)
-        if player.current_track:
-             embed.set_footer(text=f"Зараз грає: {player.current_track.get('title')}")
-             
-        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(MusicCommands(bot))
