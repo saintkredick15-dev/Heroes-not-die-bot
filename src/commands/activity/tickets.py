@@ -322,10 +322,15 @@ class TicketSystem(commands.Cog):
         self.bot.add_view(TicketConfigView())
         log.info("Ticket views registered")
 
-    tickets_group = discord.app_commands.Group(name="tickets", description="Керування системою тікетів")
+    tickets_group = discord.app_commands.Group(
+        name="tickets", 
+        description="Керування системою тікетів",
+        default_permissions=discord.Permissions(administrator=True)
+    )
 
     @tickets_group.command(name="setup", description="Швидке встановлення стандартної панелі")
     @discord.app_commands.checks.has_permissions(administrator=True)
+    @discord.app_commands.default_permissions(administrator=True)
     async def setup(self, interaction: discord.Interaction):
         """Встановлює стандартну панель створення тікетів"""
         embed = discord.Embed(
@@ -338,6 +343,7 @@ class TicketSystem(commands.Cog):
 
     @tickets_group.command(name="settings", description="Налаштування системи тікетів (Категорія, Ролі)")
     @discord.app_commands.checks.has_permissions(administrator=True)
+    @discord.app_commands.default_permissions(administrator=True)
     async def settings(self, interaction: discord.Interaction):
         """Відкриває меню налаштувань"""
         embed = discord.Embed(
@@ -349,6 +355,7 @@ class TicketSystem(commands.Cog):
 
     @tickets_group.command(name="panel", description="Конструктор кастомної панелі тікетів")
     @discord.app_commands.checks.has_permissions(administrator=True)
+    @discord.app_commands.default_permissions(administrator=True)
     async def panel_builder(self, interaction: discord.Interaction):
         """Запускає конструктор панелі"""
         initial_title = "Служба підтримки"

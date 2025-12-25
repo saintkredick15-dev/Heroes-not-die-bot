@@ -4,3 +4,5 @@ Pillow
 python-dotenv
 motor
 rich
+yt-dlp
+PyNaCl

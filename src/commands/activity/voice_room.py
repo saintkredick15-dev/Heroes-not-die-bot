@@ -455,6 +455,7 @@ class RoomManagementCommands(commands.Cog):
         creator_channel="Voice канал де користувачі створюють свої кімнати",
         management_channel="Text канал куди відправити панель управління кімнатами"
     )
+    @app_commands.default_permissions(administrator=True)
     async def room_setup(self, interaction: discord.Interaction, 
                         creator_channel: discord.VoiceChannel, 
                         management_channel: discord.TextChannel):
