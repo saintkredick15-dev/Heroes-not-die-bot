@@ -591,7 +591,7 @@ class MusicCommands(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         
         if not interaction.user.voice:
-             await interaction.followup.send("❌ Ви маєте бути в голосовому каналі!", ephemeral=True, delete_after=5)
+             await interaction.followup.send("❌ Ви маєте бути в голосовому каналі!", ephemeral=True)
              return
         
         channel = interaction.user.voice.channel
