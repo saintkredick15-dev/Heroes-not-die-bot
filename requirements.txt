@@ -1,0 +1,9 @@
+discord.py
+matplotlib
+Pillow
+python-dotenv
+motor
+rich
+yt-dlp
+PyNaCl
+aiohttp
