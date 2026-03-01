@@ -31,32 +31,36 @@ E_CROSS = "<:krestik:1476693091355463842>"
 
 async def get_greetings_settings(guild_id: int) -> dict:
     settings = await _col.find_one({"_id": guild_id}) or {}
-    return {
-        "welcome_channel_id": settings.get("welcome_channel_id"),
-        "welcome_text": settings.get("welcome_text", "Ласкаво просимо {user_mention} до **{server_name}**!"),
-        "welcome_image_enabled": settings.get("welcome_image_enabled", True),
-        "welcome_font_color": settings.get("welcome_font_color", "#FFFFFF"),
-        "welcome_font_name": settings.get("welcome_font_name", "ARIAL"),
-        "welcome_outline_color": settings.get("welcome_outline_color", "#5865F2"),
-        "welcome_bg_url": settings.get("welcome_bg_url", ""),
-        "welcome_bg_color": settings.get("welcome_bg_color", "#1A1A2E"),
-
-        "goodbye_channel_id": settings.get("goodbye_channel_id"),
-        "goodbye_text": settings.get("goodbye_text", "Бувай, {user_mention}, сподіваємось, тобі тут сподобалось! 👋"),
-        "goodbye_image_enabled": settings.get("goodbye_image_enabled", True),
-        "goodbye_font_color": settings.get("goodbye_font_color", "#FFFFFF"),
-        "goodbye_font_name": settings.get("goodbye_font_name", "ARIAL"),
-        "goodbye_outline_color": settings.get("goodbye_outline_color", "#5865F2"),
-        "goodbye_bg_url": settings.get("goodbye_bg_url", ""),
-        "goodbye_bg_color": settings.get("goodbye_bg_color", "#1A1A2E")
-    }
+    data = {}
+    for mode in ("welcome", "goodbye", "boost"):
+        defs = {
+            "text": "Ласкаво просимо {user_mention}!" if mode=="welcome" else ("Бувай, {user_mention}!" if mode=="goodbye" else "🚀 Дякуємо за підняття сервера, {user_mention}!"),
+            "image": True,
+            "font_c": "#FFFFFF",
+            "font_n": "ARIAL",
+            "out_c": "#FF73FA" if mode=="boost" else "#5865F2",
+            "bg_u": "",
+            "bg_c": "#1A1A2E"
+        }
+        data[f"{mode}_channel_id"] = settings.get(f"{mode}_channel_id")
+        data[f"{mode}_text"] = settings.get(f"{mode}_text", defs["text"])
+        data[f"{mode}_image_enabled"] = settings.get(f"{mode}_image_enabled", defs["image"])
+        data[f"{mode}_font_color"] = settings.get(f"{mode}_font_color", defs["font_c"])
+        data[f"{mode}_font_name"] = settings.get(f"{mode}_font_name", defs["font_n"])
+        data[f"{mode}_outline_color"] = settings.get(f"{mode}_outline_color", defs["out_c"])
+        data[f"{mode}_bg_url"] = settings.get(f"{mode}_bg_url", defs["bg_u"])
+        data[f"{mode}_bg_color"] = settings.get(f"{mode}_bg_color", defs["bg_c"])
+    # Boost role
+    data["boost_role_id"] = settings.get("boost_role_id")
+    return data
 
 async def update_settings(guild_id: int, data: dict) -> None:
     await _col.update_one({"_id": guild_id}, {"$set": data}, upsert=True)
 
-class TextModal(discord.ui.Modal):
     def __init__(self, guild_id: int, mode: str, current_text: str, view: DashboardView):
-        title = "Текст Привітання" if mode == "welcome" else "Текст Прощання"
+        if mode == "welcome": title = "Текст Привітання"
+        elif mode == "goodbye": title = "Текст Прощання"
+        else: title = "Текст про Буст"
         super().__init__(title=title)
         self.guild_id = guild_id
         self.mode = mode
@@ -133,6 +137,34 @@ class UrlModal(discord.ui.Modal):
         await update_settings(self.guild_id, {key: new_url})
         self.view.settings[key] = new_url
         await interaction.response.edit_message(embed=_build_embed(self.view.settings, self.mode), view=self.view)
+
+class BoostRoleModal(discord.ui.Modal, title="Роль за буст сервера"):
+    role_input = discord.ui.TextInput(
+        label="ID ролі (залиште пустим для видалення)",
+        placeholder="123456789012345678",
+        required=False,
+        max_length=25,
+    )
+
+    def __init__(self, view: "DashboardView"):
+        super().__init__()
+        self.dv = view
+        current = view.settings.get("boost_role_id")
+        if current:
+            self.role_input.default = str(current)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        raw = self.role_input.value.strip()
+        if not raw:
+            role_id = None
+        elif raw.isdigit():
+            role_id = int(raw)
+        else:
+            return await interaction.response.send_message(f"{E_CROSS} Невірний ID ролі.", ephemeral=True)
+        await update_settings(interaction.guild.id, {"boost_role_id": role_id})
+        self.dv.settings["boost_role_id"] = role_id
+        await interaction.response.edit_message(embed=_build_embed(self.dv.settings, self.dv.mode), view=self.dv)
+
 
 class FontSelect(discord.ui.Select):
     def __init__(self, current_font: str):
@@ -216,10 +248,20 @@ class DashboardView(discord.ui.View):
         self.settings[key] = not current
         await interaction.response.edit_message(embed=_build_embed(self.settings, self.mode), view=self)
 
+    @discord.ui.button(label="Роль за буст", style=discord.ButtonStyle.secondary, emoji="🎁", row=4)
+    async def btn_boost_role(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.mode != "boost":
+            return await interaction.response.send_message(f"{E_CROSS} Ця кнопка доступна лише в режимі Boost.", ephemeral=True)
+        await interaction.response.send_modal(BoostRoleModal(self))
+
 def _build_embed(settings: dict, mode: str) -> discord.Embed:
-    is_welcome = (mode == "welcome")
+    if mode == "welcome":
+        title = f"{E_HI} Налаштування Привітань (Welcome)"
+    elif mode == "goodbye":
+        title = f"{E_BYE} Налаштування Прощань (Goodbye)"
+    else:
+        title = "🚀 Налаштування Бустів Сервера (Boost)"
     
-    title = f"{E_HI} Налаштування Привітань (Welcome)" if is_welcome else f"{E_BYE} Налаштування Прощань (Goodbye)"
     desc = "Налаштуйте канал, текст та генерацію візуальної картки."
     
     embed = discord.Embed(title=title, description=desc, color=0x1a1a2e)
@@ -239,6 +281,11 @@ def _build_embed(settings: dict, mode: str) -> discord.Embed:
     embed.add_field(name=f"{E_COLOR} Колір тексту", value=settings[f"{mode}_font_color"], inline=True)
     embed.add_field(name=f"{E_COLOR_OUTLINE} Колір рамки", value=settings[f"{mode}_outline_color"], inline=True)
     
+    if mode == "boost":
+        role_id = settings.get("boost_role_id")
+        role_val = f"<@&{role_id}>" if role_id else f"{E_CROSS} Не встановлено"
+        embed.add_field(name="🎁 Роль за буст", value=role_val, inline=True)
+    
     embed.add_field(name=f"{E_TEXT} Текст повідомлення", value=f"```{settings[f'{mode}_text']}```", inline=False)
     
     if bg_url:
@@ -255,7 +302,8 @@ class GreetingsSettings(commands.Cog):
     @app_commands.describe(mode="Оберіть режим для налаштування")
     @app_commands.choices(mode=[
         app_commands.Choice(name="👋 Привітання (Welcome)", value="welcome"),
-        app_commands.Choice(name="🚪 Прощання (Goodbye)", value="goodbye")
+        app_commands.Choice(name="🚪 Прощання (Goodbye)", value="goodbye"),
+        app_commands.Choice(name="🚀 Бусти сервера (Boost)", value="boost")
     ])
     @app_commands.default_permissions(administrator=True)
     async def welcome_setup(self, interaction: discord.Interaction, mode: app_commands.Choice[str]):
@@ -275,6 +323,21 @@ class GreetingsSettings(commands.Cog):
         if member.bot: return
         await self._process_greeting(member, "goodbye")
         
+    @commands.Cog.listener()
+    async def on_member_update(self, before: discord.Member, after: discord.Member):
+        if before.premium_since is None and after.premium_since is not None:
+            # Видаємо роль за буст якщо налаштовано
+            settings = await _col.find_one({"_id": after.guild.id}) or {}
+            boost_role_id = settings.get("boost_role_id")
+            if boost_role_id:
+                role = after.guild.get_role(boost_role_id)
+                if role:
+                    try:
+                        await after.add_roles(role, reason="Boost Reward")
+                    except discord.Forbidden:
+                        pass
+            await self._process_greeting(after, "boost")
+        
     async def _process_greeting(self, member: discord.Member, mode: str):
         settings = await get_greetings_settings(member.guild.id)
         channel_id = settings.get(f"{mode}_channel_id")
@@ -286,7 +349,8 @@ class GreetingsSettings(commands.Cog):
         raw_text = settings.get(f"{mode}_text")
         if not raw_text:
             if mode == 'welcome': raw_text = "Ласкаво просимо {user_mention} до **{server_name}**!"
-            else: raw_text = "Бувай, {user_mention}, сподіваємось, тобі тут сподобалось! 👋"
+            elif mode == 'goodbye': raw_text = "Бувай, {user_mention}, сподіваємось, тобі тут сподобалось! 👋"
+            else: raw_text = "🚀 Дякуємо за підняття сервера, {user_mention}!"
             
         formatted_text = raw_text.replace("{user_mention}", member.mention).replace("{server_name}", member.guild.name)
 
@@ -312,10 +376,11 @@ class GreetingsSettings(commands.Cog):
                     print(f"[Greetings] Failed to download bg image: {e}")
                 
             try:
+                top_texts = {"welcome": "ЛАСКАВО ПРОСИМО", "goodbye": "ПРОЩАВАЙ", "boost": "ДЯКУЄМО ЗА БУСТ"}
                 card_buffer = generate_welcome_card(
                     avatar_bytes=avatar_bytes,
                     username=member.display_name,
-                    top_text="ЛАСКАВО ПРОСИМО" if mode == "welcome" else "ПРОЩАВАЙ",
+                    top_text=top_texts.get(mode, "ПОВІДОМЛЕННЯ"),
                     bg_bytes=bg_bytes,
                     bg_color_hex=settings.get(f"{mode}_bg_color", "#1A1A2E"),
                     font_name=settings.get(f"{mode}_font_name", "ARIAL"),
