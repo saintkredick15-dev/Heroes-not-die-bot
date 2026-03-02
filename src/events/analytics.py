@@ -23,6 +23,8 @@ E_COINS   = "<:coins:1477376020318388274>"
 E_WARN    = "<:warn:1477376152191373504>"
 E_MUTE    = "<:mutemicro:1476200127063396443>"
 E_BAN     = "<:ban:1476199074494681170>"
+E_STATS   = "<:statistics:1477721796857041067>"
+E_HAMMER  = "<:hammer:1477376411642761479>"
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -73,7 +75,7 @@ async def _build_stats_embed(guild: discord.Guild, days: int) -> discord.Embed:
     net_members = result.get("joins", 0) - result.get("leaves", 0)
 
     embed = discord.Embed(
-        title=f"📊 Статистика сервера за {days} днів",
+        title=f"{E_STATS} Статистика сервера за {days} днів",
         color=0x1a1a2e,
         timestamp=datetime.now(timezone.utc),
     )
@@ -108,7 +110,7 @@ async def _build_stats_embed(guild: discord.Guild, days: int) -> discord.Embed:
     embed.add_field(name="\u200b", value="\u200b", inline=True)
 
     embed.add_field(
-        name="🚔  Модераційні дії",
+        name=f"{E_HAMMER}  Модераційні дії",
         value=(
             f"{E_WARN} Попереджень: **{result.get('warns', 0)}**\n"
             f"{E_MUTE} Мутів: **{result.get('mutes', 0)}**\n"
@@ -175,6 +177,13 @@ class AnalyticsCog(commands.Cog):
                 last_post = datetime.fromtimestamp(last_post_ts, tz=timezone.utc)
                 if (now - last_post).days < interval_days:
                     continue
+            else:
+                # Перший запуск — ставимо мітку і чекаємо повний інтервал
+                await _col_settings.update_one(
+                    {"_id": guild_id},
+                    {"$set": {"stats_last_post": now.timestamp()}},
+                )
+                continue
 
             guild = self.bot.get_guild(guild_id)
             if not guild:

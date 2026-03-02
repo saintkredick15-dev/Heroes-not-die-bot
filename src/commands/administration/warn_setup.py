@@ -1,6 +1,6 @@
 """
-warn_setup.py — Панель налаштування ескалації попереджень (Smart Panel V14).
-Налаштування: скільки варнів → яка дія (mute/kick/ban) та тривалість.
+warn_setup.py — Панель налаштування попереджень (Smart Panel V14).
+Ескалації + налаштування спадання (decay) варнів.
 """
 import discord
 from discord import app_commands
@@ -11,11 +11,12 @@ db = get_database()
 _col = db.guild_settings
 
 # ── Емодзі ────────────────────────────────────────────────────────────────────
-E_SHIELD  = "<:shieldcheck:1477720160570839130>"
+E_WARN    = "<:warn:1477376152191373504>"
 E_CROSS   = "<:krestik:1476693091355463842>"
+E_CHECK   = "<:check:1454140864627740834>"
 E_SETTING = "<:settings:1476196821444591768>"
 
-EMBED_COLOR = 0x5865F2
+EMBED_COLOR = 0x1a1a2e
 
 ACTION_LABELS = {
     "mute": "🔇 Мут",
@@ -30,34 +31,50 @@ async def _get(guild_id: int) -> dict:
 
 def _build_embed(settings: dict) -> discord.Embed:
     rules = settings.get("warn_escalation", [])
+    decay_days = settings.get("warn_decay_days", 0)
 
     embed = discord.Embed(
-        title=f"{E_SHIELD} Налаштування Попереджень",
-        description="Визначте, що відбувається при накопиченні певної кількості попереджень.",
+        title=f"{E_WARN} Налаштування Попереджень",
+        description="Визначте, що відбувається при накопиченні попереджень.",
         color=EMBED_COLOR,
     )
 
     if not rules:
         embed.add_field(
             name="Правила ескалації",
-            value=f"{E_CROSS} Не налаштовано. Натисніть **Додати правило** нижче.",
+            value=f"{E_CROSS} Не налаштовано.\nНатисніть **Додати правило** нижче.",
             inline=False,
         )
     else:
-        # Sort by warn count
         sorted_rules = sorted(rules, key=lambda r: r["count"])
         lines = []
-        for r in sorted_rules:
+        for i, r in enumerate(sorted_rules, 1):
             action_label = ACTION_LABELS.get(r["action"], r["action"])
             duration = r.get("duration", "")
             if duration:
-                lines.append(f"**{r['count']}** варнів → {action_label} на **{duration}**")
+                lines.append(f"`{i}.` **{r['count']}** варнів → {action_label} на **{duration}**")
             else:
-                lines.append(f"**{r['count']}** варнів → {action_label}")
+                lines.append(f"`{i}.` **{r['count']}** варнів → {action_label}")
         embed.add_field(name="Правила ескалації", value="\n".join(lines), inline=False)
+
+    # Decay info
+    if decay_days > 0:
+        embed.add_field(
+            name=f"{E_SETTING} Спадання варнів",
+            value=f"Попередження старіші за **{decay_days}** днів не враховуються для ескалації.",
+            inline=False,
+        )
+    else:
+        embed.add_field(
+            name=f"{E_SETTING} Спадання варнів",
+            value=f"{E_CROSS} Вимкнено (варни не спадають).",
+            inline=False,
+        )
 
     return embed
 
+
+# ── Modals ────────────────────────────────────────────────────────────────────
 
 class AddRuleModal(discord.ui.Modal, title="Додати правило ескалації"):
     warn_count = discord.ui.TextInput(
@@ -90,49 +107,102 @@ class AddRuleModal(discord.ui.Modal, title="Додати правило еска
 
         if not count_raw.isdigit() or not (1 <= int(count_raw) <= 50):
             return await interaction.response.send_message(f"{E_CROSS} Кількість має бути числом від 1 до 50.", ephemeral=True)
-
         if action not in ("mute", "kick", "ban"):
             return await interaction.response.send_message(f"{E_CROSS} Дія може бути: `mute`, `kick` або `ban`.", ephemeral=True)
 
         count = int(count_raw)
         rules = self.ws_view.settings.get("warn_escalation", [])
-
-        # Remove existing rule for same count (overwrite)
         rules = [r for r in rules if r["count"] != count]
         rules.append({"count": count, "action": action, "duration": duration})
 
         self.ws_view.settings["warn_escalation"] = rules
-        await _col.update_one(
-            {"_id": interaction.guild.id},
-            {"$set": {"warn_escalation": rules}},
-            upsert=True,
-        )
-        await interaction.response.edit_message(
-            embed=_build_embed(self.ws_view.settings), view=self.ws_view,
-        )
+        await _col.update_one({"_id": interaction.guild.id}, {"$set": {"warn_escalation": rules}}, upsert=True)
+        await interaction.response.edit_message(embed=_build_embed(self.ws_view.settings), view=self.ws_view)
 
+
+class DeleteRuleModal(discord.ui.Modal, title="Видалити правило"):
+    rule_number = discord.ui.TextInput(
+        label="Номер правила для видалення",
+        placeholder="1",
+        max_length=2,
+        required=True,
+    )
+
+    def __init__(self, view: "WarnSetupView"):
+        super().__init__()
+        self.ws_view = view
+
+    async def on_submit(self, interaction: discord.Interaction):
+        raw = self.rule_number.value.strip()
+        if not raw.isdigit():
+            return await interaction.response.send_message(f"{E_CROSS} Введіть номер правила.", ephemeral=True)
+
+        idx = int(raw) - 1
+        rules = sorted(self.ws_view.settings.get("warn_escalation", []), key=lambda r: r["count"])
+        if idx < 0 or idx >= len(rules):
+            return await interaction.response.send_message(f"{E_CROSS} Такого правила не існує.", ephemeral=True)
+
+        rules.pop(idx)
+        self.ws_view.settings["warn_escalation"] = rules
+        await _col.update_one({"_id": interaction.guild.id}, {"$set": {"warn_escalation": rules}}, upsert=True)
+        await interaction.response.edit_message(embed=_build_embed(self.ws_view.settings), view=self.ws_view)
+
+
+class DecayModal(discord.ui.Modal, title="Спадання варнів"):
+    decay_input = discord.ui.TextInput(
+        label="Днів до спадання (0 = вимкнено)",
+        placeholder="30",
+        max_length=3,
+        required=True,
+    )
+
+    def __init__(self, view: "WarnSetupView"):
+        super().__init__()
+        self.ws_view = view
+        current = view.settings.get("warn_decay_days", 0)
+        self.decay_input.default = str(current)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        raw = self.decay_input.value.strip()
+        if not raw.isdigit() or int(raw) > 365:
+            return await interaction.response.send_message(f"{E_CROSS} Введіть число від 0 до 365.", ephemeral=True)
+
+        days = int(raw)
+        self.ws_view.settings["warn_decay_days"] = days
+        await _col.update_one({"_id": interaction.guild.id}, {"$set": {"warn_decay_days": days}}, upsert=True)
+        await interaction.response.edit_message(embed=_build_embed(self.ws_view.settings), view=self.ws_view)
+
+
+# ── View ──────────────────────────────────────────────────────────────────────
 
 class WarnSetupView(discord.ui.View):
     def __init__(self, settings: dict):
         super().__init__(timeout=86400)
         self.settings = settings
 
-    @discord.ui.button(label="Додати правило", style=discord.ButtonStyle.primary, emoji="➕", row=0)
+    @discord.ui.button(label="Додати правило", style=discord.ButtonStyle.secondary, row=0)
     async def add_rule_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(AddRuleModal(self))
 
-    @discord.ui.button(label="Очистити всі правила", style=discord.ButtonStyle.danger, emoji="🗑️", row=0)
+    @discord.ui.button(label="Видалити правило", style=discord.ButtonStyle.secondary, row=0)
+    async def del_rule_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        rules = self.settings.get("warn_escalation", [])
+        if not rules:
+            return await interaction.response.send_message(f"{E_CROSS} Немає правил для видалення.", ephemeral=True)
+        await interaction.response.send_modal(DeleteRuleModal(self))
+
+    @discord.ui.button(label="Очистити все", style=discord.ButtonStyle.danger, row=0)
     async def clear_rules_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.settings["warn_escalation"] = []
-        await _col.update_one(
-            {"_id": interaction.guild.id},
-            {"$set": {"warn_escalation": []}},
-            upsert=True,
-        )
-        await interaction.response.edit_message(
-            embed=_build_embed(self.settings), view=self,
-        )
+        await _col.update_one({"_id": interaction.guild.id}, {"$set": {"warn_escalation": []}}, upsert=True)
+        await interaction.response.edit_message(embed=_build_embed(self.settings), view=self)
 
+    @discord.ui.button(label="Спадання варнів", style=discord.ButtonStyle.secondary, row=1)
+    async def decay_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(DecayModal(self))
+
+
+# ── Cog ───────────────────────────────────────────────────────────────────────
 
 class WarnSetupCog(commands.Cog):
     def __init__(self, bot: commands.Bot):

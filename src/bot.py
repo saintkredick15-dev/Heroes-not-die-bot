@@ -1,4 +1,5 @@
 import discord
+from discord import app_commands
 from discord.ext import commands
 import json
 import os
@@ -41,6 +42,62 @@ intents.message_content = True
 
 
 from services.automod import load_automod_cache
+from modules.db import get_database
+db = get_database()
+
+
+# ── Command Tree з перевіркою обмежень ────────────────────────────────────────
+# Кеш: { guild_id: { "meme": [ch_ids], "avatar": [ch_ids], ... } }
+_restriction_cache: dict[int, dict] = {}
+
+
+class RestrictedTree(app_commands.CommandTree):
+    """CommandTree з вбудованою перевіркою обмежень команд по каналах."""
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not interaction.guild:
+            return True
+
+        guild_id = interaction.guild.id
+        restrictions = _restriction_cache.get(guild_id)
+
+        # Fallback: якщо кеш порожній — підвантажуємо з БД
+        if restrictions is None:
+            doc = await db.guild_settings.find_one({"_id": guild_id})
+            if doc and "command_restrictions" in doc:
+                restrictions = doc["command_restrictions"]
+                _restriction_cache[guild_id] = restrictions
+                log.info(f"[RESTRICT] Loaded from DB for guild {guild_id}: {restrictions}")
+            else:
+                _restriction_cache[guild_id] = {}
+                return True
+
+        if not restrictions:
+            return True
+
+        command = interaction.command
+        if not command:
+            return True
+
+        cmd_name = command.name
+        if cmd_name not in restrictions:
+            return True
+
+        allowed_channels = restrictions[cmd_name]
+        if not allowed_channels:
+            return True
+
+        if interaction.channel_id in allowed_channels:
+            return True
+
+        ch_list = ", ".join(f"<#{c}>" for c in allowed_channels)
+        log.info(f"[RESTRICT] BLOCKED: /{cmd_name} in ch={interaction.channel_id}, allowed={allowed_channels}")
+        await interaction.response.send_message(
+            f"❌ Команду `/{cmd_name}` можна використовувати лише в: {ch_list}",
+            ephemeral=True,
+        )
+        return False
+
 
 class HeroesBot(commands.Bot):
     """Підклас Bot з переозначеним setup_hook (правильний API discord.py)."""
@@ -105,11 +162,37 @@ class HeroesBot(commands.Bot):
         log.info("Synced slash commands globally")
 
 
-bot = HeroesBot(command_prefix=config.get("prefix", "!"), intents=intents)
+bot = HeroesBot(
+    command_prefix=config.get("prefix", "!"),
+    intents=intents,
+    tree_cls=RestrictedTree,
+)
+
+
+# ── Хуки для перезавантаження кешу обмежень ───────────────────────────────────
+
+async def _load_restrictions():
+    """Завантажити обмеження при старті."""
+    _restriction_cache.clear()
+    async for doc in db.guild_settings.find({"command_restrictions": {"$exists": True}}):
+        _restriction_cache[doc["_id"]] = doc.get("command_restrictions", {})
+    log.info(f"[RESTRICT] Loaded restrictions for {len(_restriction_cache)} guild(s)")
+
+
+async def reload_restrictions_cache(guild_id: int):
+    doc = await db.guild_settings.find_one({"_id": guild_id})
+    if doc and "command_restrictions" in doc:
+        _restriction_cache[guild_id] = doc["command_restrictions"]
+    else:
+        _restriction_cache.pop(guild_id, None)
+
+# Зберігаємо функцію в бот для доступу з інших модулів
+bot.reload_restrictions = reload_restrictions_cache
 
 
 @bot.event
 async def on_ready():
+    await _load_restrictions()
     log.info(f"Bot {bot.user} is ready! Loaded {len(bot.cogs)} cogs")
 
 

@@ -49,11 +49,20 @@ async def _get_escalations(guild_id: int) -> list[dict]:
 
 
 async def _count_active_warns(guild_id: int, user_id: int) -> int:
-    return await db.cases.count_documents({
+    """Рахує активні варни з урахуванням decay (спадання)."""
+    settings = await db.guild_settings.find_one({"_id": guild_id}) or {}
+    decay_days = settings.get("warn_decay_days", 0)
+
+    query = {
         "guild_id": guild_id,
         "user_id": user_id,
         "action": "warn"
-    })
+    }
+    if decay_days > 0:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=decay_days)
+        query["timestamp"] = {"$gte": cutoff}
+
+    return await db.cases.count_documents(query)
 
 
 async def _send_dm(user: discord.User | discord.Member, embed: discord.Embed):
@@ -93,10 +102,10 @@ async def apply_case(
         )
 
     action_texts = {
-        "warn": ("Отримано попередження", E_WARN, 0xf39c12),
-        "mute": ("Отримано Тайм-аут", E_MUTE, 0xe67e22),
-        "kick": ("Вигнано з сервера", E_KICK, 0xe74c3c),
-        "ban":  ("Заблоковано на сервері", E_BAN, 0x992d22)
+        "warn": ("Отримано попередження", E_WARN, 0x1a1a2e),
+        "mute": ("Отримано Тайм-аут", E_MUTE, 0x1a1a2e),
+        "kick": ("Вигнано з сервера", E_KICK, 0x1a1a2e),
+        "ban":  ("Заблоковано на сервері", E_BAN, 0x1a1a2e)
     }
 
     title_text, emoji, color = action_texts.get(action, ("Покарання", E_SHIELD, 0xffffff))
@@ -107,7 +116,7 @@ async def apply_case(
         timestamp=datetime.now(timezone.utc)
     )
     dm_embed.add_field(name="Сервер", value=guild.name, inline=True)
-    dm_embed.add_field(name="Кейс", value=f"`#{case_id}`", inline=True)
+    dm_embed.add_field(name="ID", value=f"`#{case_id}`", inline=True)
     dm_embed.add_field(name="Причина", value=reason, inline=False)
 
     if action == "warn":

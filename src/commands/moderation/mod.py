@@ -97,7 +97,7 @@ class ModerationCog(commands.Cog):
             reason=причина
         )
         
-        await interaction.followup.send(embed=_ok(f"🛡️ {користувач.mention} отримав попередження. Кейс `#{case_id}`."))
+        await interaction.followup.send(embed=_ok(f"🛡️ {користувач.mention} отримав попередження. ID `#{case_id}`."))
 
     @app_commands.command(name="purge", description="Очистити чат")
     @app_commands.describe(період="За який час видалити")
@@ -151,7 +151,7 @@ class ModerationCog(commands.Cog):
             reason=причина,
             duration_hours=duration_hours
         )
-        await interaction.followup.send(embed=_ok(f"🔇 {користувач.mention} отримав тайм-аут на **{час}**. Кейс `#{case_id}`."))
+        await interaction.followup.send(embed=_ok(f"🔇 {користувач.mention} отримав тайм-аут на **{час}**. ID `#{case_id}`."))
 
     @app_commands.command(name="unmute", description="Зняти тайм-аут з користувача")
     @app_commands.describe(користувач="З кого зняти заглушення")
@@ -182,7 +182,7 @@ class ModerationCog(commands.Cog):
             action="kick",
             reason=причина
         )
-        await interaction.followup.send(embed=_ok(f"🦵 {користувач.mention} вигнаний. Кейс `#{case_id}`."))
+        await interaction.followup.send(embed=_ok(f"🦵 {користувач.mention} вигнаний. ID `#{case_id}`."))
 
     @app_commands.command(name="ban", description="Забанити користувача")
     @app_commands.describe(користувач="Кого забанити", причина="Причина")
@@ -200,7 +200,73 @@ class ModerationCog(commands.Cog):
             action="ban",
             reason=причина
         )
-        await interaction.followup.send(embed=_ok(f"🔨 {користувач.mention} забанений. Кейс `#{case_id}`."))
+        await interaction.followup.send(embed=_ok(f"🔨 {користувач.mention} забанений. ID `#{case_id}`."))
+
+    @app_commands.command(name="warns", description="Переглянути історію попереджень користувача")
+    @app_commands.describe(користувач="Чию історію переглянути")
+    @app_commands.default_permissions(administrator=True)
+    async def warns_cmd(self, interaction: discord.Interaction, користувач: discord.Member):
+        if not check_permissions(interaction):
+            return await interaction.response.send_message(embed=_err("Недостатньо прав."), ephemeral=True)
+
+        await interaction.response.defer(ephemeral=True)
+
+        from modules.db import get_database
+        _db = get_database()
+
+        # Get decay settings
+        settings = await _db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
+        decay_days = settings.get("warn_decay_days", 0)
+
+        query = {
+            "guild_id": interaction.guild.id,
+            "user_id": користувач.id,
+            "action": "warn"
+        }
+
+        cursor = _db.cases.find(query).sort("timestamp", -1).limit(20)
+        warns = await cursor.to_list(length=20)
+
+        embed = discord.Embed(
+            title=f"<:warn:1477376152191373504> Історія попереджень",
+            description=f"Користувач: {користувач.mention}",
+            color=EMBED_COLOR,
+        )
+
+        if not warns:
+            embed.add_field(name="Результат", value="<:krestik:1476693091355463842> Попереджень не знайдено.", inline=False)
+        else:
+            active_count = 0
+            for i, w in enumerate(warns, 1):
+                ts = w.get("timestamp")
+                ts_str = discord.utils.format_dt(ts, "R") if ts else "невідомо"
+                mod_id = w.get("moderator_id")
+                reason = w.get("reason", "Не вказано")
+                case_id = w.get("case_id", "???")
+
+                # Check if expired by decay
+                expired = False
+                if decay_days > 0 and ts:
+                    from datetime import datetime, timezone, timedelta
+                    cutoff = datetime.now(timezone.utc) - timedelta(days=decay_days)
+                    if ts < cutoff:
+                        expired = True
+
+                if not expired:
+                    active_count += 1
+
+                status = "~~`Спав`~~" if expired else ""
+                mod_text = f"<@{mod_id}>" if mod_id else "Система"
+
+                embed.add_field(
+                    name=f"#{case_id} — {ts_str} {status}",
+                    value=f"**Причина:** {reason}\n**Модератор:** {mod_text}",
+                    inline=False,
+                )
+
+            embed.set_footer(text=f"Активних варнів: {active_count} / {len(warns)} загалом")
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(ModerationCog(bot))

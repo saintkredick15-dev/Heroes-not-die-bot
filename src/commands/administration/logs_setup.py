@@ -78,7 +78,7 @@ def _ch_name(guild: discord.Guild, ch_id: int | None) -> str:
 def _build_embed(guild: discord.Guild, settings: dict, category: str) -> discord.Embed:
     embed = discord.Embed(
         title=f"{E_SETTING} Налаштування Логів",
-        color=0x5865F2,
+        color=0x1a1a2e,
     )
 
     if category in LOG_TYPES:
@@ -179,14 +179,18 @@ class WhitelistRolesModal(discord.ui.Modal, title="Білий список ро�
 # ── Components ────────────────────────────────────────────────────────────────
 
 class LogChannelSelect(discord.ui.ChannelSelect):
-    def __init__(self, key: str, name: str, row: int):
+    def __init__(self, key: str, name: str, row: int, current_id: int | None = None):
         self.db_key = key
+        defaults = []
+        if current_id:
+            defaults = [discord.Object(id=current_id)]
         super().__init__(
             channel_types=[discord.ChannelType.text],
             placeholder="Вибрати ...",
             min_values=0,
             max_values=1,
             row=row,
+            default_values=defaults,
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -200,13 +204,15 @@ class LogChannelSelect(discord.ui.ChannelSelect):
 
 
 class WhitelistChannelSelect(discord.ui.ChannelSelect):
-    def __init__(self, row: int):
+    def __init__(self, row: int, current_ids: list[int] = None):
+        defaults = [discord.Object(id=cid) for cid in (current_ids or [])]
         super().__init__(
             channel_types=[discord.ChannelType.text],
             placeholder="Вибрати ...",
             min_values=0,
             max_values=5,
             row=row,
+            default_values=defaults,
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -242,7 +248,7 @@ class CategorySelect(discord.ui.Select):
 
 class IntervalButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="Змінити інтервал", style=discord.ButtonStyle.secondary, emoji="⏱️", row=2)
+        super().__init__(label="Змінити інтервал", style=discord.ButtonStyle.secondary, emoji=discord.PartialEmoji.from_str("<:clock:1476209087804084328>"), row=2)
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_modal(IntervalModal(self.view))
@@ -270,7 +276,8 @@ class LogsSmartView(discord.ui.View):
         if category in LOG_TYPES:
             row = 1
             for key, name in LOG_TYPES[category].items():
-                self.add_item(LogChannelSelect(key, name, row))
+                current_ch = settings.get(key)
+                self.add_item(LogChannelSelect(key, name, row, current_id=current_ch))
                 row += 1
                 if row > 4:
                     break
@@ -278,7 +285,8 @@ class LogsSmartView(discord.ui.View):
                 self.add_item(IntervalButton())
 
         elif category == "whitelist":
-            self.add_item(WhitelistChannelSelect(row=1))
+            wl_ids = settings.get("log_whitelist_channels", [])
+            self.add_item(WhitelistChannelSelect(row=1, current_ids=wl_ids))
             self.add_item(WhitelistRolesButton())
 
 

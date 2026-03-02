@@ -248,7 +248,7 @@ class DashboardView(discord.ui.View):
         self.settings[key] = not current
         await interaction.response.edit_message(embed=_build_embed(self.settings, self.mode), view=self)
 
-    @discord.ui.button(label="Роль за буст", style=discord.ButtonStyle.secondary, emoji="🎁", row=4)
+    @discord.ui.button(label="Роль за буст", style=discord.ButtonStyle.secondary, emoji="<:boost:1478073594247643377>", row=4)
     async def btn_boost_role(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.mode != "boost":
             return await interaction.response.send_message(f"{E_CROSS} Ця кнопка доступна лише в режимі Boost.", ephemeral=True)
@@ -260,7 +260,7 @@ def _build_embed(settings: dict, mode: str) -> discord.Embed:
     elif mode == "goodbye":
         title = f"{E_BYE} Налаштування Прощань (Goodbye)"
     else:
-        title = "🚀 Налаштування Бустів Сервера (Boost)"
+        title = "<:boost:1478073594247643377> Налаштування Бустів Сервера (Boost)"
     
     desc = "Налаштуйте канал, текст та генерацію візуальної картки."
     
@@ -284,7 +284,7 @@ def _build_embed(settings: dict, mode: str) -> discord.Embed:
     if mode == "boost":
         role_id = settings.get("boost_role_id")
         role_val = f"<@&{role_id}>" if role_id else f"{E_CROSS} Не встановлено"
-        embed.add_field(name="🎁 Роль за буст", value=role_val, inline=True)
+        embed.add_field(name="<:boost:1478073594247643377> Роль за буст", value=role_val, inline=True)
     
     embed.add_field(name=f"{E_TEXT} Текст повідомлення", value=f"```{settings[f'{mode}_text']}```", inline=False)
     
