@@ -19,9 +19,13 @@ E_CHAT     = "<:chat:1475953787687403716>"
 E_MICRO    = "<:micro:1475954046350135346>"
 E_STAR     = "<:star:1475954213455532067>"
 E_CALENDAR = "<:calendar:1476195260236435608>"
+E_COIN     = "<:coin:1478487028105482485>"
+E_FLAME    = "<:flame:1478490474145906800>"
+E_SHIELD   = "<:shield:1478800925664612372>"
+E_BOOST    = "<:boost:1478073594247643377>"
+E_BANK     = "<:bank:1478483868867891261>"
 
 EMBED_COLOR = 0x1a1a2e
-
 
 def make_xp_bar(xp: int, needed: int, length: int = 8) -> str:
     if needed <= 0:
@@ -30,7 +34,6 @@ def make_xp_bar(xp: int, needed: int, length: int = 8) -> str:
     filled = max(0, min(filled, length))
     return "█" * filled + "░" * (length - filled)
 
-
 class ProfileCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -38,7 +41,11 @@ class ProfileCommands(commands.Cog):
     @app_commands.command(name="profile", description="Показує профіль користувача")
     @app_commands.describe(user="Користувач (за замовчуванням — ти)")
     async def profile(self, interaction: discord.Interaction, user: discord.Member = None):
-        await interaction.response.defer(ephemeral=False)
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.defer(ephemeral=False)
+        except Exception:
+            pass
 
         try:
             target    = user or interaction.user
@@ -56,7 +63,6 @@ class ProfileCommands(commands.Cog):
                 if target.joined_at else "Невідомо"
             )
 
-            # Ролі (топ-3, без @everyone)
             roles = [
                 r.name for r in sorted(target.roles, key=lambda r: r.position, reverse=True)
                 if r.name != "@everyone"
@@ -85,15 +91,38 @@ class ProfileCommands(commands.Cog):
             filename = "profile_graph.png"
             file     = discord.File(fp=buf, filename=filename)
 
-            # Загальний XP (сума всіх зароблених рівнів + поточний)
             total_xp_val = sum(get_level_xp(l) for l in range(1, level)) + xp
+            
+            eco_user = await db.economy_users.find_one({"guild_id": interaction.guild.id, "user_id": target.id}) or {}
+            wallet = eco_user.get("wallet", 0)
+            bank   = eco_user.get("bank", 0)
+            streak = eco_user.get("daily_streak", 0)
+            quests = eco_user.get("completed_quests", 0)
+            
+            now = datetime.now()
+            shield_until = eco_user.get("shield_until")
+            boost_until  = eco_user.get("coin_boost_until")
+            
+            active_items = []
+            if shield_until and isinstance(shield_until, datetime) and shield_until > now:
+                active_items.append(f"{E_SHIELD} Щит до <t:{int(shield_until.timestamp())}:R>")
+            if boost_until and isinstance(boost_until, datetime) and boost_until > now:
+                active_items.append(f"{E_BOOST} Буст до <t:{int(boost_until.timestamp())}:R>")
+                
+            eco_str = (
+                f"<:Wallet:1478483324392706201>Гаманець: **{wallet:,}** {E_COIN}\n"
+                f":bank: Банк: **{bank:,}**<:banknote:1478511186860572753>\n"
+                f"{E_FLAME} Стрік: **{streak}** днів\n"
+                f"<:cutiecheckmark:1479120440734650389> Квестів: **{quests}**"
+            )
+            active_str = "\n".join(active_items) if active_items else "Немає активних бонусів."
 
             # ── Embed — вертикальний layout як у v1, але з новим стилем ─────
             embed = discord.Embed(
                 title=f"Профіль {target.display_name}",
                 color=EMBED_COLOR,
             )
-            embed.set_thumbnail(url=target.display_avatar.url)  # тільки великий аватар справа
+            embed.set_thumbnail(url=target.display_avatar.url)  
             embed.description = "\n".join([
                 f"{E_CALENDAR} **Учасник з:** {joined_at}\n",
                 f"**Рівень:** {level}",
@@ -102,6 +131,8 @@ class ProfileCommands(commands.Cog):
                 f"{E_CHAT} {msgs}　{E_MICRO} {voice_h}г　{E_STAR} {reactions}\n",
                 f"**Ролі:** {roles_str}",
             ])
+            embed.add_field(name="<:Coins:1478486725113286899> Економіка", value=eco_str, inline=True)
+            embed.add_field(name="<:zap:1479582544361033820> Активно", value=active_str, inline=True)
             embed.set_image(url=f"attachment://{filename}")
 
             await interaction.followup.send(embed=embed, file=file)
@@ -111,7 +142,6 @@ class ProfileCommands(commands.Cog):
         except Exception as e:
             _log.error("Unexpected profile error for %s: %s", target, e, exc_info=True)
             await interaction.followup.send("⚠️ Внутрішня помилка. Спробуйте пізніше.")
-
 
 async def setup(bot):
     await bot.add_cog(ProfileCommands(bot))

@@ -33,16 +33,13 @@ E_SUPPORTROLE = "<:supportrole:1476198036567756841>"
 
 EMBED_COLOR = 0x1a1a2e
 
-
 # ── DB helpers ────────────────────────────────────────────────────────────────
 
 async def get_config(guild_id: int) -> dict:
     return await collection.find_one({"_id": guild_id}) or {}
 
-
 async def update_config(guild_id: int, data: dict):
     await collection.update_one({"_id": guild_id}, {"$set": data}, upsert=True)
-
 
 async def next_ticket_id(guild_id: int) -> int:
     result = await collection.find_one_and_update(
@@ -52,7 +49,6 @@ async def next_ticket_id(guild_id: int) -> int:
         return_document=True,
     )
     return result.get("ticket_counter", 1)
-
 
 # ── Modals ────────────────────────────────────────────────────────────────────
 
@@ -72,7 +68,6 @@ class CloseReasonModal(discord.ui.Modal, title="Закрити тікет"):
     async def on_submit(self, interaction: discord.Interaction):
         reason_text = self.reason.value.strip() or "Причину не вказано"
         await _do_close_ticket(interaction, self._ticket_data, reason_text)
-
 
 class RoleInputModal(discord.ui.Modal, title="Додати роль за ID"):
     role_id = discord.ui.TextInput(label="ID ролі", placeholder="Наприклад: 123456789012345678")
@@ -104,7 +99,6 @@ class RoleInputModal(discord.ui.Modal, title="Додати роль за ID"):
         else:
             await interaction.response.send_message(f"⚠️ Роль {role.mention} вже в списку.", ephemeral=True)
 
-
 class PanelContentModal(discord.ui.Modal, title="Налаштування панелі"):
     panel_title = discord.ui.TextInput(label="Заголовок", default="Служба підтримки")
     panel_desc = discord.ui.TextInput(
@@ -120,7 +114,6 @@ class PanelContentModal(discord.ui.Modal, title="Налаштування пан
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.send_message("✅ Текст панелі оновлено!", ephemeral=True)
-
 
 class ButtonConfigModal(discord.ui.Modal, title="Додати кнопку"):
     btn_label = discord.ui.TextInput(label="Текст кнопки", placeholder="Створити тікет")
@@ -142,7 +135,6 @@ class ButtonConfigModal(discord.ui.Modal, title="Додати кнопку"):
             "style": discord.ButtonStyle.blurple,
         })
         await interaction.response.send_message(f"✅ Кнопку «{label}» додано!", ephemeral=True)
-
 
 # ── Ticket close logic ────────────────────────────────────────────────────────
 
@@ -173,7 +165,6 @@ def _build_close_embed(
     )
     return embed
 
-
 async def _do_close_ticket(interaction: discord.Interaction, ticket_data: dict, reason: str):
     guild   = interaction.guild
     channel = interaction.channel
@@ -187,7 +178,6 @@ async def _do_close_ticket(interaction: discord.Interaction, ticket_data: dict, 
 
     embed = _build_close_embed(guild, ticket_id, opened_by, closed_by, opened_at, claimed_by, reason)
 
-    # 1. Лог-канал
     config = await get_config(guild.id)
     log_ch_id = config.get("log_channel_id")
     if log_ch_id:
@@ -198,14 +188,12 @@ async def _do_close_ticket(interaction: discord.Interaction, ticket_data: dict, 
             except (discord.Forbidden, discord.HTTPException):
                 pass
 
-    # 2. DM відкривачу
     if opened_by:
         try:
             await opened_by.send(embed=embed)
         except (discord.Forbidden, discord.HTTPException):
             pass
 
-    # 3. Підтвердження → видалення
     await interaction.response.send_message("Тікет буде закрито через 5 секунд...", ephemeral=True)
     await asyncio.sleep(5)
     try:
@@ -214,7 +202,6 @@ async def _do_close_ticket(interaction: discord.Interaction, ticket_data: dict, 
         pass
 
     await db.active_tickets.delete_one({"channel_id": channel.id})
-
 
 # ── Persistent Views ──────────────────────────────────────────────────────────
 
@@ -268,7 +255,6 @@ class TicketControlView(discord.ui.View):
         td = await self._get_ticket_data(interaction.channel.id)
         await interaction.response.send_modal(CloseReasonModal(td))
 
-
 class TicketView(discord.ui.View):
     """Persistent view для публічної панелі (біла кнопка)."""
 
@@ -278,12 +264,11 @@ class TicketView(discord.ui.View):
     @discord.ui.button(
         label="Створити тікет",
         emoji=discord.PartialEmoji.from_str(E_TICKET),
-        style=discord.ButtonStyle.secondary,   # ← біла кнопка
+        style=discord.ButtonStyle.secondary,   
         custom_id="ticket_create_v2",
     )
     async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         await create_ticket_routine(interaction)
-
 
 class DynamicTicketView(discord.ui.View):
     def __init__(self, buttons_config: list):
@@ -319,7 +304,6 @@ class DynamicTicketView(discord.ui.View):
 
     async def _ticket_callback(self, interaction: discord.Interaction):
         await create_ticket_routine(interaction)
-
 
 # ── Create ticket ─────────────────────────────────────────────────────────────
 
@@ -384,7 +368,6 @@ async def create_ticket_routine(interaction: discord.Interaction):
     )
     embed.set_author(name=guild.name)
     await channel.send(embed=embed, view=TicketControlView())
-
 
 # ── Admin Panel ───────────────────────────────────────────────────────────────
 
@@ -468,7 +451,7 @@ class TicketAdminView(discord.ui.View):
 
     @discord.ui.button(label="📋 Надіслати панель", style=discord.ButtonStyle.success, row=4)
     async def send_panel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Вибраний канал або поточний
+        
         if self.target_channel_id:
             target_ch = interaction.guild.get_channel(self.target_channel_id)
         else:
@@ -489,7 +472,6 @@ class TicketAdminView(discord.ui.View):
 
     def _build_preview(self) -> discord.Embed:
         return discord.Embed(title=self.embed_title, description=self.embed_desc, color=EMBED_COLOR)
-
 
 # ── Cog ───────────────────────────────────────────────────────────────────────
 
@@ -523,7 +505,6 @@ class TicketSystem(commands.Cog):
             "Використовуй селектори нижче для налаштування системи."
         )
         await interaction.response.send_message(embed=embed, view=TicketAdminView(), ephemeral=True)
-
 
 async def setup(bot):
     await bot.add_cog(TicketSystem(bot))

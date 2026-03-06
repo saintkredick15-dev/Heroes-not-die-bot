@@ -5,7 +5,6 @@ from modules.db import get_database
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 
-
 class ImageGenerator:
     def __init__(
         self,
@@ -47,7 +46,6 @@ class ImageGenerator:
 
         return x, y
 
-
 class Divider(ImageGenerator):
     def __init__(
         self,
@@ -71,11 +69,10 @@ class Divider(ImageGenerator):
 
         return buffer
 
-
 class Badge(ImageGenerator):
     def __init__(
         self,
-        background_image_path: str = "images/badge_bg.png",  # assets_path/{this_path}
+        background_image_path: str = "images/badge_bg.png",  
         title_font_filename: str = "ScienceGothic.ttf",
     ):
         assets_path = "../assets"
@@ -121,9 +118,7 @@ class Badge(ImageGenerator):
 
         return buffer
 
-
 db = get_database()
-
 
 class ComplaintModal(discord.ui.Modal, title="Відправити жалобу"):
     complaint = discord.ui.TextInput(
@@ -134,7 +129,7 @@ class ComplaintModal(discord.ui.Modal, title="Відправити жалобу"
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        # ID каналу для жалоб
+        
         complaint_channel_id = 1403706530100023386
         complaint_channel = interaction.guild.get_channel(complaint_channel_id)
 
@@ -161,11 +156,10 @@ class ComplaintModal(discord.ui.Modal, title="Відправити жалобу"
                 "Помилка: не вдалося знайти канал для жалоб", ephemeral=True
             )
 
-
 class EventButtons(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-        # Додаємо URL кнопку через add_item
+        
         join_button = discord.ui.Button(
             label="Приєднатись",
             emoji="<:plus:1420453103005859990>",
@@ -184,7 +178,6 @@ class EventButtons(discord.ui.View):
     ):
         modal = ComplaintModal()
         await interaction.response.send_modal(modal)
-
 
 class RulesView(discord.ui.View):
     def __init__(self):
@@ -225,7 +218,6 @@ class RulesView(discord.ui.View):
             color=0x36393F,
         )
 
-        # Create a second embed for the rest of the rules
         embed2 = discord.Embed(
             description="""```
 3. Не флудити та не спамити без змісту (спам, флуд, оффтоп, капс).
@@ -338,7 +330,6 @@ class RulesView(discord.ui.View):
             color=0x36393F,
         )
 
-        # Add the custom roles section
         embed4 = discord.Embed(
             title="🎭・Як отримати кастомні ролі:",
             description="""**Івенти** — зайняти **призове місце** в офіційному івенті сервера. (кастомка залишається рівно **до слідуючого номінанта** на призове місце в івенті від сервера) виграти **10 разів у івентах/іграх**
@@ -423,7 +414,6 @@ ID учасника.
             color=0x36393F,
         )
 
-        # Add support channel link button
         support_view = discord.ui.View(timeout=None)
         support_view.add_item(
             discord.ui.Button(
@@ -453,7 +443,6 @@ ID учасника.
             color=0x36393F,
         )
 
-        # Add game rules document button with updated label
         game_rules_view = discord.ui.View(timeout=None)
         game_rules_view.add_item(
             discord.ui.Button(
@@ -467,7 +456,6 @@ ID учасника.
         await interaction.response.send_message(
             embed=embed, view=game_rules_view, ephemeral=True
         )
-
 
 class EventsView(discord.ui.View):
     def __init__(self):
@@ -563,13 +551,12 @@ class EventsView(discord.ui.View):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-
 class ActivityCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     async def cog_load(self):
-        # Register the persistent view when the cog loads
+        
         self.bot.add_view(RulesView())
         self.bot.add_view(EventsView())
 
@@ -577,11 +564,9 @@ class ActivityCog(commands.Cog):
     async def recruitment_command(self, ctx):
         """Команда для відображення інформації про набір до адміністрації"""
 
-        # First embed with image only
         embed1 = discord.Embed(color=0x36393F)
         embed1.set_image(url="https://i.imgur.com/6RTM1Gw.png")
 
-        # Second embed with recruitment information
         embed2 = discord.Embed(
             title="Набір до Адміністрації серверу відкритий!",
             description="""<@&1410532910989312000> — адміністрація сервера. Довірені особи власника серверу.
@@ -599,25 +584,23 @@ class ActivityCog(commands.Cog):
 <@&1416511869124087810> — досвідчені учасники сервера. Це люди, які давно перебувають на сервері та знають його від А до Я. Вони можуть допомогти новачкам зорієнтуватися, пояснити правила, підказати, як користуватися каналами чи економікою. Є опорою для спільноти, але не мають повноважень модерації.
 
 звертайся в <#1403682856814903368>""",
-            color=0x36393F,  # Gray color
+            color=0x36393F,  
         )
 
         await ctx.send(embeds=[embed1, embed2])
 
     @commands.command(name="івенттайбл", aliases=["eventtimetable", "тайбл"])
     async def event_timetable(self, ctx):
-        # Перший ембед з зображенням
+        
         first_embed = discord.Embed(color=0x2B2D31)
         first_embed.set_image(url="https://i.imgur.com/ftmM1HG.png")
 
-        # Другий ембед з інформацією про гру
         second_embed = discord.Embed(
             title="**Gartic Phone** — HEROES NOT DIE",
             description="Гра, що поєднує «зламаний телефон» і малювання, де гравці по черзі малюють та підписують малюнки, створюючи кумедний ланцюжок інтерпретаці.",
             color=0x2B2D31,
         )
 
-        # Додаємо поля з емодзі в одну лінію
         second_embed.add_field(
             name="<:zirka:1412519774780395631> Ведучий — <@kredick>",
             value="",
@@ -634,10 +617,8 @@ class ActivityCog(commands.Cog):
             inline=False,
         )
 
-        # Створюємо кнопки
         view = EventButtons()
 
-        # Відправляємо пінг ролі та ембеди з кнопками
         await ctx.send(
             "||<@&1412151154699145318>||", embeds=[first_embed, second_embed], view=view
         )
@@ -650,9 +631,8 @@ class ActivityCog(commands.Cog):
         ).render_to_bytes()
         divider_file = File(fp=divider_badge, filename="divider.png")
 
-        # Main welcome embed
         embed = discord.Embed(
-            color=0x36393F  # Dark theme color
+            color=0x36393F  
         )
         description = [
             "```🎀・Ласкаво просимо на сервер!```",
@@ -675,7 +655,6 @@ class ActivityCog(commands.Cog):
         embed.description = str.join("\n", description)
         embed.set_image(url=f"attachment://{divider_file.filename}")
         
-        # Create the main view with 4 buttons
         view = RulesView()
 
         await ctx.send(embeds=[embed], view=view, files=[divider_file])
@@ -684,7 +663,6 @@ class ActivityCog(commands.Cog):
     async def events_command(self, ctx):
         """Команда для відображення інформації про заходи сервера"""
 
-        # Main events embed
         embed = discord.Embed(color=0x36393F)
 
         embed.add_field(
@@ -699,12 +677,9 @@ class ActivityCog(commands.Cog):
             inline=False,
         )
 
-        # Create the view with dropdown menu
         view = EventsView()
 
         await ctx.send(embed=embed, view=view)
 
-
-# Setup function for the cog
 async def setup(bot):
     await bot.add_cog(ActivityCog(bot))

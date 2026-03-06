@@ -42,7 +42,6 @@ LOG_TYPES = {
     }
 }
 
-# Опис кожної категорії
 CAT_DESCRIPTIONS = {
     "mod": "Логування банів, мутів, кіків та попереджень.",
     "msg": "Логування видалених та відредагованих повідомлень.",
@@ -61,7 +60,6 @@ CAT_NAMES = {
     "whitelist": f"{E_SETTING} Білий список",
 }
 
-
 async def _get(guild_id: int) -> dict:
     return await _col.find_one({"_id": guild_id}) or {}
 
@@ -73,7 +71,6 @@ def _ch_name(guild: discord.Guild, ch_id: int | None) -> str:
         return f"{E_CROSS} не вказано"
     ch = guild.get_channel(ch_id)
     return f"<#{ch_id}>" if ch else f"{E_CROSS} канал не знайдено"
-
 
 def _build_embed(guild: discord.Guild, settings: dict, category: str) -> discord.Embed:
     embed = discord.Embed(
@@ -92,7 +89,7 @@ def _build_embed(guild: discord.Guild, settings: dict, category: str) -> discord
 
     elif category == "whitelist":
         embed.description = CAT_DESCRIPTIONS["whitelist"]
-        # Whitelist channels
+        
         wl_channels = settings.get("log_whitelist_channels", [])
         if wl_channels:
             ch_list = ", ".join(f"<#{c}>" for c in wl_channels)
@@ -100,7 +97,6 @@ def _build_embed(guild: discord.Guild, settings: dict, category: str) -> discord
             ch_list = f"{E_CROSS} не вказано"
         embed.add_field(name="Канали-виключення", value=ch_list, inline=False)
 
-        # Whitelist roles (stored as IDs)
         wl_roles = settings.get("log_whitelist_roles", [])
         if wl_roles:
             role_list = ", ".join(f"<@&{r}>" for r in wl_roles)
@@ -112,7 +108,6 @@ def _build_embed(guild: discord.Guild, settings: dict, category: str) -> discord
         embed.description = "Оберіть категорію логів для налаштування."
 
     return embed
-
 
 # ── Modals ────────────────────────────────────────────────────────────────────
 
@@ -140,7 +135,6 @@ class IntervalModal(discord.ui.Modal, title="Інтервал статистик
             view=self.view,
         )
 
-
 class WhitelistRolesModal(discord.ui.Modal, title="Білий список ролей"):
     roles_input = discord.ui.TextInput(
         label="ID ролей через кому",
@@ -153,7 +147,7 @@ class WhitelistRolesModal(discord.ui.Modal, title="Білий список ро�
     def __init__(self, view: "LogsSmartView"):
         super().__init__()
         self.view = view
-        # Pre-fill with current IDs
+        
         current = self.view.settings.get("log_whitelist_roles", [])
         if current:
             self.roles_input.default = ", ".join(str(r) for r in current)
@@ -174,7 +168,6 @@ class WhitelistRolesModal(discord.ui.Modal, title="Білий список ро�
             embed=_build_embed(interaction.guild, self.view.settings, self.view.category),
             view=self.view,
         )
-
 
 # ── Components ────────────────────────────────────────────────────────────────
 
@@ -202,7 +195,6 @@ class LogChannelSelect(discord.ui.ChannelSelect):
             view=self.view
         )
 
-
 class WhitelistChannelSelect(discord.ui.ChannelSelect):
     def __init__(self, row: int, current_ids: list[int] = None):
         defaults = [discord.Object(id=cid) for cid in (current_ids or [])]
@@ -224,7 +216,6 @@ class WhitelistChannelSelect(discord.ui.ChannelSelect):
             view=self.view
         )
 
-
 class CategorySelect(discord.ui.Select):
     def __init__(self, current_category: str):
         options = [
@@ -245,7 +236,6 @@ class CategorySelect(discord.ui.Select):
             view=new_view,
         )
 
-
 class IntervalButton(discord.ui.Button):
     def __init__(self):
         super().__init__(label="Змінити інтервал", style=discord.ButtonStyle.secondary, emoji=discord.PartialEmoji.from_str("<:clock:1476209087804084328>"), row=2)
@@ -253,14 +243,12 @@ class IntervalButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_modal(IntervalModal(self.view))
 
-
 class WhitelistRolesButton(discord.ui.Button):
     def __init__(self):
         super().__init__(label="Ролі (ввести ID)", style=discord.ButtonStyle.secondary, emoji="🛡️", row=2)
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_modal(WhitelistRolesModal(self.view))
-
 
 # ── Main View ─────────────────────────────────────────────────────────────────
 
@@ -270,7 +258,6 @@ class LogsSmartView(discord.ui.View):
         self.settings = settings
         self.category = category
 
-        # Row 0: Category selector
         self.add_item(CategorySelect(category))
 
         if category in LOG_TYPES:
@@ -289,7 +276,6 @@ class LogsSmartView(discord.ui.View):
             self.add_item(WhitelistChannelSelect(row=1, current_ids=wl_ids))
             self.add_item(WhitelistRolesButton())
 
-
 # ── Cog ───────────────────────────────────────────────────────────────────────
 
 class LogsSetupCog(commands.Cog):
@@ -304,7 +290,6 @@ class LogsSetupCog(commands.Cog):
         view = LogsSmartView(settings, "main")
         embed = _build_embed(interaction.guild, settings, "main")
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
-
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(LogsSetupCog(bot))

@@ -6,7 +6,6 @@ import asyncio
 
 db = get_database()
 
-# Модальні форми для різних налаштувань
 class RoomNameModal(discord.ui.Modal, title="Змінити назву кімнати"):
     name_input = discord.ui.TextInput(
         label="Нова назва кімнати",
@@ -22,7 +21,6 @@ class RoomNameModal(discord.ui.Modal, title="Змінити назву кімн�
     async def on_submit(self, interaction: discord.Interaction):
         new_name = self.name_input.value
         
-        # Знаходимо приватний канал користувача
         user_room = await db.private_rooms.find_one({
             "owner_id": self.user_id,
             "active": True
@@ -32,7 +30,7 @@ class RoomNameModal(discord.ui.Modal, title="Змінити назву кімн�
             channel = interaction.guild.get_channel(user_room["channel_id"])
             if channel:
                 await channel.edit(name=new_name)
-                # Оновлюємо в БД
+                
                 await db.private_rooms.update_one(
                     {"owner_id": self.user_id, "active": True},
                     {"$set": {"name": new_name}}
@@ -101,20 +99,19 @@ class UserMentionModal(discord.ui.Modal):
         user_input = self.user_input.value.strip()
         target_user = None
         
-        # Спробуємо знайти користувача
         if user_input.startswith('<@') and user_input.endswith('>'):
-            # Mention формат
+            
             user_id = user_input[2:-1].replace('!', '')
             try:
                 target_user = await interaction.guild.fetch_member(int(user_id))
             except (ValueError, discord.HTTPException):
                 pass
         else:
-            # Спробуємо як ID
+            
             try:
                 target_user = await interaction.guild.fetch_member(int(user_input))
             except (ValueError, discord.HTTPException):
-                # Спробуємо знайти по імені
+                
                 target_user = discord.utils.get(interaction.guild.members, display_name=user_input)
                 if not target_user:
                     target_user = discord.utils.get(interaction.guild.members, name=user_input)
@@ -137,40 +134,39 @@ class UserMentionModal(discord.ui.Modal):
             await interaction.response.send_message("❌ Не вдалося знайти твою кімнату!", ephemeral=True)
             return
 
-        # Виконуємо дію в залежності від типу
         if self.action_type == "access":
-            # Управління доступом
+            
             overwrites = channel.overwrites
             if target_user in overwrites:
-                # Користувач вже має налаштування - видаляємо їх
+                
                 del overwrites[target_user]
                 await channel.edit(overwrites=overwrites)
                 await interaction.response.send_message(f"✅ Скинуто права доступу для {target_user.display_name}", ephemeral=True)
             else:
-                # Даємо доступ
+                
                 overwrites[target_user] = discord.PermissionOverwrite(connect=True, view_channel=True)
                 await channel.edit(overwrites=overwrites)
                 await interaction.response.send_message(f"✅ Надано доступ користувачеві {target_user.display_name}", ephemeral=True)
                 
         elif self.action_type == "mic":
-            # Управління мікрофоном
+            
             overwrites = channel.overwrites
             current_perms = overwrites.get(target_user, discord.PermissionOverwrite())
             if current_perms.speak is False:
-                # Повертаємо право говорити
+                
                 current_perms.speak = True
                 overwrites[target_user] = current_perms
                 await channel.edit(overwrites=overwrites)
                 await interaction.response.send_message(f"✅ Повернуто право говорити для {target_user.display_name}", ephemeral=True)
             else:
-                # Забираємо право говорити
+                
                 current_perms.speak = False
                 overwrites[target_user] = current_perms
                 await channel.edit(overwrites=overwrites)
                 await interaction.response.send_message(f"✅ Заборонено говорити користувачеві {target_user.display_name}", ephemeral=True)
                 
         elif self.action_type == "kick":
-            # Кікаємо користувача
+            
             if target_user.voice and target_user.voice.channel == channel:
                 await target_user.move_to(None)
                 await interaction.response.send_message(f"✅ Користувача {target_user.display_name} вигнано з кімнати", ephemeral=True)
@@ -178,7 +174,7 @@ class UserMentionModal(discord.ui.Modal):
                 await interaction.response.send_message(f"❌ Користувач {target_user.display_name} не в твоїй кімнаті", ephemeral=True)
                 
         elif self.action_type == "reset":
-            # Скидаємо права
+            
             overwrites = channel.overwrites
             if target_user in overwrites:
                 del overwrites[target_user]
@@ -188,19 +184,18 @@ class UserMentionModal(discord.ui.Modal):
                 await interaction.response.send_message(f"❌ У користувача {target_user.display_name} немає особливих прав", ephemeral=True)
                 
         elif self.action_type == "owner":
-            # Передача власності
+            
             await db.private_rooms.update_one(
                 {"owner_id": self.user_id, "active": True},
                 {"$set": {"owner_id": target_user.id}}
             )
             
-            # Оновлюємо права каналу
             overwrites = channel.overwrites
-            # Забираємо права у старого власника
+            
             overwrites[interaction.user] = discord.PermissionOverwrite(
                 connect=True, view_channel=True, manage_channels=False, manage_permissions=False
             )
-            # Даємо права новому власнику
+            
             overwrites[target_user] = discord.PermissionOverwrite(
                 connect=True, view_channel=True, manage_channels=True, manage_permissions=True
             )
@@ -252,8 +247,8 @@ class RoomManagementView(discord.ui.View):
                 
                 current_perms = overwrites.get(everyone, discord.PermissionOverwrite())
                 if current_perms.connect is False:
-                    # Відкриваємо доступ
-                    current_perms.connect = None  # Повертаємо до стандартних налаштувань
+                    
+                    current_perms.connect = None  
                     overwrites[everyone] = current_perms
                     await channel.edit(overwrites=overwrites)
                     await db.private_rooms.update_one(
@@ -262,7 +257,7 @@ class RoomManagementView(discord.ui.View):
                     )
                     await interaction.response.send_message("🔓 Кімнату відкрито для всіх!", ephemeral=True)
                 else:
-                    # Закриваємо доступ
+                    
                     current_perms.connect = False
                     overwrites[everyone] = current_perms
                     await channel.edit(overwrites=overwrites)
@@ -288,7 +283,7 @@ class RoomManagementView(discord.ui.View):
                 
                 current_perms = overwrites.get(everyone, discord.PermissionOverwrite())
                 if current_perms.view_channel is False:
-                    # Показуємо кімнату
+                    
                     current_perms.view_channel = None
                     overwrites[everyone] = current_perms
                     await channel.edit(overwrites=overwrites)
@@ -298,7 +293,7 @@ class RoomManagementView(discord.ui.View):
                     )
                     await interaction.response.send_message("👁️ Кімнату зроблено видимою для всіх!", ephemeral=True)
                 else:
-                    # Ховаємо кімнату
+                    
                     current_perms.view_channel = False
                     overwrites[everyone] = current_perms
                     await channel.edit(overwrites=overwrites)
@@ -349,7 +344,7 @@ class RoomManagementView(discord.ui.View):
         if user_room:
             channel = interaction.guild.get_channel(user_room["channel_id"])
             if channel:
-                # Збираємо інформацію про кімнату
+                
                 member_count = len(channel.members) if hasattr(channel, 'members') else 0
                 limit = user_room.get("user_limit", 0)
                 limit_text = f"{limit} користувачів" if limit > 0 else "без ліміту"
@@ -379,7 +374,7 @@ class RoomManagementCommands(commands.Cog):
         self.bot = bot
 
     async def cog_load(self):
-        # Індекс для швидкого пошуку server_configs та private_rooms
+        
         await db.server_configs.create_index("guild_id", unique=True, background=True)
         await db.private_rooms.create_index("owner_id", background=True)
         await db.private_rooms.create_index("channel_id", background=True)
@@ -387,39 +382,37 @@ class RoomManagementCommands(commands.Cog):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
         """Обробляє зміни voice статусу"""
-        # Перевіряємо чи користувач зайшов в канал-створювач
+        
         if after.channel:
-            # Знаходимо налаштування сервера
+            
             server_config = await db.server_configs.find_one({"guild_id": member.guild.id})
             if server_config and after.channel.id == server_config.get("creator_channel_id"):
                 await self.create_private_room(member, after.channel)
         
-        # Перевіряємо чи користувач покинув свій приватний канал
         if before.channel:
             user_room = await db.private_rooms.find_one({
                 "channel_id": before.channel.id,
                 "active": True
             })
             if user_room and len(before.channel.members) == 0:
-                # Канал порожній, видаляємо його
+                
                 await self.delete_private_room(before.channel, user_room)
 
     async def create_private_room(self, member, creator_channel):
         """Створити приватну кімнату для користувача"""
-        # Перевіряємо чи вже має активну кімнату
+        
         existing_room = await db.private_rooms.find_one({
             "owner_id": member.id,
             "active": True
         })
         
         if existing_room:
-            # Переносимо в існуючу кімнату
+            
             existing_channel = member.guild.get_channel(existing_room["channel_id"])
             if existing_channel:
                 await member.move_to(existing_channel)
                 return
 
-        # Створюємо новий приватний канал
         overwrites = {
             member.guild.default_role: discord.PermissionOverwrite(connect=True, view_channel=True),
             member: discord.PermissionOverwrite(connect=True, view_channel=True, manage_channels=True, manage_permissions=True)
@@ -432,10 +425,8 @@ class RoomManagementCommands(commands.Cog):
             user_limit=None
         )
 
-        # Переносимо користувача в новий канал
         await member.move_to(private_channel)
 
-        # Зберігаємо в БД
         await db.private_rooms.insert_one({
             "owner_id": member.id,
             "channel_id": private_channel.id,
@@ -466,14 +457,13 @@ class RoomManagementCommands(commands.Cog):
                         creator_channel: discord.VoiceChannel, 
                         management_channel: discord.TextChannel):
         """Налаштування системи приватних кімнат для адмінів"""
-        # Перевіряємо права
+        
         if not interaction.user.guild_permissions.manage_channels:
             await interaction.response.send_message("❌ У тебе немає прав для використання цієї команди!", ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
 
-        # Видаляємо старі панелі управління (якщо є)
         async for message in management_channel.history(limit=50):
             if message.author == interaction.client.user and message.embeds:
                 if message.embeds[0].title == "🏠 Управління приватною кімнатою":
@@ -483,7 +473,6 @@ class RoomManagementCommands(commands.Cog):
                         pass
                     break
 
-        # Зберігаємо конфігурацію
         await db.server_configs.update_one(
             {"guild_id": interaction.guild.id},
             {
@@ -497,7 +486,6 @@ class RoomManagementCommands(commands.Cog):
             upsert=True
         )
 
-        # Створюємо embed та view для панелі управління
         embed = discord.Embed(
             title="🏠 Управління приватною кімнатою",
             color=0x7c7cf0,
@@ -519,10 +507,8 @@ class RoomManagementCommands(commands.Cog):
 
         view = RoomManagementView()
         
-        # Відправляємо панель управління в зазначений канал
         await management_channel.send(embed=embed, view=view)
 
-        # Підтверджуємо налаштування адміну
         success_embed = discord.Embed(
             title="✅ Система приватних кімнат налаштована!",
             color=0x00ff00,
@@ -546,7 +532,7 @@ class RoomManagementCommands(commands.Cog):
         return user_room
 
 async def setup(bot):
-    # Додаємо persistent view при завантаженні модуля
+    
     view = RoomManagementView()
     bot.add_view(view)
     print("✅ Room Management persistent view зареєстровано")

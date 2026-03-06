@@ -21,7 +21,6 @@ E_MEMBERS  = "<:members:1477720603472691420>"
 
 EMBED_COLOR = 0x1a1a2e
 
-# Модулі автомоду
 MODULES = {
     "am_antispam":   {"label": "Антиспам",         "emoji": "<:repeat:1454136632197255220>",    "desc": "Блокує флуд повідомленнями за короткий час."},
     "am_antiinvite": {"label": "Антизапрошення",   "emoji": "<:nolink:1477753086369075281>",    "desc": "Блокує посилання discord.gg."},
@@ -32,7 +31,6 @@ MODULES = {
     "am_imagespam":  {"label": "Image-спам",      "emoji": "<:photo:1476690859029172456>",     "desc": "Ловить масове закидання картинок/файлів."},
 }
 
-# Налаштування модулів (label max 45 chars!)
 MODULE_SETTINGS = {
     "am_antispam": {
         "am_antispam_count":    {"name": "Скільки повідомлень = спам",   "default": 5},
@@ -72,13 +70,11 @@ MODULE_SETTINGS = {
     },
 }
 
-
 async def _get(guild_id: int) -> dict:
     return await _col.find_one({"_id": guild_id}) or {}
 
 async def _set(guild_id: int, data: dict):
     await _col.update_one({"_id": guild_id}, {"$set": data}, upsert=True)
-
 
 # ── Embeds ────────────────────────────────────────────────────────────────────
 
@@ -93,7 +89,6 @@ def _build_main_embed(settings: dict) -> discord.Embed:
         status = f"{E_CHECK} Увімкнено" if enabled else f"{E_CROSS} Вимкнено"
         embed.add_field(name=f"{mod['emoji']} {mod['label']}", value=status, inline=True)
 
-    # Whitelist
     wl_ch = settings.get("am_whitelist_channels", [])
     wl_roles = settings.get("am_whitelist_roles", [])
     wl_text = ""
@@ -106,7 +101,6 @@ def _build_main_embed(settings: dict) -> discord.Embed:
     wl_text += "\n*Адміністратори ігноруються.*"
     embed.add_field(name=f"{E_SETTING} Білий список", value=wl_text, inline=False)
 
-    # Custom words
     rules = settings.get("automod_rules", [])
     if rules:
         words = ", ".join(f"`{r['trigger']}`" for r in rules[:15])
@@ -114,7 +108,6 @@ def _build_main_embed(settings: dict) -> discord.Embed:
     else:
         embed.add_field(name=f"{E_NO} Заборонені слова", value=f"{E_CROSS} не додано", inline=False)
     return embed
-
 
 def _build_module_embed(key: str, settings: dict) -> discord.Embed:
     mod = MODULES[key]
@@ -127,7 +120,6 @@ def _build_module_embed(key: str, settings: dict) -> discord.Embed:
         color=EMBED_COLOR,
     )
 
-    # Параметри модуля
     if key in MODULE_SETTINGS:
         for skey, sinfo in MODULE_SETTINGS[key].items():
             if skey.endswith("_mute_dur"):
@@ -139,7 +131,6 @@ def _build_module_embed(key: str, settings: dict) -> discord.Embed:
                 val = "—"
             embed.add_field(name=sinfo["name"], value=f"`{val}`", inline=True)
 
-    # Додаткова інфо для конкретних модулів
     if key == "am_antispam":
         dup = settings.get("am_antispam_duplicates", False)
         dup_status = f"{E_CHECK} Увімкнено" if dup else f"{E_CROSS} Вимкнено"
@@ -164,7 +155,6 @@ def _build_module_embed(key: str, settings: dict) -> discord.Embed:
             embed.add_field(name="Дозволені домени", value=f"{E_CROSS} не вказано", inline=False)
 
     return embed
-
 
 # ── Modals ────────────────────────────────────────────────────────────────────
 
@@ -216,7 +206,6 @@ class ModuleSettingsModal(discord.ui.Modal):
         embed = _build_module_embed(self.mod_key, self.parent_view.settings)
         await interaction.response.edit_message(embed=embed, view=self.parent_view)
 
-
 class CustomWordsModal(discord.ui.Modal, title="Заборонені слова/фрази"):
     words_input = discord.ui.TextInput(
         label="Слова через кому",
@@ -243,7 +232,6 @@ class CustomWordsModal(discord.ui.Modal, title="Заборонені слова/
         await interaction.response.edit_message(
             embed=_build_main_embed(self.am_view.settings), view=self.am_view)
 
-
 class WhitelistRolesModal(discord.ui.Modal, title="Білий список ролей"):
     roles_input = discord.ui.TextInput(
         label="ID ролей через кому",
@@ -268,7 +256,6 @@ class WhitelistRolesModal(discord.ui.Modal, title="Білий список ро�
         await reload_guild_automod_cache(interaction.guild.id)
         await interaction.response.edit_message(
             embed=_build_main_embed(self.am_view.settings), view=self.am_view)
-
 
 class AllowedDomainsModal(discord.ui.Modal, title="Дозволені домени"):
     domains_input = discord.ui.TextInput(
@@ -295,7 +282,6 @@ class AllowedDomainsModal(discord.ui.Modal, title="Дозволені домен
         embed = _build_module_embed(self.sub_view.mod_key, self.sub_view.settings)
         await interaction.response.edit_message(embed=embed, view=self.sub_view)
 
-
 class AllowedServersModal(discord.ui.Modal, title="Дозволені сервери"):
     servers_input = discord.ui.TextInput(
         label="Invite або ID серверів, через кому",
@@ -310,7 +296,7 @@ class AllowedServersModal(discord.ui.Modal, title="Дозволені серве
         self.sub_view = view
         current = view.settings.get("am_antiinvite_allowed_servers", [])
         if current:
-            # Показуємо назви серверів для зручності
+            
             if isinstance(current[0], dict):
                 self.servers_input.default = ", ".join(s.get("name", str(s.get("guild_id", ""))) for s in current)
             else:
@@ -335,7 +321,7 @@ class AllowedServersModal(discord.ui.Modal, title="Дозволені серве
         invite_re = re.compile(r'(?:discord\.gg|discord\.com/invite|discordapp\.com/invite|dsc\.gg)/([a-zA-Z0-9\-]+)', re.I)
 
         for entry in entries:
-            # Спробуємо витягти invite-код з URL
+            
             m = invite_re.search(entry)
             code = m.group(1) if m else None
 
@@ -349,12 +335,11 @@ class AllowedServersModal(discord.ui.Modal, title="Дозволені серве
                 except (discord.NotFound, discord.HTTPException):
                     errors.append(entry)
             elif entry.isdigit():
-                # Guild ID напряму
+                
                 resolved.append({"guild_id": int(entry), "name": f"ID: {entry}"})
             else:
                 errors.append(entry)
 
-        # Дедуплікація по guild_id
         seen = set()
         unique = []
         for s in resolved:
@@ -379,7 +364,6 @@ class AllowedServersModal(discord.ui.Modal, title="Дозволені серве
         if msg:
             await interaction.followup.send(msg, ephemeral=True)
 
-
 # ── Module Sub-Panel View ────────────────────────────────────────────────────
 
 class ModuleSubView(discord.ui.View):
@@ -388,7 +372,6 @@ class ModuleSubView(discord.ui.View):
         self.mod_key = key
         self.settings = settings
 
-        # Додаткові кнопки для конкретних модулів (row=1)
         if key == "am_antispam":
             dup_on = settings.get("am_antispam_duplicates", False)
             label = "Повтори: ВКЛ" if dup_on else "Повтори: ВИКЛ"
@@ -447,7 +430,6 @@ class ModuleSubView(discord.ui.View):
     async def _open_allowed_servers(self, interaction: discord.Interaction):
         await interaction.response.send_modal(AllowedServersModal(self))
 
-
 # ── Main View ─────────────────────────────────────────────────────────────────
 
 class ModuleButton(discord.ui.Button):
@@ -463,17 +445,13 @@ class ModuleButton(discord.ui.Button):
         embed = _build_module_embed(self.mod_key, view.settings)
         await interaction.response.edit_message(embed=embed, view=sub_view)
 
-
 class AutomodView(discord.ui.View):
     def __init__(self, settings: dict):
         super().__init__(timeout=86400)
         self.settings = settings
 
         keys = list(MODULES.keys())
-        # Row 0: Антиспам, Антизапрошення
-        # Row 1: Анти-посилання, Анти-капс
-        # Row 2: Анти-згадки, Emoji-спам
-        # Row 3: Image-спам, Заборонені слова, Білий список ролей
+        
         row_map = {0: 0, 1: 0, 2: 1, 3: 1, 4: 2, 5: 2, 6: 3}
         for i, key in enumerate(keys):
             mod = MODULES[key]
@@ -483,7 +461,6 @@ class AutomodView(discord.ui.View):
         self.add_item(CustomWordsButton())
         self.add_item(WhitelistRolesButton())
         self.add_item(WhitelistChannelSelect(settings))
-
 
 class CustomWordsButton(discord.ui.Button):
     def __init__(self):
@@ -496,7 +473,6 @@ class CustomWordsButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_modal(CustomWordsModal(self.view))
-
 
 class WhitelistChannelSelect(discord.ui.ChannelSelect):
     def __init__(self, settings: dict):
@@ -517,7 +493,6 @@ class WhitelistChannelSelect(discord.ui.ChannelSelect):
         await interaction.response.edit_message(
             embed=_build_main_embed(self.view.settings), view=self.view)
 
-
 class WhitelistRolesButton(discord.ui.Button):
     def __init__(self):
         super().__init__(
@@ -529,7 +504,6 @@ class WhitelistRolesButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_modal(WhitelistRolesModal(self.view))
-
 
 # ── Cog ───────────────────────────────────────────────────────────────────────
 
@@ -545,7 +519,6 @@ class AutomodSetupCog(commands.Cog):
         view = AutomodView(settings)
         embed = _build_main_embed(settings)
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
-
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(AutomodSetupCog(bot))

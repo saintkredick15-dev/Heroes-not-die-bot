@@ -21,7 +21,6 @@ EMBED_COLOR = 0x1a1a2e
 
 UNIT_MAP = {"s": 1, "m": 60, "h": 3600, "d": 86400}
 
-
 def _parse_duration(text: str) -> int | None:
     """Parse e.g. '5m', '2h', '1d' into seconds. Returns None on error."""
     text = text.strip().lower()
@@ -34,7 +33,6 @@ def _parse_duration(text: str) -> int | None:
         return int(text[:-1]) * UNIT_MAP[suffix]
     except ValueError:
         return None
-
 
 class CustomPurgeModal(discord.ui.Modal, title="Свій термін видалення"):
     period = discord.ui.TextInput(
@@ -75,7 +73,6 @@ class CustomPurgeModal(discord.ui.Modal, title="Свій термін видал
                 embed=discord.Embed(description=f"❌ Помилка: {e}", color=0x2b2d31), ephemeral=True
             )
 
-
 def _load_config() -> dict:
     try:
         with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -84,7 +81,6 @@ def _load_config() -> dict:
         print(f"[admin] Помилка завантаження config.json: {e}")
         return {}
 
-
 def check_permissions(interaction: discord.Interaction) -> bool:
     config = _load_config()
     return (
@@ -92,14 +88,11 @@ def check_permissions(interaction: discord.Interaction) -> bool:
         or interaction.user.id in config.get("dev", [])
     )
 
-
 def _ok(description: str) -> discord.Embed:
     return discord.Embed(description=description, color=EMBED_COLOR)
 
-
 def _err(description: str) -> discord.Embed:
     return discord.Embed(description=f"❌ {description}", color=0x2b2d31)
-
 
 class AdminCommands(commands.Cog):
     def __init__(self, bot):

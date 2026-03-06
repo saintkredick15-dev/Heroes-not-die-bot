@@ -16,14 +16,11 @@ E_PALETTE  = "<:palette:1476196821444591768>"
 E_CROSS    = "<:krestik:1476693091355463842>"
 EMBED_COLOR = 0x1a1a2e
 
-
 async def _get(guild_id: int) -> dict:
     return await _col.find_one({"_id": guild_id}) or {}
 
-
 async def _set(guild_id: int, data: dict):
     await _col.update_one({"_id": guild_id}, {"$set": data}, upsert=True)
-
 
 def _build_embed(settings: dict) -> discord.Embed:
     min_lvl = settings.get("color_min_level", 10)
@@ -44,7 +41,6 @@ def _build_embed(settings: dict) -> discord.Embed:
     )
     embed.set_footer(text="Налаштування зберігаються автоматично")
     return embed
-
 
 # ── Modals ────────────────────────────────────────────────────────────────────
 
@@ -72,7 +68,6 @@ class MinLevelModal(discord.ui.Modal, title="Мінімальний рівень
                 embed=_build_embed(self.color_view.settings), view=self.color_view)
         except ValueError:
             await interaction.response.send_message(f"{E_CROSS} Введіть число.", ephemeral=True)
-
 
 class AnchorRoleModal(discord.ui.Modal, title="Якір для кольорів"):
     role_input = discord.ui.TextInput(
@@ -109,7 +104,6 @@ class AnchorRoleModal(discord.ui.Modal, title="Якір для кольорів"
         except ValueError:
             await interaction.response.send_message(f"{E_CROSS} ID має бути числом.", ephemeral=True)
 
-
 # ── View ──────────────────────────────────────────────────────────────────────
 
 class ColorsView(discord.ui.View):
@@ -125,7 +119,6 @@ class ColorsView(discord.ui.View):
     @discord.ui.button(label="Налаштувати Якір (ID ролі)", style=discord.ButtonStyle.secondary, row=1)
     async def anchor_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(AnchorRoleModal(self))
-
 
 class DeployColorSelect(discord.ui.ChannelSelect):
     def __init__(self):
@@ -150,7 +143,6 @@ class DeployColorSelect(discord.ui.ChannelSelect):
         await ch.send(embed=embed, view=ColorPickerView())
         await interaction.response.send_message(f"✅ Панель кольорів відправлена у {ch.mention}", ephemeral=True)
 
-
 # ── Cog ───────────────────────────────────────────────────────────────────────
 
 class ColorsCog(commands.Cog):
@@ -165,7 +157,6 @@ class ColorsCog(commands.Cog):
         view = ColorsView(settings)
         embed = _build_embed(settings)
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
-
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(ColorsCog(bot))

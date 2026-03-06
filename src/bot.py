@@ -136,6 +136,9 @@ class HeroesBot(commands.Bot):
         else:
             log.warning(f"Commands folder not found at: {commands_path}")
 
+        # 3. Сервіси
+        extensions.append(('service', 'services.scheduler', 'scheduler'))
+
         # Завантаження з прогрес-баром
         with Progress() as progress:
             task = progress.add_task("[green]Loading extensions...", total=len(extensions))

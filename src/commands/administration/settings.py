@@ -19,7 +19,6 @@ E_CROSS   = "<:krestik:1476693091355463842>"
 E_NOTIF   = "<:notification:1476256523519787161>"
 EMBED_COLOR = 0x1a1a2e
 
-# Команди які можна обмежити
 RESTRICTABLE_COMMANDS = {
     "meme":        "Випадковий мем з Reddit",
     "avatar":      "Аватар користувача",
@@ -27,14 +26,11 @@ RESTRICTABLE_COMMANDS = {
     "leaderboard": "Топ учасників",
 }
 
-
 async def _get(guild_id: int) -> dict:
     return await _col.find_one({"_id": guild_id}) or {}
 
-
 async def _set(guild_id: int, data: dict):
     await _col.update_one({"_id": guild_id}, {"$set": data}, upsert=True)
-
 
 def _build_main_embed(settings: dict) -> discord.Embed:
     embed = discord.Embed(
@@ -42,7 +38,6 @@ def _build_main_embed(settings: dict) -> discord.Embed:
         color=EMBED_COLOR,
     )
 
-    # Level Up
     lu_ch = settings.get("levelup_channel_id")
     lu_status = f"<#{lu_ch}>" if lu_ch else f"{E_CROSS} Вимкнено"
     embed.add_field(
@@ -51,7 +46,6 @@ def _build_main_embed(settings: dict) -> discord.Embed:
         inline=False,
     )
 
-    # Per-command restrictions
     restrictions = settings.get("command_restrictions", {})
     if restrictions:
         lines = []
@@ -67,7 +61,6 @@ def _build_main_embed(settings: dict) -> discord.Embed:
         embed.add_field(name="📌 Обмеження команд", value=f"{E_CROSS} Не налаштовано.", inline=False)
 
     return embed
-
 
 def _build_cmd_embed(cmd_name: str, settings: dict) -> discord.Embed:
     desc = RESTRICTABLE_COMMANDS.get(cmd_name, "")
@@ -89,7 +82,6 @@ def _build_cmd_embed(cmd_name: str, settings: dict) -> discord.Embed:
         embed.add_field(name="Статус", value="Доступна в усіх каналах.", inline=False)
     return embed
 
-
 # ── Views ─────────────────────────────────────────────────────────────────────
 
 class SettingsView(discord.ui.View):
@@ -105,7 +97,6 @@ class SettingsView(discord.ui.View):
         await _set(interaction.guild.id, {"levelup_channel_id": None})
         await interaction.response.edit_message(
             embed=_build_main_embed(self.settings), view=self)
-
 
 class LevelUpChannelSelect(discord.ui.ChannelSelect):
     def __init__(self, settings: dict):
@@ -126,7 +117,6 @@ class LevelUpChannelSelect(discord.ui.ChannelSelect):
         await interaction.response.edit_message(
             embed=_build_main_embed(self.view.settings), view=self.view)
 
-
 class CommandSelect(discord.ui.Select):
     def __init__(self):
         options = [
@@ -140,7 +130,6 @@ class CommandSelect(discord.ui.Select):
         view = CmdRestrictionView(cmd_name, self.view.settings)
         embed = _build_cmd_embed(cmd_name, self.view.settings)
         await interaction.response.edit_message(embed=embed, view=view)
-
 
 class CmdRestrictionView(discord.ui.View):
     def __init__(self, cmd_name: str, settings: dict):
@@ -166,7 +155,6 @@ class CmdRestrictionView(discord.ui.View):
         view = SettingsView(self.settings)
         await interaction.response.edit_message(
             embed=_build_main_embed(self.settings), view=view)
-
 
 class CmdChannelSelect(discord.ui.ChannelSelect):
     def __init__(self, cmd_name: str, settings: dict):
@@ -197,7 +185,6 @@ class CmdChannelSelect(discord.ui.ChannelSelect):
         embed = _build_cmd_embed(self.cmd_name, settings)
         await interaction.response.edit_message(embed=embed, view=self.view)
 
-
 # ── Cog ───────────────────────────────────────────────────────────────────────
 
 class SettingsCog(commands.Cog):
@@ -212,7 +199,6 @@ class SettingsCog(commands.Cog):
         view = SettingsView(settings)
         embed = _build_main_embed(settings)
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
-
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(SettingsCog(bot))

@@ -15,7 +15,16 @@ DEFAULT_USER: dict = {
     "voice_minutes": 0,
     "reactions": 0,
     "history": {},
+    
+    # Економіка
+    "wallet": 0,
+    "bank": 0,
+    "daily_streak": 0,
+    "daily_last": 0,
+    "work_last": 0,
+    "total_earned": 0,
     "levelup_notify": True,  # чи надсилати сповіщення про підвищення рівня
+    "eco_history": [] # Наприклад: [{"action": "Work", "amount": 500, "time": 16400000}]
 }
 
 

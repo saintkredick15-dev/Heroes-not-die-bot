@@ -12,19 +12,17 @@ class UtilityCog(commands.Cog):
         self, interaction: discord.Interaction, member: discord.Member = None
     ):
         """Отримати аватар користувача"""
-        # Якщо користувача не вказано, беремо того, хто викликав команду
+        
         target = member or interaction.user
         
-        # Перевіряємо чи є аватар, якщо нема - беремо дефолтний
         avatar_url = target.avatar.url if target.avatar else target.default_avatar.url
 
         embed = discord.Embed(
             title=f"Аватар {target.display_name}",
-            color=0x36393F  # Dark theme color
+            color=0x36393F  
         )
         embed.set_image(url=avatar_url)
         
-        # Додаємо кнопку для завантаження
         view = discord.ui.View()
         view.add_item(discord.ui.Button(
             label="Завантажити оригінал",

@@ -15,7 +15,6 @@ from utils.image_generator import get_available_fonts
 db = get_database()
 _col = db.guild_settings
 
-# Емодзі користувача
 E_HI = "<:hi:1476689510560567456>"
 E_BYE = "<:bye:1476689667351904376>"
 E_LIST = "<:list:1454151067989184562>"
@@ -50,7 +49,7 @@ async def get_greetings_settings(guild_id: int) -> dict:
         data[f"{mode}_outline_color"] = settings.get(f"{mode}_outline_color", defs["out_c"])
         data[f"{mode}_bg_url"] = settings.get(f"{mode}_bg_url", defs["bg_u"])
         data[f"{mode}_bg_color"] = settings.get(f"{mode}_bg_color", defs["bg_c"])
-    # Boost role
+    
     data["boost_role_id"] = settings.get("boost_role_id")
     return data
 
@@ -164,7 +163,6 @@ class BoostRoleModal(discord.ui.Modal, title="Роль за буст серве�
         await update_settings(interaction.guild.id, {"boost_role_id": role_id})
         self.dv.settings["boost_role_id"] = role_id
         await interaction.response.edit_message(embed=_build_embed(self.dv.settings, self.dv.mode), view=self.dv)
-
 
 class FontSelect(discord.ui.Select):
     def __init__(self, current_font: str):
@@ -326,7 +324,7 @@ class GreetingsSettings(commands.Cog):
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         if before.premium_since is None and after.premium_since is not None:
-            # Видаємо роль за буст якщо налаштовано
+            
             settings = await _col.find_one({"_id": after.guild.id}) or {}
             boost_role_id = settings.get("boost_role_id")
             if boost_role_id:

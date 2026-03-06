@@ -1,6 +1,8 @@
 import discord
 from discord.ext import commands, tasks
 from datetime import datetime
+import time
+import random
 from pymongo import UpdateOne
 from modules.db import get_database
 from repositories.user import get_user, update_user, get_level_xp
@@ -145,6 +147,9 @@ class ActivityEvents(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.update_voice_time.start()
+        # Economy cooldown caches
+        self._msg_cooldowns: dict[int, dict[int, float]] = {}
+        self._react_cooldowns: dict[int, dict[int, float]] = {}
 
     def cog_unload(self):
         self.update_voice_time.cancel()
@@ -165,8 +170,31 @@ class ActivityEvents(commands.Cog):
             "messages": user_data["messages"] + 1,
             "history": history,
         }
+
+        # --- Економіка: Валюта за повідомлення ---
+        settings = await db.guild_settings.find_one({"_id": message.guild.id}) or {}
+        eco = settings.get("economy", {})
+        if eco.get("enabled", True):
+            guild_cds = self._msg_cooldowns.setdefault(message.guild.id, {})
+            now = time.time()
+            if now - guild_cds.get(message.author.id, 0) >= eco.get("msg_cooldown", 60):
+                guild_cds[message.author.id] = now
+                earn_conf = eco.get("msg_earn", [5, 10])
+                if isinstance(earn_conf, list) and len(earn_conf) == 2:
+                    earned = random.randint(earn_conf[0], earn_conf[1])
+                else:
+                    earned = int(earn_conf) if isinstance(earn_conf, (int, float, str)) else 5
+                update_data["wallet"] = user_data.get("wallet", 0) + earned
+                update_data["total_earned"] = user_data.get("total_earned", 0) + earned
+        # ----------------------------------------
+
         user_data.update(update_data)
-        await update_user(db, message.guild.id, message.author, message.author.id, update_data)
+        # Also increment xp leaderboard weekly/monthly counters
+        await db.users.update_one(
+            {"guild_id": message.guild.id, "user_id": message.author.id},
+            {"$set": update_data, "$inc": {"xp_week": 10, "xp_month": 10}},
+            upsert=True
+        )
         await level_up_check(message, user_data)
 
     @commands.Cog.listener()
@@ -185,7 +213,25 @@ class ActivityEvents(commands.Cog):
             "reactions": user_data["reactions"] + 1,
             "history": history,
         }
-        await update_user(db, reaction.message.guild.id, user, user.id, update_data)
+
+        # --- Економіка: Валюта за реакції ---
+        settings = await db.guild_settings.find_one({"_id": reaction.message.guild.id}) or {}
+        eco = settings.get("economy", {})
+        if eco.get("enabled", True):
+            guild_cds = self._react_cooldowns.setdefault(reaction.message.guild.id, {})
+            now = time.time()
+            if now - guild_cds.get(user.id, 0) >= eco.get("reaction_cooldown", 30):
+                guild_cds[user.id] = now
+                earned = eco.get("reaction_earn", 2)
+                update_data["wallet"] = user_data.get("wallet", 0) + earned
+                update_data["total_earned"] = user_data.get("total_earned", 0) + earned
+        # ------------------------------------
+
+        await db.users.update_one(
+            {"guild_id": reaction.message.guild.id, "user_id": user.id},
+            {"$set": update_data, "$inc": {"xp_week": 2, "xp_month": 2}},
+            upsert=True
+        )
 
     @tasks.loop(minutes=1)
     async def update_voice_time(self):
@@ -217,7 +263,12 @@ class ActivityEvents(commands.Cog):
                 )
             }
 
-            # Збираємо bulk-операції
+            # Завантажуємо settings для гільдії
+            settings = await db.guild_settings.find_one({"_id": guild.id}) or {}
+            eco = settings.get("economy", {})
+            eco_enabled = eco.get("enabled", True)
+            voice_earn = eco.get("voice_earn", 3)
+
             for member in members_to_process:
                 user_data = existing_docs.get(member.id)
                 if not user_data:
@@ -226,11 +277,16 @@ class ActivityEvents(commands.Cog):
                 history = dict(user_data.get("history", {}))
                 history[today] = history.get(today, 0) + 5
 
+                inc_query = {"xp": 5, "voice_minutes": 1, "xp_week": 5, "xp_month": 5}
+                if eco_enabled:
+                    inc_query["wallet"] = voice_earn
+                    inc_query["total_earned"] = voice_earn
+
                 operations.append(
                     UpdateOne(
                         {"guild_id": guild.id, "user_id": member.id},
                         {
-                            "$inc": {"xp": 5, "voice_minutes": 1},
+                            "$inc": inc_query,
                             "$set": {
                                 "history": history,
                                 "username": member.display_name,

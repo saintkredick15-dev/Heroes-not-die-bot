@@ -30,7 +30,6 @@ PRESETS = {
     "Dark":    ("#2C3E50", "⚫"),
 }
 
-
 def _is_color_role(role: discord.Role) -> bool:
     if role.permissions.value != 0:
         return False
@@ -41,7 +40,6 @@ def _is_color_role(role: discord.Role) -> bool:
         return True
     return False
 
-
 async def _remove_old_colors(member: discord.Member):
     to_remove = [r for r in member.roles if _is_color_role(r)]
     if to_remove:
@@ -50,20 +48,18 @@ async def _remove_old_colors(member: discord.Member):
         except discord.Forbidden:
             pass
 
-
 async def _assign_color_role(interaction: discord.Interaction, name: str, hex_color: str):
-    # Defer першим — до будь-яких async операцій
+    
     if interaction.response.is_done():
         return
     try:
         await interaction.response.defer(ephemeral=True)
     except (discord.NotFound, discord.HTTPException):
-        return  # Інтеракція протухла — ігноруємо
+        return  
 
     guild  = interaction.guild
     member = interaction.user
 
-    # Anchor role для позиціонування
     base_role = guild.me.top_role
     settings  = await db.guild_settings.find_one({"_id": guild.id}) or {}
     anchor_id = settings.get("color_anchor_role_id")
@@ -72,7 +68,6 @@ async def _assign_color_role(interaction: discord.Interaction, name: str, hex_co
         if anchor_role:
             base_role = anchor_role
 
-    # Знайти або створити роль
     role = discord.utils.get(guild.roles, name=name)
 
     if not role:
@@ -103,7 +98,6 @@ async def _assign_color_role(interaction: discord.Interaction, name: str, hex_co
             await interaction.followup.send(f"❌ Помилка при створенні ролі: {e}", ephemeral=True)
             return
 
-    # Знімаємо старий колір, видаємо новий
     await _remove_old_colors(member)
 
     try:
@@ -115,7 +109,6 @@ async def _assign_color_role(interaction: discord.Interaction, name: str, hex_co
         )
     except Exception as e:
         await interaction.followup.send(f"❌ Помилка: {type(e).__name__}", ephemeral=True)
-
 
 class CustomHexModal(discord.ui.Modal, title="Кастомний колір нікнейма"):
     hex_input = discord.ui.TextInput(
@@ -138,7 +131,6 @@ class CustomHexModal(discord.ui.Modal, title="Кастомний колір ні
             color_str = "#" + color_str
         await _assign_color_role(interaction, name=color_str, hex_color=color_str)
 
-
 class PredefinedColorSelect(discord.ui.Select):
     def __init__(self):
         options = [
@@ -156,7 +148,6 @@ class PredefinedColorSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         choice_name = self.values[0]
         await _assign_color_role(interaction, name=choice_name, hex_color=PRESETS[choice_name][0])
-
 
 class ColorPickerView(discord.ui.View):
     def __init__(self):
@@ -201,11 +192,9 @@ class ColorPickerView(discord.ui.View):
         await _remove_old_colors(member)
         await interaction.followup.send("✅ Твій колір знято.", ephemeral=True)
 
-
 class RolePickerCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
 
 async def setup(bot):
     await bot.add_cog(RolePickerCommands(bot))

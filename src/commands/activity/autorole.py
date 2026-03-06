@@ -23,10 +23,8 @@ E_SETTINGS = "<:settings:1476196821444591768>"
 
 EMBED_COLOR = 0x1a1a2e
 
-
 async def _get_config(guild_id: int) -> dict:
     return await _col.find_one({"guild_id": guild_id}) or {}
-
 
 # ── Modal для ролі вручну ─────────────────────────────────────────────────────
 
@@ -65,7 +63,6 @@ class RoleByNameModal(discord.ui.Modal, title="Вказати роль вруч�
             f"✅ Роль **{role.name}** обрана! Натисни «Зберегти».",
             ephemeral=True,
         )
-
 
 # ── View ──────────────────────────────────────────────────────────────────────
 
@@ -156,7 +153,6 @@ class AutoRoleView(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
         await interaction.followup.send("Завантаження повного списку учасників...", ephemeral=True)
 
-        # fetch_members = реальний API, не тільки кеш
         targets: list[discord.Member] = []
         async for member in interaction.guild.fetch_members(limit=None):
             if not member.bot and member.id not in excluded_ids and role not in member.roles:
@@ -190,7 +186,6 @@ class AutoRoleView(discord.ui.View):
         self.selected_role_id = None
         self.excluded_user_ids = []
         await interaction.response.send_message("Авто-роль відключена.", ephemeral=True)
-
 
 # ── Cog ───────────────────────────────────────────────────────────────────────
 
@@ -248,7 +243,6 @@ class AutoRoleSystem(commands.Cog):
         )
         view = AutoRoleView(current_role_id=role_id, excluded_user_ids=excluded_ids)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-
 
 async def setup(bot):
     await bot.add_cog(AutoRoleSystem(bot))

@@ -17,7 +17,7 @@ E_CHAT    = "<:chat:1475953787687403716>"
 
 EMBED_COLOR = 0x1a1a2e
 SUPPORT_URL = "https://discord.gg/FJPkRjf5mA"
-# Замінити на реальний invite link бота
+
 BOT_INVITE  = "https://discord.com/oauth2/authorize?client_id=1396865832792887386&permissions=8&integration_type=0&scope=bot+applications.commands"
 
 # ── Дані модулів ──────────────────────────────────────────────────────────────
@@ -100,7 +100,6 @@ FEEDBACK = {
     },
 }
 
-
 def _main_embed(user: discord.User, bot: discord.User) -> discord.Embed:
     embed = discord.Embed(
         title="Меню допомоги",
@@ -116,7 +115,6 @@ def _main_embed(user: discord.User, bot: discord.User) -> discord.Embed:
     embed.set_footer(text="Розробник: Kredick15")
     return embed
 
-
 def _module_embed(key: str, bot: discord.User) -> discord.Embed:
     mod = MODULES[key]
     lines = [f"{cmd} — {desc}" for cmd, desc in mod["commands"]]
@@ -129,7 +127,6 @@ def _module_embed(key: str, bot: discord.User) -> discord.Embed:
     embed.set_footer(text="Розробник: Kredick15")
     return embed
 
-
 def _feedback_embed(key: str, bot: discord.User, user: discord.User) -> discord.Embed:
     fb = FEEDBACK[key]
     embed = discord.Embed(
@@ -140,7 +137,6 @@ def _feedback_embed(key: str, bot: discord.User, user: discord.User) -> discord.
     embed.set_thumbnail(url=bot.display_avatar.url)
     embed.set_footer(text="Розробник: Kredick15")
     return embed
-
 
 # ── View ──────────────────────────────────────────────────────────────────────
 
@@ -157,7 +153,6 @@ class HelpView(discord.ui.View):
             url=BOT_INVITE,
             row=2,
         ))
-
 
 class ModuleSelect(discord.ui.Select):
     def __init__(self, bot_user: discord.User):
@@ -176,7 +171,6 @@ class ModuleSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         embed = _module_embed(self.values[0], self.bot_user)
         await interaction.response.edit_message(embed=embed)
-
 
 class FeedbackSelect(discord.ui.Select):
     def __init__(self, user: discord.User, bot_user: discord.User):
@@ -197,7 +191,6 @@ class FeedbackSelect(discord.ui.Select):
         embed = _feedback_embed(self.values[0], self.bot_user, self.fb_user)
         await interaction.response.edit_message(embed=embed)
 
-
 # ── Cog ───────────────────────────────────────────────────────────────────────
 
 class HelpCog(commands.Cog):
@@ -209,7 +202,6 @@ class HelpCog(commands.Cog):
         embed = _main_embed(interaction.user, self.bot.user)
         view = HelpView(interaction.user, self.bot.user)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(HelpCog(bot))

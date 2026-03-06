@@ -24,10 +24,8 @@ ACTION_LABELS = {
     "ban": "🔨 Бан",
 }
 
-
 async def _get(guild_id: int) -> dict:
     return await _col.find_one({"_id": guild_id}) or {}
-
 
 def _build_embed(settings: dict) -> discord.Embed:
     rules = settings.get("warn_escalation", [])
@@ -57,7 +55,6 @@ def _build_embed(settings: dict) -> discord.Embed:
                 lines.append(f"`{i}.` **{r['count']}** варнів → {action_label}")
         embed.add_field(name="Правила ескалації", value="\n".join(lines), inline=False)
 
-    # Decay info
     if decay_days > 0:
         embed.add_field(
             name=f"{E_SETTING} Спадання варнів",
@@ -72,7 +69,6 @@ def _build_embed(settings: dict) -> discord.Embed:
         )
 
     return embed
-
 
 # ── Modals ────────────────────────────────────────────────────────────────────
 
@@ -119,7 +115,6 @@ class AddRuleModal(discord.ui.Modal, title="Додати правило еска
         await _col.update_one({"_id": interaction.guild.id}, {"$set": {"warn_escalation": rules}}, upsert=True)
         await interaction.response.edit_message(embed=_build_embed(self.ws_view.settings), view=self.ws_view)
 
-
 class DeleteRuleModal(discord.ui.Modal, title="Видалити правило"):
     rule_number = discord.ui.TextInput(
         label="Номер правила для видалення",
@@ -147,7 +142,6 @@ class DeleteRuleModal(discord.ui.Modal, title="Видалити правило")
         await _col.update_one({"_id": interaction.guild.id}, {"$set": {"warn_escalation": rules}}, upsert=True)
         await interaction.response.edit_message(embed=_build_embed(self.ws_view.settings), view=self.ws_view)
 
-
 class DecayModal(discord.ui.Modal, title="Спадання варнів"):
     decay_input = discord.ui.TextInput(
         label="Днів до спадання (0 = вимкнено)",
@@ -171,7 +165,6 @@ class DecayModal(discord.ui.Modal, title="Спадання варнів"):
         self.ws_view.settings["warn_decay_days"] = days
         await _col.update_one({"_id": interaction.guild.id}, {"$set": {"warn_decay_days": days}}, upsert=True)
         await interaction.response.edit_message(embed=_build_embed(self.ws_view.settings), view=self.ws_view)
-
 
 # ── View ──────────────────────────────────────────────────────────────────────
 
@@ -201,7 +194,6 @@ class WarnSetupView(discord.ui.View):
     async def decay_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(DecayModal(self))
 
-
 # ── Cog ───────────────────────────────────────────────────────────────────────
 
 class WarnSetupCog(commands.Cog):
@@ -216,7 +208,6 @@ class WarnSetupCog(commands.Cog):
         view = WarnSetupView(settings)
         embed = _build_embed(settings)
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
-
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(WarnSetupCog(bot))
