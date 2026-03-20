@@ -46,7 +46,7 @@ class CustomPurgeModal(discord.ui.Modal, title="Свій термін видал
         if not seconds or seconds <= 0:
             await interaction.response.send_message(
                 embed=discord.Embed(
-                    description="❌ Невірний формат. Приклади: `10m`, `2h`, `3d`",
+                    description="<:cutiex:1480246146076119132> Невірний формат. Приклади: `10m`, `2h`, `3d`",
                     color=0x2b2d31,
                 ),
                 ephemeral=True,
@@ -59,18 +59,18 @@ class CustomPurgeModal(discord.ui.Modal, title="Свій термін видал
             deleted = await interaction.channel.purge(after=cutoff)
             await interaction.followup.send(
                 embed=discord.Embed(
-                    description=f"🗑️ Видалено **{len(deleted)}** повідомлень (за {self.period.value}).",
+                    description=f"<:trash:1477722148071145634> Видалено **{len(deleted)}** повідомлень (за {self.period.value}).",
                     color=EMBED_COLOR,
                 ),
                 ephemeral=True,
             )
         except discord.Forbidden:
             await interaction.followup.send(
-                embed=discord.Embed(description="❌ Немає прав на видалення.", color=0x2b2d31), ephemeral=True
+                embed=discord.Embed(description="<:cutiex:1480246146076119132> Немає прав на видалення.", color=0x2b2d31), ephemeral=True
             )
         except discord.HTTPException as e:
             await interaction.followup.send(
-                embed=discord.Embed(description=f"❌ Помилка: {e}", color=0x2b2d31), ephemeral=True
+                embed=discord.Embed(description=f"<:cutiex:1480246146076119132> Помилка: {e}", color=0x2b2d31), ephemeral=True
             )
 
 def _load_config() -> dict:
@@ -92,7 +92,7 @@ def _ok(description: str) -> discord.Embed:
     return discord.Embed(description=description, color=EMBED_COLOR)
 
 def _err(description: str) -> discord.Embed:
-    return discord.Embed(description=f"❌ {description}", color=0x2b2d31)
+    return discord.Embed(description=f"<:cutiex:1480246146076119132> {description}", color=0x2b2d31)
 
 class AdminCommands(commands.Cog):
     def __init__(self, bot):
@@ -135,7 +135,7 @@ class AdminCommands(commands.Cog):
                 return
             await update_user_raw(db, interaction.guild.id, користувач.id, {"xp": max(data["xp"] - кількість, 0)})
             await interaction.response.send_message(
-                embed=_ok(f"🗑️ **{кількість} XP** забрано у {користувач.mention}."), ephemeral=True
+                embed=_ok(f"<:trash:1477722148071145634> **{кількість} XP** забрано у {користувач.mention}."), ephemeral=True
             )
 
         elif дія.value == "setlevel":

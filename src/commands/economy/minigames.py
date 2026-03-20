@@ -12,7 +12,7 @@ class BaseMinigame(discord.ui.View):
 
     async def interaction_check(self, i: discord.Interaction) -> bool:
         if i.user.id != self.owner_id:
-            await i.response.send_message("❌ Це не твоя гра!", ephemeral=True)
+            await i.response.send_message("<:cutiex:1480246146076119132> Це не твоя гра!", ephemeral=True)
             return False
         return True
 
@@ -64,10 +64,10 @@ class MathQuizView(BaseMinigame):
     def _make_callback(self, val: int):
         async def cb(i: discord.Interaction):
             if val == self.answer:
-                embed = discord.Embed(title="✅ Вірно!", description=f"{self.question} {self.answer}", color=0x57f287)
+                embed = discord.Embed(title="<:cutiecheckmark:1479120440734650389> Вірно!", description=f"{self.question} {self.answer}", color=0x57f287)
                 await self.finish(i, "win", embed)
             else:
-                embed = discord.Embed(title="❌ Помилка!", description=f"Правильна відповідь: {self.answer}", color=0xed4245)
+                embed = discord.Embed(title="<:cutiex:1480246146076119132> Помилка!", description=f"Правильна відповідь: {self.answer}", color=0xed4245)
                 await self.finish(i, "lose", embed)
         return cb
 
@@ -90,10 +90,10 @@ class HigherLowerView(BaseMinigame):
 
     async def _check(self, i: discord.Interaction, is_correct: bool):
         if is_correct:
-            embed = discord.Embed(title="✅ Вгадав!", description=f"Наступне число було **{self.secret}**", color=0x57f287)
+            embed = discord.Embed(title="<:cutiecheckmark:1479120440734650389> Вгадав!", description=f"Наступне число було **{self.secret}**", color=0x57f287)
             await self.finish(i, "win", embed)
         else:
-            embed = discord.Embed(title="❌ Не вгадав!", description=f"Наступне число було **{self.secret}**", color=0xed4245)
+            embed = discord.Embed(title="<:cutiex:1480246146076119132> Не вгадав!", description=f"Наступне число було **{self.secret}**", color=0xed4245)
             await self.finish(i, "lose", embed)
 
 class ShellGameView(BaseMinigame):
@@ -102,7 +102,7 @@ class ShellGameView(BaseMinigame):
         self.winning_idx = random.randint(0, 2)
         
         for idx in range(3):
-            btn = discord.ui.Button(emoji="📦", style=discord.ButtonStyle.secondary)
+            btn = discord.ui.Button(emoji="<:openlootbox:1479952212980535498>", style=discord.ButtonStyle.secondary)
             btn.callback = self._make_callback(idx)
             self.add_item(btn)
 
@@ -113,14 +113,14 @@ class ShellGameView(BaseMinigame):
                     c.emoji = "💎"
                     c.style = discord.ButtonStyle.success
                 else:
-                    c.emoji = "❌"
+                    c.emoji = "<:cutiex:1480246146076119132>"
                     c.style = discord.ButtonStyle.danger
             
             if idx == self.winning_idx:
-                embed = discord.Embed(title="✅ Відгадав!", description="Ти знайшов приз!", color=0x57f287)
+                embed = discord.Embed(title="<:cutiecheckmark:1479120440734650389> Відгадав!", description="Ти знайшов приз!", color=0x57f287)
                 await self.finish(i, "win", embed)
             else:
-                embed = discord.Embed(title="❌ Пусто!", description="Ти не вгадав коробочку.", color=0xed4245)
+                embed = discord.Embed(title="<:cutiex:1480246146076119132> Пусто!", description="Ти не вгадав коробочку.", color=0xed4245)
                 await self.finish(i, "lose", embed)
         return cb
 
@@ -134,10 +134,10 @@ class DiceDuelView(BaseMinigame):
         bot_roll = random.randint(2, 12)
         
         if user_roll > bot_roll:
-            embed = discord.Embed(title="✅ Перемога!", description=f"Твій кидок: **{user_roll}**\nКидок суперника: **{bot_roll}**", color=0x57f287)
+            embed = discord.Embed(title="<:cutiecheckmark:1479120440734650389> Перемога!", description=f"Твій кидок: **{user_roll}**\nКидок суперника: **{bot_roll}**", color=0x57f287)
             await self.finish(i, "win", embed)
         elif user_roll < bot_roll:
-            embed = discord.Embed(title="❌ Поразка!", description=f"Твій кидок: **{user_roll}**\nКидок суперника: **{bot_roll}**", color=0xed4245)
+            embed = discord.Embed(title="<:cutiex:1480246146076119132> Поразка!", description=f"Твій кидок: **{user_roll}**\nКидок суперника: **{bot_roll}**", color=0xed4245)
             await self.finish(i, "lose", embed)
         else:
             embed = discord.Embed(title="🤝 Нічия!", description=f"Обидва кинули **{user_roll}**", color=0xffff00)
@@ -159,10 +159,10 @@ class OddEmojiView(BaseMinigame):
     def _make_callback(self, idx: int):
         async def cb(i: discord.Interaction):
             if idx == self.odd_idx:
-                embed = discord.Embed(title="✅ Знайшов зайве!", color=0x57f287)
+                embed = discord.Embed(title="<:cutiecheckmark:1479120440734650389> Знайшов зайве!", color=0x57f287)
                 await self.finish(i, "win", embed)
             else:
-                embed = discord.Embed(title="❌ Промах!", color=0xed4245)
+                embed = discord.Embed(title="<:cutiex:1480246146076119132> Промах!", color=0xed4245)
                 await self.finish(i, "lose", embed)
         return cb
 
@@ -193,10 +193,10 @@ class UnscrambleView(BaseMinigame):
     def _make_callback(self, c: str):
         async def cb(i: discord.Interaction):
             if c == self.word:
-                embed = discord.Embed(title="✅ Правильно!", description=f"Слово було: **{self.word}**", color=0x57f287)
+                embed = discord.Embed(title="<:cutiecheckmark:1479120440734650389> Правильно!", description=f"Слово було: **{self.word}**", color=0x57f287)
                 await self.finish(i, "win", embed)
             else:
-                embed = discord.Embed(title="❌ Помилка!", description=f"Слово було: **{self.word}**", color=0xed4245)
+                embed = discord.Embed(title="<:cutiex:1480246146076119132> Помилка!", description=f"Слово було: **{self.word}**", color=0xed4245)
                 await self.finish(i, "lose", embed)
         return cb
 
@@ -224,10 +224,10 @@ class TriviaView(BaseMinigame):
     def _make_callback(self, correct: bool, ans: str):
         async def cb(i: discord.Interaction):
             if correct:
-                embed = discord.Embed(title="✅ Вірно!", description=f"Відповідь: **{ans}**", color=0x57f287)
+                embed = discord.Embed(title="<:cutiecheckmark:1479120440734650389> Вірно!", description=f"Відповідь: **{ans}**", color=0x57f287)
                 await self.finish(i, "win", embed)
             else:
-                embed = discord.Embed(title="❌ Невірно!", description=f"Правильна: **{ans}**", color=0xed4245)
+                embed = discord.Embed(title="<:cutiex:1480246146076119132> Невірно!", description=f"Правильна: **{ans}**", color=0xed4245)
                 await self.finish(i, "lose", embed)
         return cb
 
@@ -241,10 +241,10 @@ class TypingModal(discord.ui.Modal, title="Швидкий друк"):
 
     async def on_submit(self, interaction: discord.Interaction):
         if self.word_input.value.strip().lower() == self.expected_word.lower():
-            embed = discord.Embed(title="✅ Вірно надруковано!", color=0x57f287)
+            embed = discord.Embed(title="<:cutiecheckmark:1479120440734650389> Вірно надруковано!", color=0x57f287)
             await self.finish_callback(interaction, "win", embed)
         else:
-            embed = discord.Embed(title="❌ Помилка в слові!", description=f"Очікувалось: **{self.expected_word}**", color=0xed4245)
+            embed = discord.Embed(title="<:cutiex:1480246146076119132> Помилка в слові!", description=f"Очікувалось: **{self.expected_word}**", color=0xed4245)
             await self.finish_callback(interaction, "lose", embed)
 
 class TypingTestView(BaseMinigame):
@@ -273,10 +273,10 @@ class GuessNumberView(BaseMinigame):
                 if int(c.label) == self.winner: c.style = discord.ButtonStyle.success
                 else: c.style = discord.ButtonStyle.danger
             if num == self.winner:
-                embed = discord.Embed(title="✅ Вгадав число!", color=0x57f287)
+                embed = discord.Embed(title="<:cutiecheckmark:1479120440734650389> Вгадав число!", color=0x57f287)
                 await self.finish(i, "win", embed)
             else:
-                embed = discord.Embed(title="❌ Не вгадав!", description=f"Було число **{self.winner}**", color=0xed4245)
+                embed = discord.Embed(title="<:cutiex:1480246146076119132> Не вгадав!", description=f"Було число **{self.winner}**", color=0xed4245)
                 await self.finish(i, "lose", embed)
         return cb
 
@@ -293,10 +293,10 @@ class ReactionTestView(BaseMinigame):
     def _make_callback(self, idx: int):
         async def cb(i: discord.Interaction):
             if idx == self.green_idx:
-                embed = discord.Embed(title="✅ Швидка реакція!", color=0x57f287)
+                embed = discord.Embed(title="<:cutiecheckmark:1479120440734650389> Швидка реакція!", color=0x57f287)
                 await self.finish(i, "win", embed)
             else:
-                embed = discord.Embed(title="❌ Натиснув не туди!", color=0xed4245)
+                embed = discord.Embed(title="<:cutiex:1480246146076119132> Натиснув не туди!", color=0xed4245)
                 await self.finish(i, "lose", embed)
         return cb
 
@@ -306,7 +306,7 @@ def get_random_minigame(owner_id: int, stake: int, eco: dict, on_complete) -> tu
     all_games = [
         {"id": "math", "class": MathQuizView, "title": "🧮 Математика", "desc": "Розв'яжи приклад за 15 секунд!"},
         {"id": "higher_lower", "class": HigherLowerView, "title": "📈 Більше Менше", "desc": "Наступне число буде Більше чи Менше ❓"},
-        {"id": "shell", "class": ShellGameView, "title": "📦 Наперстки", "desc": "Вгадай, де захований діамант!"},
+        {"id": "shell", "class": ShellGameView, "title": "<:openlootbox:1479952212980535498> Наперстки", "desc": "Вгадай, де захований діамант!"},
         {"id": "dice", "class": DiceDuelView, "title": "🎲 Кості", "desc": "Кинь кості! Потрібно викинути більше за суперника."},
         {"id": "odd_emoji", "class": OddEmojiView, "title": "🔍 Зайвий Емодзі", "desc": "Знайди зайвий емодзі серед усіх за 12 секунд!"},
         {"id": "unscramble", "class": UnscrambleView, "title": "🔤 Анаграма", "desc": "Знайди правильне слово серед варіантів."},

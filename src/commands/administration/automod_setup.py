@@ -355,7 +355,7 @@ class AllowedServersModal(discord.ui.Modal, title="Дозволені серве
 
         msg = ""
         if unique:
-            msg += "✅ " + ", ".join(f"**{s['name']}**" for s in unique)
+            msg += "<:cutiecheckmark:1479120440734650389> " + ", ".join(f"**{s['name']}**" for s in unique)
         if errors:
             msg += f"\n{E_CROSS} Не вдалось розпізнати: " + ", ".join(f"`{e}`" for e in errors)
 

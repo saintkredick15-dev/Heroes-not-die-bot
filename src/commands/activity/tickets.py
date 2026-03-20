@@ -76,7 +76,7 @@ class RoleInputModal(discord.ui.Modal, title="Додати роль за ID"):
         try:
             r_id = int(self.role_id.value.strip())
         except ValueError:
-            await interaction.response.send_message("❌ Невірний формат ID.", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> Невірний формат ID.", ephemeral=True)
             return
 
         role = interaction.guild.get_role(r_id)
@@ -87,7 +87,7 @@ class RoleInputModal(discord.ui.Modal, title="Додати роль за ID"):
                 role = None
 
         if not role:
-            await interaction.response.send_message(f"❌ Роль `{r_id}` не знайдена.", ephemeral=True)
+            await interaction.response.send_message(f"<:cutiex:1480246146076119132> Роль `{r_id}` не знайдена.", ephemeral=True)
             return
 
         config = await get_config(interaction.guild.id)
@@ -95,9 +95,9 @@ class RoleInputModal(discord.ui.Modal, title="Додати роль за ID"):
         if r_id not in current:
             current.append(r_id)
             await update_config(interaction.guild.id, {"support_role_ids": current})
-            await interaction.response.send_message(f"✅ Роль {role.mention} додана.", ephemeral=True)
+            await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Роль {role.mention} додана.", ephemeral=True)
         else:
-            await interaction.response.send_message(f"⚠️ Роль {role.mention} вже в списку.", ephemeral=True)
+            await interaction.response.send_message(f"<:warn:1477376152191373504> Роль {role.mention} вже в списку.", ephemeral=True)
 
 class PanelContentModal(discord.ui.Modal, title="Налаштування панелі"):
     panel_title = discord.ui.TextInput(label="Заголовок", default="Служба підтримки")
@@ -113,7 +113,7 @@ class PanelContentModal(discord.ui.Modal, title="Налаштування пан
         self.panel_desc.default = current_desc
 
     async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.send_message("✅ Текст панелі оновлено!", ephemeral=True)
+        await interaction.response.send_message("<:cutiecheckmark:1479120440734650389> Текст панелі оновлено!", ephemeral=True)
 
 class ButtonConfigModal(discord.ui.Modal, title="Додати кнопку"):
     btn_label = discord.ui.TextInput(label="Текст кнопки", placeholder="Створити тікет")
@@ -125,7 +125,7 @@ class ButtonConfigModal(discord.ui.Modal, title="Додати кнопку"):
 
     async def on_submit(self, interaction: discord.Interaction):
         if len(self.view_instance.custom_buttons) >= 10:
-            await interaction.response.send_message("❌ Максимум 10 кнопок!", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> Максимум 10 кнопок!", ephemeral=True)
             return
         label = self.btn_label.value.strip() or "Тікет"
         emoji_str = self.btn_emoji.value.strip()
@@ -134,7 +134,7 @@ class ButtonConfigModal(discord.ui.Modal, title="Додати кнопку"):
             "emoji": emoji_str if emoji_str else None,
             "style": discord.ButtonStyle.blurple,
         })
-        await interaction.response.send_message(f"✅ Кнопку «{label}» додано!", ephemeral=True)
+        await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Кнопку «{label}» додано!", ephemeral=True)
 
 # ── Ticket close logic ────────────────────────────────────────────────────────
 
@@ -224,14 +224,14 @@ class TicketControlView(discord.ui.View):
         member_ids  = {r.id for r in interaction.user.roles}
 
         if not interaction.user.guild_permissions.administrator and not support_ids.intersection(member_ids):
-            await interaction.response.send_message("❌ Тільки персонал підтримки може взяти тікет.", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> Тільки персонал підтримки може взяти тікет.", ephemeral=True)
             return
 
         td = await self._get_ticket_data(interaction.channel.id)
         if td.get("claimed_by"):
             claimer = interaction.guild.get_member(td["claimed_by"])
             await interaction.response.send_message(
-                f"⚠️ Тікет вже взятий {claimer.mention if claimer else 'кимось'}.", ephemeral=True
+                f"<:warn:1477376152191373504> Тікет вже взятий {claimer.mention if claimer else 'кимось'}.", ephemeral=True
             )
             return
 
@@ -322,7 +322,7 @@ async def create_ticket_routine(interaction: discord.Interaction):
     channel_name = f"ticket-{user.name}".lower().replace(" ", "-")
     existing = discord.utils.get(guild.text_channels, name=channel_name, category_id=category.id)
     if existing:
-        await interaction.response.send_message(f"❌ Відкритий тікет: {existing.mention}", ephemeral=True)
+        await interaction.response.send_message(f"<:cutiex:1480246146076119132> Відкритий тікет: {existing.mention}", ephemeral=True)
         return
 
     overwrites = {
@@ -340,7 +340,7 @@ async def create_ticket_routine(interaction: discord.Interaction):
             name=channel_name, category=category, overwrites=overwrites, topic=f"User ID: {user.id}"
         )
     except discord.HTTPException as e:
-        await interaction.response.send_message(f"❌ Помилка: {e}", ephemeral=True)
+        await interaction.response.send_message(f"<:cutiex:1480246146076119132> Помилка: {e}", ephemeral=True)
         log.error(f"Failed to create ticket for {user}: {e}")
         return
 
@@ -356,7 +356,7 @@ async def create_ticket_routine(interaction: discord.Interaction):
         "claimed_by": None,
     })
 
-    await interaction.response.send_message(f"✅ Тікет #{ticket_id}: {channel.mention}", ephemeral=True)
+    await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Тікет #{ticket_id}: {channel.mention}", ephemeral=True)
 
     embed = discord.Embed(
         description=(
@@ -389,7 +389,7 @@ class TicketAdminView(discord.ui.View):
         cat = select.values[0] if select.values else None
         await update_config(interaction.guild.id, {"category_id": cat.id if cat else None})
         await interaction.response.send_message(
-            f"✅ Категорія: {cat.mention if cat else 'Стандартна (Tickets)'}", ephemeral=True
+            f"<:cutiecheckmark:1479120440734650389> Категорія: {cat.mention if cat else 'Стандартна (Tickets)'}", ephemeral=True
         )
 
     @discord.ui.select(
@@ -402,7 +402,7 @@ class TicketAdminView(discord.ui.View):
         ch = select.values[0] if select.values else None
         await update_config(interaction.guild.id, {"log_channel_id": ch.id if ch else None})
         await interaction.response.send_message(
-            f"✅ Лог-канал: {ch.mention if ch else 'відключено'}", ephemeral=True
+            f"<:cutiecheckmark:1479120440734650389> Лог-канал: {ch.mention if ch else 'відключено'}", ephemeral=True
         )
 
     @discord.ui.select(
@@ -415,7 +415,7 @@ class TicketAdminView(discord.ui.View):
         ch = select.values[0] if select.values else None
         self.target_channel_id = ch.id if ch else None
         await interaction.response.send_message(
-            f"✅ Панель буде надіслана в: {ch.mention if ch else 'поточний канал'}", ephemeral=True
+            f"<:cutiecheckmark:1479120440734650389> Панель буде надіслана в: {ch.mention if ch else 'поточний канал'}", ephemeral=True
         )
 
     @discord.ui.select(
@@ -427,7 +427,7 @@ class TicketAdminView(discord.ui.View):
         role_ids = [r.id for r in select.values]
         await update_config(interaction.guild.id, {"support_role_ids": role_ids})
         mentions = ", ".join(r.mention for r in select.values) or "очищено"
-        await interaction.response.send_message(f"✅ Ролі підтримки: {mentions}", ephemeral=True)
+        await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Ролі підтримки: {mentions}", ephemeral=True)
 
     @discord.ui.button(label="Роль за ID", style=discord.ButtonStyle.secondary, row=4)
     async def add_role_id(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -445,7 +445,7 @@ class TicketAdminView(discord.ui.View):
     @discord.ui.button(label="Додати кнопку", style=discord.ButtonStyle.secondary, row=4)
     async def add_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if len(self.custom_buttons) >= 10:
-            await interaction.response.send_message("❌ Максимум 10 кнопок!", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> Максимум 10 кнопок!", ephemeral=True)
             return
         await interaction.response.send_modal(ButtonConfigModal(self))
 
@@ -458,17 +458,17 @@ class TicketAdminView(discord.ui.View):
             target_ch = interaction.channel
 
         if not target_ch:
-            await interaction.response.send_message("❌ Канал не знайдено.", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> Канал не знайдено.", ephemeral=True)
             return
 
         try:
             final_view = DynamicTicketView(self.custom_buttons) if self.custom_buttons else TicketView()
             await target_ch.send(embed=self._build_preview(), view=final_view)
             await interaction.response.edit_message(
-                content=f"✅ Панель надіслана в {target_ch.mention}!", embed=None, view=None
+                content=f"<:cutiecheckmark:1479120440734650389> Панель надіслана в {target_ch.mention}!", embed=None, view=None
             )
         except discord.HTTPException as e:
-            await interaction.response.send_message(f"❌ Помилка: {e}", ephemeral=True)
+            await interaction.response.send_message(f"<:cutiex:1480246146076119132> Помилка: {e}", ephemeral=True)
 
     def _build_preview(self) -> discord.Embed:
         return discord.Embed(title=self.embed_title, description=self.embed_desc, color=EMBED_COLOR)

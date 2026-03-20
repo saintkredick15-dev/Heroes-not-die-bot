@@ -53,14 +53,14 @@ class RoleByNameModal(discord.ui.Modal, title="Вказати роль вруч�
 
         if not role:
             await interaction.response.send_message(
-                f"❌ Роль **«{query}»** не знайдена. Спробуй ввести точну назву або ID.",
+                f"<:cutiex:1480246146076119132> Роль **«{query}»** не знайдена. Спробуй ввести точну назву або ID.",
                 ephemeral=True,
             )
             return
 
         self._view.selected_role_id = role.id
         await interaction.response.send_message(
-            f"✅ Роль **{role.name}** обрана! Натисни «Зберегти».",
+            f"<:cutiecheckmark:1479120440734650389> Роль **{role.name}** обрана! Натисни «Зберегти».",
             ephemeral=True,
         )
 
@@ -81,11 +81,11 @@ class AutoRoleView(discord.ui.View):
         if select.values:
             self.selected_role_id = select.values[0].id
             await interaction.response.send_message(
-                f"✅ Обрано **{select.values[0].name}**. Натисни «Зберегти».", ephemeral=True
+                f"<:cutiecheckmark:1479120440734650389> Обрано **{select.values[0].name}**. Натисни «Зберегти».", ephemeral=True
             )
         else:
             self.selected_role_id = None
-            await interaction.response.send_message("✅ Роль знята.", ephemeral=True)
+            await interaction.response.send_message("<:cutiecheckmark:1479120440734650389> Роль знята.", ephemeral=True)
 
     @discord.ui.select(
         cls=discord.ui.UserSelect,
@@ -100,7 +100,7 @@ class AutoRoleView(discord.ui.View):
                 f"Виключено: {mentions}\nНатисни «Зберегти».", ephemeral=True
             )
         else:
-            await interaction.response.send_message("✅ Виключення очищено.", ephemeral=True)
+            await interaction.response.send_message("<:cutiecheckmark:1479120440734650389> Виключення очищено.", ephemeral=True)
 
     @discord.ui.button(label="Ввести назву/ID ролі", style=discord.ButtonStyle.secondary, row=2)
     async def role_by_name_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -109,12 +109,12 @@ class AutoRoleView(discord.ui.View):
     @discord.ui.button(label="Зберегти", style=discord.ButtonStyle.primary, row=3)
     async def save_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self.selected_role_id:
-            await interaction.response.send_message("❌ Спочатку обери роль.", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> Спочатку обери роль.", ephemeral=True)
             return
 
         role = interaction.guild.get_role(self.selected_role_id)
         if not role:
-            await interaction.response.send_message("❌ Роль не знайдена.", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> Роль не знайдена.", ephemeral=True)
             return
 
         await _col.update_one(
@@ -133,7 +133,7 @@ class AutoRoleView(discord.ui.View):
             if self.excluded_user_ids else "\nВиключень немає."
         )
         await interaction.response.send_message(
-            f"✅ Роль **{role.name}** збережена.{excl}", ephemeral=True
+            f"<:cutiecheckmark:1479120440734650389> Роль **{role.name}** збережена.{excl}", ephemeral=True
         )
 
     @discord.ui.button(label="Застосувати зараз", style=discord.ButtonStyle.success, row=3)
@@ -141,12 +141,12 @@ class AutoRoleView(discord.ui.View):
         config = await _get_config(interaction.guild.id)
         role_id = config.get("role_id")
         if not role_id:
-            await interaction.response.send_message("❌ Авто-роль не налаштована.", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> Авто-роль не налаштована.", ephemeral=True)
             return
 
         role = interaction.guild.get_role(role_id)
         if not role:
-            await interaction.response.send_message("❌ Роль не знайдена.", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> Роль не знайдена.", ephemeral=True)
             return
 
         excluded_ids: set[int] = set(config.get("excluded_user_ids", []))
@@ -223,7 +223,7 @@ class AutoRoleSystem(commands.Cog):
         excluded_ids: list[int] = config.get("excluded_user_ids", [])
 
         status = (
-            f"{role.mention} — {'✅ увімкнено' if enabled else '⏸ вимкнено'}"
+            f"{role.mention} — {'<:cutiecheckmark:1479120440734650389> увімкнено' if enabled else '⏸ вимкнено'}"
             if role else "не налаштована"
         )
         excl_text = (

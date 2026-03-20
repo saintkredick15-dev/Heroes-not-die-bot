@@ -150,34 +150,47 @@ def build_eco_embed(
     author_rank: int | None,
     author_data: dict | None,
     eco_settings: dict,
+    mode: str = "all"
 ) -> discord.Embed:
     start        = page * PAGE_SIZE
     page_entries = entries[start: start + PAGE_SIZE]
     curr         = eco_settings.get("currency_emoji", EMOJI_COIN)
     curr_name    = eco_settings.get("currency_name", "Coin")
     embed        = discord.Embed(color=0x1a1a2e)
-    embed.set_author(name=f"LEADERBOARD  •  ECONOMY  •  {page + 1}/{total_pages}", icon_url=guild_icon)
+    
+    title_mode = {"week": "7 ДНІВ", "month": "30 ДНІВ", "all": "ALL TIME"}.get(mode, "ALL TIME")
+    embed.set_author(name=f"LEADERBOARD  •  ECONOMY  •  {title_mode}  •  {page + 1}/{total_pages}", icon_url=guild_icon)
 
     lines: list[str] = []
     for rank, doc, member in page_entries:
-        wallet  = doc.get("wallet", 0)
-        bank    = doc.get("bank", 0)
-        total   = wallet + bank
-        badge   = RANK_BADGES.get(rank, f"`{rank:>2}.`")
-        name    = member.display_name[:20]
+        badge = RANK_BADGES.get(rank, f"`{rank:>2}.`")
+        name  = member.display_name[:20]
 
-        lines.append(
-            f"{badge} **{name}** — `{total:,}` {curr}\n"
-            f"　{EMOJI_COIN} `{wallet:,}`  {EMOJI_BANK} `{bank:,}`"
-        )
+        if mode == "week":
+            earned = doc.get("week_earned", 0)
+            lines.append(f"{badge} **{name}** — Зароблено: `{earned:,}` {curr}")
+        elif mode == "month":
+            earned = doc.get("month_earned", 0)
+            lines.append(f"{badge} **{name}** — Зароблено: `{earned:,}` {curr}")
+        else:
+            wallet = doc.get("wallet", 0)
+            bank   = doc.get("bank", 0)
+            total  = wallet + bank
+            lines.append(
+                f"{badge} **{name}** — `{total:,}` {curr}\n"
+                f"　{EMOJI_COIN} `{wallet:,}`  {EMOJI_BANK} `{bank:,}`"
+            )
 
     embed.description = "\n\n".join(lines) if lines else "*Тут поки нікого немає*"
 
     if author_rank and author_data:
-        a_wallet = author_data.get("wallet", 0)
-        a_bank   = author_data.get("bank", 0)
-        a_total  = a_wallet + a_bank
-        embed.set_footer(text=f"Ти на #{author_rank} \u2022 {a_total:,} {curr_name}")
+        if mode == "week":
+            a_val = author_data.get("week_earned", 0)
+        elif mode == "month":
+            a_val = author_data.get("month_earned", 0)
+        else:
+            a_val = author_data.get("wallet", 0) + author_data.get("bank", 0)
+        embed.set_footer(text=f"Ти на #{author_rank} \u2022 {a_val:,} {curr_name}")
     return embed
 
 def build_history_embed(
@@ -284,7 +297,7 @@ class XPLeaderboardView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
-            await interaction.response.send_message("❌ Це не твоя команда.", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> Це не твоя команда.", ephemeral=True)
             return False
         return True
 
@@ -381,7 +394,7 @@ class EcoLeaderboardView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
-            await interaction.response.send_message("❌ Це не твоя команда.", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> Це не твоя команда.", ephemeral=True)
             return False
         return True
 
@@ -390,11 +403,7 @@ class EcoLeaderboardView(discord.ui.View):
         if self.mode == "history":
             return build_history_embed(self.history_entries, self.page, self.total_pages, icon, self.eco_settings, self.guild)
 
-        embed = build_eco_embed(self.entries, self.page, self.total_pages, icon, self.author_rank, self.author_data, self.eco_settings)
-        mode_label = {"week": "ТИЖДЕНЬ", "month": "МІСЯЦЬ", "all": "ALL TIME"}.get(self.mode, "ALL TIME")
-        embed.set_author(name=f"LEADERBOARD  \u2022  ECONOMY  \u2022  {mode_label}  \u2022  {self.page + 1}/{self.total_pages}",
-                         icon_url=icon)
-        return embed
+        return build_eco_embed(self.entries, self.page, self.total_pages, icon, self.author_rank, self.author_data, self.eco_settings, mode=self.mode)
 
     @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:day7:1479248144112812124>"), style=discord.ButtonStyle.secondary, row=0)
     async def week_btn(self, interaction: discord.Interaction, _):
@@ -467,7 +476,7 @@ class LeaderboardCommands(commands.Cog):
         entries = await fetch_xp_leaderboard(interaction.guild)
 
         if not entries:
-            await interaction.followup.send("📭 На сервері ще немає статистики.", ephemeral=True)
+            await interaction.followup.send("<:inbox:1479128004847341620> На сервері ще немає статистики.", ephemeral=True)
             return
 
         view = XPLeaderboardView(entries, interaction.guild, interaction.user.id)
@@ -482,7 +491,7 @@ class LeaderboardCommands(commands.Cog):
         eco_settings = settings.get("economy", {})
 
         if not entries:
-            await interaction.followup.send("📭 На сервері ще немає даних економіки.", ephemeral=True)
+            await interaction.followup.send("<:inbox:1479128004847341620> На сервері ще немає даних економіки.", ephemeral=True)
             return
 
         view = EcoLeaderboardView(entries, interaction.guild, interaction.user.id, eco_settings)

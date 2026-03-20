@@ -1,7 +1,3 @@
-"""
-/economy_setup — Адмін-панель налаштувань економіки.
-Повністю кнопковий UI, без монолітних форм.
-"""
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -48,8 +44,8 @@ DEFAULT_ECO = {
     "voice_earn": 3,
     "reaction_earn": 2,
 
-    "work_min": 100,
-    "work_max": 500,
+    "work_min": 50,
+    "work_max": 400,
     "work_cooldown": 14400,
     "work_type": "both",
     "event_chance": 40,
@@ -64,14 +60,17 @@ DEFAULT_ECO = {
     "crime_enabled": True,
     "crime_cooldown": 28800,
     "crime_ban_duration": 1800,
+    "crime_bribe_percent": 75,
+    "crime_bribe_timeout": 15,
 
     "gambling_enabled": False,
     "gambling_max_bet": 10000,
     "gambling_daily_cap": 0,
+    "gambling_cooldown": 0,
     "duel_timer": 15,
     "duel_max_rounds": 9,
     "duel_draw_refund": True,
-    "casino_rtp": 95,
+    "casino_rtp": 90,
 
     "bank_base_limit": 10000,
     "bank_level_multiplier": 1000,
@@ -92,8 +91,19 @@ DEFAULT_ECO = {
 
     "shop_shield_price": 5000,
     "shop_xp_boost_price": 2000,
-    "shop_lottery_price": 500,
+    "shop_lootbox_common_price": 2500,
+    "shop_lootbox_rare_price": 10000,
     "shop_crime_pass_price": 3000,
+    
+    "account_age_min_days": 14,
+    "inflation_enabled": True,
+    "inflation_max_limit": 3.0,
+    "inflation_multiplier": 1.0,
+    
+    "lb_com_jackpot_pct": 10,
+    "lb_rare_jackpot_pct": 5,
+    "lb_rare_pass_pct": 10,
+
     "coin_boost_duration": 86400,
     "shop_roles": [],
     "salary_roles": [],
@@ -107,10 +117,19 @@ DEFAULT_ECO = {
 
     "season_enabled": False,
     "season_duration_days": 30,
-    "season_winner_role_id": 0,
+    "season_winner_roles": {},
+    "season_announce_channel_id": 0,
     "season_start_bonus": 0,
     "season_start": 0,
+    "season_number": 1,
     "season_history": [],
+
+    "auction_channel_id": 0,
+    "auction_anti_snipe_seconds": 30,
+
+    "fund_enabled": False,
+    "fund_goal": 1000000,
+    "fund_current": 0,
 
     "duel_enabled": True,
     "work_complex_stages": 3,
@@ -119,11 +138,7 @@ DEFAULT_ECO = {
 }
 
 def parse_duration(value: str) -> int:
-    """
-    Парсить рядок в секунди.
-    Підтримує англійські h/m/s та українські г/хв/с.
-    Приклади: '4h', '30m', '1h30m', '8г', '30хв', '3600', '30s'
-    """
+    
     import re
     v = value.strip().lower()
     
@@ -145,7 +160,7 @@ def parse_duration(value: str) -> int:
     return int(float(v))
 
 def fmt_duration_modal(seconds: int) -> str:
-    """Для default значень в модалах — повертає '8h', '30m', '1h30m'."""
+    
     h, rem = divmod(seconds, 3600)
     m = rem // 60
     s = rem % 60
@@ -156,7 +171,7 @@ def fmt_duration_modal(seconds: int) -> str:
     return "".join(parts) or "0s"
 
 def fmt_duration(seconds: int) -> str:
-    """Форматує секунди → '4г', '1г 30хв', '45хв'."""
+    
     h, rem = divmod(seconds, 3600)
     m = rem // 60
     if h and m:
@@ -169,9 +184,11 @@ def get_eco(settings: dict) -> dict:
     return {**DEFAULT_ECO, **settings.get("economy", {})}
 
 async def save_eco(guild_id: int, updates: dict):
+    from modules.db import invalidate_guild_settings
     await db.guild_settings.update_one(
         {"_id": guild_id}, {"$set": updates}, upsert=True
     )
+    invalidate_guild_settings(guild_id)
 
 # ── Embed головного меню ──────────────────────────────────────────────────────
 
@@ -280,6 +297,7 @@ def build_category_embed(eco: dict, category: str) -> discord.Embed:
         "crime":    f"{E_CRIME} Крайм",
         "gambling": f"{E_STATS} Гемблінг",
         "shop":     f"{E_SHOP} Магазин",
+        "auction":  "<:Auction:1479863712855621805> Аукціон",
         "games":    f"{E_GAME} Налаштування ігор",
     }
     embed = discord.Embed(
@@ -292,7 +310,15 @@ def build_category_embed(eco: dict, category: str) -> discord.Embed:
         embed.description = (
             f"**Статус економіки:** {status_str}\n"
             f"**Валюта:** {curr} `{eco['currency_name']}`\n\n"
-            f"*Використовуйте кнопки нижче для зміни.*"
+            f"**Фонд Сервера:** {'ВКЛ' if eco.get('fund_enabled', False) else 'ВИКЛ'}\n"
+            f"Мета фонду: `{eco.get('fund_goal', 1000000):,}` {curr}\n"
+            f"Зібрано: `{eco.get('fund_current', 0):,}` {curr}\n\n"
+            f"**Інфляція та Твінки:**\n"
+            f"Глобальна Інфляція: {'ВКЛ' if eco.get('inflation_enabled', True) else 'ВИКЛ'}\n"
+            f"Ліміт Інфляції: `{eco.get('inflation_max_limit', 3.0):.1f}x` | Поточна: `{eco.get('inflation_multiplier', 1.0):.2f}x`\n"
+            f"Мін. Вік Акаунта: `{eco.get('account_age_min_days', 14)} днів`\n"
+            f"Податок Переказу: `{eco.get('transfer_tax_percent', 0)}%` | Ліміт: `{eco.get('transfer_daily_limit', 0):,}` {curr}\n\n"
+            f"*Використовуйте кнопки нижче.*"
         )
     elif category == "passive":
         msg_earn = eco["msg_earn"]
@@ -343,8 +369,10 @@ def build_category_embed(eco: dict, category: str) -> discord.Embed:
         embed.description = (
             f"**Статус:** {crime_str}\n"
             f"{E_CLOCK} **КД:** `{fmt_duration(eco['crime_cooldown'])}`\n"
-            f"{E_WARN} **Бан-штраф:** `{fmt_duration(eco['crime_ban_duration'])}`\n\n"
-            f"*При провалі крайму юзер не може використовувати eco-команди протягом бан-штрафу.*"
+            f"{E_WARN} **Бан-штраф:** `{fmt_duration(eco['crime_ban_duration'])}`\n"
+            f"<:banknote:1478511186860572753> **Хабар (% від куша):** `{eco.get('crime_bribe_percent', 75)}%`\n"
+            f"{E_CLOCK} **Час на рішення:** `{eco.get('crime_bribe_timeout', 15)}с`\n\n"
+            f"*При провалі крайму юзер може спробувати надати хабар.*"
         )
     elif category == "gambling":
         gamb_str  = f"{E_CHECK} Увімкнено" if eco["gambling_enabled"] else f"{E_CROSS} Вимкнено"
@@ -366,16 +394,21 @@ def build_category_embed(eco: dict, category: str) -> discord.Embed:
     elif category == "shop":
         curr = eco["currency_emoji"]
         prices = {
-            "Щит": eco["shop_shield_price"],
-            "Coin Буст": eco["shop_xp_boost_price"],
-            "Лото": eco["shop_lottery_price"],
-            "Crime Pass": eco["shop_crime_pass_price"],
+            "Щит": eco.get("shop_shield_price", 5000),
+            "Coin Буст": eco.get("shop_xp_boost_price", 2000),
+            "Crime Pass": eco.get("shop_crime_pass_price", 3000),
         }
         lines = []
         for name, price in prices.items():
             status = f"`{price:,}` {curr}" if price > 0 else f"{E_CROSS} Вимкнено"
             lines.append(f"**{name}:** {status}")
-        embed.description = "\n".join(lines)
+            
+        embed.description = (
+            "\n".join(lines) + "\n\n"
+            f"**Лутбокси**\n"
+            f"<:openlootbox:1479952212980535498> Звичайний `{eco.get('shop_lootbox_common_price', 2500)}` {curr} | Джекпот: `{eco.get('lb_com_jackpot_pct', 10)}%`\n"
+            f"<:gifttop:1479952511635820586> Рідкісний `{eco.get('shop_lootbox_rare_price', 10000)}` {curr} | Джекпот: `{eco.get('lb_rare_jackpot_pct', 5)}%` | Pass: `{eco.get('lb_rare_pass_pct', 10)}%`"
+        )
     elif category == "transfers":
         tax = eco.get("transfer_tax_percent", 0)
         lim = eco.get("transfer_daily_limit", 0)
@@ -400,17 +433,38 @@ def build_category_embed(eco: dict, category: str) -> discord.Embed:
         s_enabled = eco.get("season_enabled", False)
         s_status  = f"{E_CHECK} Увімкнено" if s_enabled else f"{E_CROSS} Вимкнено"
         s_dur    = eco.get("season_duration_days", 30)
-        s_role   = eco.get("season_winner_role_id", 0)
         s_bonus  = eco.get("season_start_bonus", 0)
         s_start  = eco.get("season_start", 0)
+        s_num    = eco.get("season_number", 1)
         next_reset = s_start + s_dur * 86400 if s_start > 0 else None
         next_str  = f"<t:{next_reset}:R>" if next_reset else "не запущено"
+
+        winner_roles = eco.get("season_winner_roles", {})
+        roles_lines = []
+        for pos in ("1", "2", "3", "4", "5"):
+            rid = winner_roles.get(pos)
+            val = f"<@&{rid}>" if rid else f"{E_CROSS} не задано"
+            roles_lines.append(f"  **{pos}.** {val}")
+        roles_str = "\n".join(roles_lines) if roles_lines else f"{E_CROSS} Ролі не налаштовані"
+
+        ch_id = eco.get("season_announce_channel_id", 0)
+        ch_str = f"<#{ch_id}>" if ch_id else f"{E_CROSS} Вимкнено (не задано)"
+
         embed.description = (
-            f"**Статус:** {s_status}\n"
+            f"**Статус:** {s_status}  •  **Сезон:** #{s_num}\n"
             f"**Тривалість:** `{s_dur} днів`\n"
-            f"**Роль переможців:** <@&{s_role}> (0 = вимк)\n"
             f"**Стартовий бонус:** `{s_bonus:,}` {eco['currency_emoji']}\n"
-            f"**Наступне скидання:** {next_str}"
+            f"**Наступне скидання:** {next_str}\n\n"
+            f"**Канал анонсу:**\n  {ch_str}\n\n"
+            f"**Ролі переможців:**\n{roles_str}"
+        )
+    elif category == "auction":
+        auc_channel = f"<#{eco['auction_channel_id']}>" if eco.get("auction_channel_id", 0) > 0 else f"{E_CROSS} Не встановлено"
+        snipe_sec = eco.get("auction_anti_snipe_seconds", 30)
+        embed.description = (
+            f"**Канал аукціону:** {auc_channel}\n"
+            f"**Anti-Snipe таймер:** `{snipe_sec}с`\n\n"
+            f"*Використовуйте меню нижче, щоб додати лоти в чергу або керувати активним аукціоном.*"
         )
     elif category == "games":
         enabled = eco.get("enabled_minigames", ["math", "higher_lower", "shell", "dice", "odd_emoji", "unscramble", "trivia", "typing", "guess", "reaction"])
@@ -711,24 +765,30 @@ class RobAdvancedModal(discord.ui.Modal, title="🥷 Пограбування Д
             view=SetupCategoryView(self.main_view, "rob")
         )
 
-class CrimeModal(discord.ui.Modal, title="🦹 Крайм"):
-    cooldown     = discord.ui.TextInput(label="КД (напр. 8h)", max_length=10)
-    ban_duration = discord.ui.TextInput(label="Бан при провалі (напр. 30m)", max_length=10)
+class CrimeModal(discord.ui.Modal, title="<:crimepass:1479951455543889970> Крайм"):
+    cooldown      = discord.ui.TextInput(label="КД (напр. 8h)", max_length=10)
+    ban_duration  = discord.ui.TextInput(label="Бан при провалі (напр. 30m)", max_length=10)
+    bribe_percent = discord.ui.TextInput(label="% хабаря від куша", max_length=5)
+    bribe_timeout = discord.ui.TextInput(label="Час на хабар (с)", max_length=4)
 
     def __init__(self, main_view, eco: dict):
         super().__init__()
         self.main_view = main_view
-        self.cooldown.default     = fmt_duration_modal(eco["crime_cooldown"])
-        self.ban_duration.default = fmt_duration_modal(eco["crime_ban_duration"])
+        self.cooldown.default      = fmt_duration_modal(eco["crime_cooldown"])
+        self.ban_duration.default  = fmt_duration_modal(eco["crime_ban_duration"])
+        self.bribe_percent.default = str(eco.get("crime_bribe_percent", 75))
+        self.bribe_timeout.default = str(eco.get("crime_bribe_timeout", 15))
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
             updates = {
-                "economy.crime_cooldown":     parse_duration(self.cooldown.value),
-                "economy.crime_ban_duration": parse_duration(self.ban_duration.value),
+                "economy.crime_cooldown":      parse_duration(self.cooldown.value),
+                "economy.crime_ban_duration":  parse_duration(self.ban_duration.value),
+                "economy.crime_bribe_percent": int(self.bribe_percent.value),
+                "economy.crime_bribe_timeout": int(self.bribe_timeout.value),
             }
         except ValueError:
-            await interaction.response.send_message(f"{E_CROSS} Формат: `8h`, `30m`.", ephemeral=True)
+            await interaction.response.send_message(f"{E_CROSS} Формат: `8h`, `30m` або числа для %.", ephemeral=True)
             return
         await save_eco(interaction.guild.id, updates)
         ctx = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
@@ -744,6 +804,7 @@ class GamblingModal(discord.ui.Modal, title="🎰 Гемблінг"):
     max_rounds = discord.ui.TextInput(label="Ліміт раундів дуелі", max_length=3)
     casino_rtp = discord.ui.TextInput(label="Casino RTP % (0-100, 95=стандарт)", max_length=3)
     daily_cap  = discord.ui.TextInput(label="Ліміт виграшу/день (0=вимк)", max_length=10)
+    cooldown   = discord.ui.TextInput(label="Кулдаун між ставками сек (0=вимк)", max_length=6)
 
     def __init__(self, main_view, eco: dict):
         super().__init__()
@@ -753,6 +814,7 @@ class GamblingModal(discord.ui.Modal, title="🎰 Гемблінг"):
         self.max_rounds.default = str(eco.get("duel_max_rounds", 9))
         self.casino_rtp.default = str(eco.get("casino_rtp", 95))
         self.daily_cap.default  = str(eco.get("gambling_daily_cap", 0))
+        self.cooldown.default   = str(eco.get("gambling_cooldown", 0))
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
@@ -762,6 +824,7 @@ class GamblingModal(discord.ui.Modal, title="🎰 Гемблінг"):
                 "economy.duel_max_rounds":    int(self.max_rounds.value),
                 "economy.casino_rtp":         max(0, min(100, int(self.casino_rtp.value))),
                 "economy.gambling_daily_cap": int(self.daily_cap.value),
+                "economy.gambling_cooldown":  max(0, int(self.cooldown.value)),
             }
         except ValueError:
             await interaction.response.send_message(f"{E_CROSS} Лише числа!", ephemeral=True)
@@ -821,6 +884,7 @@ class CategorySelect(discord.ui.Select):
             discord.SelectOption(label="Крайм",          value="crime",    description="КД та штраф-бан",                     emoji=discord.PartialEmoji.from_str(E_CRIME)),
             discord.SelectOption(label="Ігри та Казино", value="gambling",  description="Казино, Дуелі та Міні-ігри роботи",     emoji=discord.PartialEmoji.from_str(E_STATS)),
             discord.SelectOption(label="Магазин",        value="shop",      description="Ціни системних предметів",             emoji=discord.PartialEmoji.from_str(E_SHOP)),
+            discord.SelectOption(label="Аукціон",        value="auction",   description="Канал, лоти та черга",                 emoji=discord.PartialEmoji.from_str("<:Auction:1479863712855621805>")),
             discord.SelectOption(label="Квести",         value="quests",   description="Налаштування денних/тижневих завдань", emoji=discord.PartialEmoji.from_str("<:reasonqiestion:1476209697919860777>")),
         ]
         super().__init__(placeholder="Оберіть категорію...", options=options)
@@ -887,6 +951,14 @@ class SetupCategoryView(discord.ui.View):
 
             self._add("Валюта", discord.ButtonStyle.secondary, self._general_cb)
             self._add("Перекази", discord.ButtonStyle.secondary, self._transfer_cb)
+            self._add("Інфляція та Твінки", discord.ButtonStyle.secondary, self._inflation_cb)
+            
+            f_enabled = eco.get("fund_enabled", False)
+            fb = discord.ui.Button(label="Фонд: ВКЛ" if f_enabled else "Фонд: ВИКЛ", style=discord.ButtonStyle.success if f_enabled else discord.ButtonStyle.secondary)
+            fb.callback = lambda i: self._toggle_bool(i, "economy.fund_enabled", not f_enabled, "general")
+            self.add_item(fb)
+            
+            self._add("Налаштування Фонду", discord.ButtonStyle.secondary, self._fund_modal_cb)
             self._add("Сезон", discord.ButtonStyle.secondary, self._season_cb)
             
             reset_btn = discord.ui.Button(label="Скинути зараз", style=discord.ButtonStyle.secondary, row=1)
@@ -974,6 +1046,7 @@ class SetupCategoryView(discord.ui.View):
 
         elif category == "shop":
             self._add("Ціни предметів", discord.ButtonStyle.secondary, self._shop_cb)
+            self._add("Лутбокси", discord.ButtonStyle.secondary, self._lootboxes_cb)
             
             roles_btn = discord.ui.Button(label="Керування кастом-ролями", style=discord.ButtonStyle.primary, emoji="🎭")
             roles_btn.callback = self._shop_roles_cb
@@ -987,6 +1060,34 @@ class SetupCategoryView(discord.ui.View):
             qb.callback = lambda i: self._toggle_bool(i, "economy.quests_enabled", not q_enabled, "quests")
             self.add_item(qb)
             self._add("Налаштування", discord.ButtonStyle.secondary, self._quests_cb)
+
+        elif category == "season":
+            # ── Toggle сезону ──────────────────────────────────────────────────
+            s_enabled = eco.get("season_enabled", False)
+            sb = discord.ui.Button(
+                label="Сезон: ВКЛ" if s_enabled else "Сезон: ВИКЛ",
+                style=discord.ButtonStyle.success if s_enabled else discord.ButtonStyle.secondary
+            )
+            sb.callback = lambda i: self._toggle_bool(i, "economy.season_enabled", not s_enabled, "season")
+            self.add_item(sb)
+            # ── Modal (тривалість + бонус) ─────────────────────────────────────
+            self._add("Тривалість та бонус", discord.ButtonStyle.secondary, self._season_cb)
+            # ── Вибір каналу анонсу ────────────────────────────────────────────
+            self.add_item(SeasonAnnounceChannelSelect(self.main_view, eco))
+            # ── Ролі переможців (select позиції → RoleSelect) ──────────────────
+            self.add_item(SeasonRolePositionSelect(self.main_view, eco))
+
+        elif category == "auction":
+            self.add_item(AuctionChannelSelect(self.main_view))
+            self._add("Anti-Snipe & Таймер", discord.ButtonStyle.secondary, self._auction_config_cb)
+            
+            add_lot_btn = discord.ui.Button(label="Додати Лот", style=discord.ButtonStyle.primary, emoji="➕")
+            add_lot_btn.callback = self._auction_add_lot_cb
+            self.add_item(add_lot_btn)
+            
+            manage_lot_btn = discord.ui.Button(label="Керувати Чергою", style=discord.ButtonStyle.secondary, emoji="📋")
+            manage_lot_btn.callback = self._auction_manage_cb
+            self.add_item(manage_lot_btn)
 
         back = discord.ui.Button(
             emoji=discord.PartialEmoji.from_str(E_LEFT),
@@ -1076,6 +1177,7 @@ class SetupCategoryView(discord.ui.View):
     async def _crime_cb(self, i):     await i.response.send_modal(CrimeModal(self.main_view, self.main_view.eco))
     async def _gambling_cb(self, i):  await i.response.send_modal(GamblingModal(self.main_view, self.main_view.eco))
     async def _shop_cb(self, i):      await i.response.send_modal(ShopPricesModal(self.main_view, self.main_view.eco))
+    async def _lootboxes_cb(self, i): await i.response.send_modal(LootboxesModal(self.main_view, self.main_view.eco))
     
     async def _shop_roles_cb(self, interaction: discord.Interaction):
         
@@ -1086,11 +1188,52 @@ class SetupCategoryView(discord.ui.View):
         
     async def _games_cb(self, i):     await i.response.send_modal(GamesModal(self.main_view, self.main_view.eco))
     async def _transfer_cb(self, i):  await i.response.send_modal(TransferModal(self.main_view, self.main_view.eco))
+    async def _inflation_cb(self, i): await i.response.send_modal(InflationModal(self.main_view, self.main_view.eco))
+    async def _fund_modal_cb(self, i):
+        class FundModal(discord.ui.Modal, title="Налаштування Фонду"):
+            goal = discord.ui.TextInput(label="Ціль збору (число)", max_length=15)
+            curr = discord.ui.TextInput(label="Вже зібрано (за потреби)", max_length=15)
+            def __init__(self, mv):
+                super().__init__()
+                self.mv = mv
+                self.goal.default = str(mv.eco.get("fund_goal", 1000000))
+                self.curr.default = str(mv.eco.get("fund_current", 0))
+            async def on_submit(self, interaction: discord.Interaction):
+                try:
+                    g = max(1, int(self.goal.value))
+                    c = max(0, int(self.curr.value))
+                    await save_eco(interaction.guild.id, {"economy.fund_goal": g, "economy.fund_current": c})
+                    ctx = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
+                    self.mv.eco = get_eco(ctx)
+                    await interaction.response.edit_message(
+                        embed=build_category_embed(self.mv.eco, "general"),
+                        view=SetupCategoryView(self.mv, "general")
+                    )
+                except ValueError:
+                    await interaction.response.send_message("Лише числа!", ephemeral=True)
+        await i.response.send_modal(FundModal(self.main_view))
+
     async def _quests_cb(self, i):    await i.response.send_modal(QuestsModal(self.main_view, self.main_view.eco))
     async def _season_cb(self, i):    await i.response.send_modal(SeasonModal(self.main_view, self.main_view.eco))
+    async def _auction_config_cb(self, i): await i.response.send_modal(AuctionConfigModal(self.main_view, self.main_view.eco))
+    async def _auction_add_lot_cb(self, i): await i.response.send_modal(AuctionAddLotModal(self.main_view))
+    
+    async def _auction_manage_cb(self, interaction: discord.Interaction):
+        ctx = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
+        queue = ctx.get("auction_queue", [])
+        
+        if not queue:
+            return await interaction.response.send_message(f"{E_CROSS} Черга лотів порожня. Додайте спочатку лоти.", ephemeral=True)
+            
+        embed = discord.Embed(
+            title="📋 Керування чергою Аукціону",
+            description=f"В черзі зараз лотів: **{len(queue)}**\nВиберіть лот у списку нижче, щоб запустити його або видалити.",
+            color=EMBED_COLOR
+        )
+        await interaction.response.edit_message(embed=embed, view=AuctionManageView(self.main_view, queue))
 
     async def _season_reset_now(self, interaction: discord.Interaction):
-        """Миттєво скидає сезон та публікує підсумок у канал."""
+        
         from services.scheduler import perform_season_reset
         await interaction.response.defer(ephemeral=True)
         try:
@@ -1103,6 +1246,42 @@ class SetupCategoryView(discord.ui.View):
             )
         except Exception as e:
             await interaction.followup.send(f"{E_CROSS} Помилка: `{e}`", ephemeral=True)
+
+class LootboxesModal(discord.ui.Modal, title="Налаштування Лутбоксів"):
+    cp = discord.ui.TextInput(label="Ціна: Звичайний", max_length=10)
+    cj = discord.ui.TextInput(label="Шанс Джекпоту (Звичайний) %", max_length=3)
+    rp = discord.ui.TextInput(label="Ціна: Рідкісний", max_length=10)
+    rj = discord.ui.TextInput(label="Шанс Джекпоту (Рідкісний) %", max_length=3)
+    r_pass = discord.ui.TextInput(label="Шанс Crime Pass (Рідкісний) %", max_length=3)
+
+    def __init__(self, mv, eco: dict):
+        super().__init__()
+        self.mv = mv
+        self.cp.default = str(eco.get("shop_lootbox_common_price", 2500))
+        self.cj.default = str(eco.get("lb_com_jackpot_pct", 10))
+        self.rp.default = str(eco.get("shop_lootbox_rare_price", 10000))
+        self.rj.default = str(eco.get("lb_rare_jackpot_pct", 5))
+        self.r_pass.default = str(eco.get("lb_rare_pass_pct", 10))
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            cp = max(1, int(self.cp.value))
+            cj = min(100, max(0, int(self.cj.value)))
+            rp = max(1, int(self.rp.value))
+            rj = min(100, max(0, int(self.rj.value)))
+            r_pass = min(100, max(0, int(self.r_pass.value)))
+            
+            p = {
+                "economy.shop_lootbox_common_price": cp,
+                "economy.lb_com_jackpot_pct": cj,
+                "economy.shop_lootbox_rare_price": rp,
+                "economy.lb_rare_jackpot_pct": rj,
+                "economy.lb_rare_pass_pct": r_pass
+            }
+            await save_eco(interaction.guild.id, p)
+            await self.mv._update("shop", interaction)
+        except ValueError:
+            await interaction.response.send_message("Лише цілі числа!", ephemeral=True)
 
 class TransferModal(discord.ui.Modal, title="↔️ Перекази"):
     tax     = discord.ui.TextInput(label="Податок на переказ % (0=вимк)", max_length=3)
@@ -1127,8 +1306,35 @@ class TransferModal(discord.ui.Modal, title="↔️ Перекази"):
         ctx = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
         self.main_view.eco = get_eco(ctx)
         await interaction.response.edit_message(
-            embed=build_category_embed(self.main_view.eco, "transfers"),
-            view=SetupCategoryView(self.main_view, "transfers")
+            embed=build_category_embed(self.main_view.eco, "general"),
+            view=SetupCategoryView(self.main_view, "general")
+        )
+
+class InflationModal(discord.ui.Modal, title="📈 Інфляція та Твінки"):
+    inf_lim = discord.ui.TextInput(label="Ліміт Інфляції (х, напр. 3.0)", max_length=5)
+    age_min = discord.ui.TextInput(label="Мін. вік акаунта (днів, 0=вимк)", max_length=4)
+
+    def __init__(self, main_view, eco: dict):
+        super().__init__()
+        self.main_view = main_view
+        self.inf_lim.default = str(eco.get("inflation_max_limit", 3.0))
+        self.age_min.default = str(eco.get("account_age_min_days", 14))
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            updates = {
+                "economy.inflation_max_limit": float(self.inf_lim.value),
+                "economy.account_age_min_days": int(self.age_min.value),
+            }
+        except ValueError:
+            await interaction.response.send_message(f"Лише числа!", ephemeral=True)
+            return
+        await save_eco(interaction.guild.id, updates)
+        ctx = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
+        self.main_view.eco = get_eco(ctx)
+        await interaction.response.edit_message(
+            embed=build_category_embed(self.main_view.eco, "general"),
+            view=SetupCategoryView(self.main_view, "general")
         )
 
 class QuestsModal(discord.ui.Modal, title="📋 Квести"):
@@ -1161,24 +1367,21 @@ class QuestsModal(discord.ui.Modal, title="📋 Квести"):
             view=SetupCategoryView(self.main_view, "quests")
         )
 
-class SeasonModal(discord.ui.Modal, title="🏆 Сезон"):
-    duration    = discord.ui.TextInput(label="Тривалість (днів)", max_length=4)
-    role_id     = discord.ui.TextInput(label="ID ролі переможців (0=без ролі)", max_length=20)
-    start_bonus = discord.ui.TextInput(label="Стартовий бонус монет", max_length=10)
+class SeasonModal(discord.ui.Modal, title="<:trophy:1475953207782932602> Сезон"):
+    duration    = discord.ui.TextInput(label="Тривалість сезону (днів)", max_length=4)
+    start_bonus = discord.ui.TextInput(label="Стартовий бонус монет (0=без бонусу)", max_length=10)
 
     def __init__(self, main_view, eco: dict):
         super().__init__()
         self.main_view = main_view
         self.duration.default    = str(eco.get("season_duration_days", 30))
-        self.role_id.default     = str(eco.get("season_winner_role_id", 0))
         self.start_bonus.default = str(eco.get("season_start_bonus", 0))
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
             updates = {
-                "economy.season_duration_days":  max(1, int(self.duration.value)),
-                "economy.season_winner_role_id": int(self.role_id.value),
-                "economy.season_start_bonus":    int(self.start_bonus.value),
+                "economy.season_duration_days": max(1, int(self.duration.value)),
+                "economy.season_start_bonus":   max(0, int(self.start_bonus.value)),
             }
         except ValueError:
             await interaction.response.send_message(f"{E_CROSS} Лише числа!", ephemeral=True)
@@ -1190,6 +1393,328 @@ class SeasonModal(discord.ui.Modal, title="🏆 Сезон"):
             embed=build_category_embed(self.main_view.eco, "season"),
             view=SetupCategoryView(self.main_view, "season")
         )
+
+# ── Season — канал анонсу ────────────────────────────────────────────────────
+
+class SeasonAnnounceChannelSelect(discord.ui.ChannelSelect):
+    def __init__(self, main_view, eco: dict):
+        self.main_view = main_view
+        cur = eco.get("season_announce_channel_id", 0)
+        defaults = [discord.Object(id=cur)] if cur else []
+        super().__init__(
+            placeholder="Канал для анонсу кінця сезону...",
+            channel_types=[discord.ChannelType.text],
+            min_values=0, max_values=1,
+            default_values=defaults,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        ch_id = self.values[0].id if self.values else 0
+        await save_eco(interaction.guild.id, {"economy.season_announce_channel_id": ch_id})
+        ctx = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
+        self.main_view.eco = get_eco(ctx)
+        await interaction.response.edit_message(
+            embed=build_category_embed(self.main_view.eco, "season"),
+            view=SetupCategoryView(self.main_view, "season")
+        )
+
+# ── Season — ролі переможців ─────────────────────────────────────────────────
+
+class SeasonRolePositionSelect(discord.ui.Select):
+    """Крок 1: адмін обирає позицію (1-5)."""
+    def __init__(self, main_view, eco: dict):
+        self.main_view = main_view
+        self.eco = eco
+        winner_roles = eco.get("season_winner_roles", {})
+        opts = []
+        position_labels = {
+            "1": "<:trophy:1475953207782932602> 1 місце",
+            "2": "<:medal:1475953523039408360> 2 місце",
+            "3": "<:star:1475954213455532067> 3 місце",
+            "4": "4 місце",
+            "5": "5 місце",
+        }
+        for pos, label in position_labels.items():
+            rid = winner_roles.get(pos)
+            desc = f"Роль: <@&{rid}>" if rid else "Не та встановлено"
+            opts.append(discord.SelectOption(label=label, value=pos, description=desc[:50]))
+        super().__init__(placeholder="Обери позицію для призначення ролі...", options=opts, row=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        position = self.values[0]
+        view = SeasonRolePickerView(self.main_view, self.eco, position)
+        await interaction.response.edit_message(
+            embed=discord.Embed(
+                title=f"<:trophy:1475953207782932602> Роль для {position} місця",
+                description="Виберіть роль нижче. Натисніть 'Очистити' щоб прибрати роль.",
+                color=0x1a1a2e
+            ),
+            view=view
+        )
+
+class SeasonRolePickerView(discord.ui.View):
+    """View з RoleSelect для обраної позиції."""
+    def __init__(self, main_view, eco: dict, position: str):
+        super().__init__(timeout=120)
+        self.main_view = main_view
+        self.eco = eco
+        self.position = position
+        self.add_item(SeasonRoleSelect(main_view, eco, position))
+
+    @discord.ui.button(label="← Назад", style=discord.ButtonStyle.secondary, row=1)
+    async def back_btn(self, interaction: discord.Interaction, _):
+        ctx = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
+        self.main_view.eco = get_eco(ctx)
+        await interaction.response.edit_message(
+            embed=build_category_embed(self.main_view.eco, "season"),
+            view=SetupCategoryView(self.main_view, "season")
+        )
+
+    @discord.ui.button(label="<:cutiex:1480246146076119132> Очистити роль", style=discord.ButtonStyle.danger, row=1)
+    async def clear_btn(self, interaction: discord.Interaction, _):
+        winner_roles = self.eco.get("season_winner_roles", {})
+        winner_roles.pop(self.position, None)
+        await save_eco(interaction.guild.id, {"economy.season_winner_roles": winner_roles})
+        ctx = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
+        self.main_view.eco = get_eco(ctx)
+        await interaction.response.edit_message(
+            embed=build_category_embed(self.main_view.eco, "season"),
+            view=SetupCategoryView(self.main_view, "season")
+        )
+
+class SeasonRoleSelect(discord.ui.RoleSelect):
+    def __init__(self, main_view, eco: dict, position: str):
+        self.main_view = main_view
+        self.eco = eco
+        self.position = position
+        super().__init__(placeholder=f"Роль для {position} місця...", min_values=1, max_values=1, row=0)
+
+    async def callback(self, interaction: discord.Interaction):
+        role_id = self.values[0].id
+        winner_roles = self.eco.get("season_winner_roles", {})
+        winner_roles[self.position] = role_id
+        await save_eco(interaction.guild.id, {"economy.season_winner_roles": winner_roles})
+        ctx = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
+        self.main_view.eco = get_eco(ctx)
+        await interaction.response.edit_message(
+            embed=build_category_embed(self.main_view.eco, "season"),
+            view=SetupCategoryView(self.main_view, "season")
+        )
+
+# ── Аукціон ───────────────────────────────────────────────────────────────────
+
+class AuctionChannelSelect(discord.ui.ChannelSelect):
+    def __init__(self, main_view):
+        super().__init__(placeholder="Виберіть канал для аукціону...", channel_types=[discord.ChannelType.text])
+        self.main_view = main_view
+
+    async def callback(self, interaction: discord.Interaction):
+        channel_id = self.values[0].id
+        await save_eco(interaction.guild.id, {"economy.auction_channel_id": channel_id})
+        ctx = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
+        self.main_view.eco = get_eco(ctx)
+        await interaction.response.edit_message(
+            embed=build_category_embed(self.main_view.eco, "auction"),
+            view=SetupCategoryView(self.main_view, "auction")
+        )
+
+class AuctionConfigModal(discord.ui.Modal, title="🔨 Налаштування Аукціону"):
+    anti_snipe = discord.ui.TextInput(label="Anti-Snipe (секунди, 0=вимк)", max_length=4)
+
+    def __init__(self, main_view, eco: dict):
+        super().__init__()
+        self.main_view = main_view
+        self.anti_snipe.default = str(eco.get("auction_anti_snipe_seconds", 30))
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            updates = {
+                "economy.auction_anti_snipe_seconds": max(0, int(self.anti_snipe.value)),
+            }
+        except ValueError:
+            await interaction.response.send_message(f"{E_CROSS} Лише числа!", ephemeral=True)
+            return
+            
+        await save_eco(interaction.guild.id, updates)
+        ctx = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
+        self.main_view.eco = get_eco(ctx)
+        await interaction.response.edit_message(
+            embed=build_category_embed(self.main_view.eco, "auction"),
+            view=SetupCategoryView(self.main_view, "auction")
+        )
+
+class AuctionAddLotModal(discord.ui.Modal, title="Додати Лот до Черги"):
+    lot_name = discord.ui.TextInput(label="Назва Лоту або Пінг Ролі (@Role / ID)", max_length=100)
+    lot_desc = discord.ui.TextInput(label="Опис (що це таке)", style=discord.TextStyle.paragraph, max_length=500, required=False)
+    start_bid = discord.ui.TextInput(label="Початкова ставка", max_length=15)
+    duration = discord.ui.TextInput(label="Час Аукціону (напр. 30m, 1h, 120s)", max_length=10)
+
+    def __init__(self, main_view):
+        super().__init__()
+        self.main_view = main_view
+        
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            bid = int(self.start_bid.value)
+            dur = parse_duration(self.duration.value)
+            
+            if bid <= 0 or dur < 10:
+                raise ValueError
+        except ValueError:
+            await interaction.response.send_message(f"{E_CROSS} Помилка! Ставка має бути > 0, Час > 10 секунд. Формат часу: 30m, 1h.", ephemeral=True)
+            return
+            
+        import uuid
+        lot_id = str(uuid.uuid4())[:8]
+        
+        new_lot = {
+            "id": lot_id,
+            "name": self.lot_name.value.strip(),
+            "desc": self.lot_desc.value.strip() if self.lot_desc.value else "Опис відсутній.",
+            "start_bid": bid,
+            "duration": dur,
+            "status": "queued" 
+        }
+        
+        from modules.db import invalidate_guild_settings
+        await db.guild_settings.update_one(
+            {"_id": interaction.guild.id},
+            {"$push": {"auction_queue": new_lot}},
+            upsert=True
+        )
+        invalidate_guild_settings(interaction.guild.id)
+        
+        await interaction.response.send_message(f"{E_CHECK} Лот **{new_lot['name']}** додано до черги (Аукціон іде {fmt_duration(dur)}, старт: {bid:,})!", ephemeral=True)
+
+class AuctionManageSelect(discord.ui.Select):
+    def __init__(self, main_view, queue: list):
+        self.main_view = main_view
+        self.queue = queue
+        
+        options = []
+        for lot in queue[:25]:
+            desc = lot.get("desc", "")[:50]
+            options.append(discord.SelectOption(
+                label=lot["name"][:100],
+                value=lot["id"],
+                description=f"Старт: {lot['start_bid']} | {fmt_duration(lot['duration'])} | {desc}"
+            ))
+            
+        super().__init__(placeholder="Виберіть лот для дій...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        lot_id = self.values[0]
+        lot = next((L for L in self.queue if L["id"] == lot_id), None)
+        if not lot:
+            return await interaction.response.send_message("Лот не знайдено.", ephemeral=True)
+            
+        embed = discord.Embed(
+            title=f"Лот: {lot['name']}",
+            description=f"**Опис:** {lot.get('desc', 'Немає')}\n**Стартова ставка:** `{lot['start_bid']:,}` {self.main_view.eco['currency_emoji']}\n**Тривалість:** `{fmt_duration(lot['duration'])}`",
+            color=discord.Color.gold()
+        )
+        embed.set_footer(text=f"ID Лоту: {lot_id}")
+        
+        await interaction.response.edit_message(embed=embed, view=AuctionLotActionView(self.main_view, lot))
+
+class AuctionManageView(discord.ui.View):
+    def __init__(self, main_view, queue: list):
+        super().__init__(timeout=900)
+        self.main_view = main_view
+        self.add_item(AuctionManageSelect(main_view, queue))
+        
+        back_btn = discord.ui.Button(label="Назад", style=discord.ButtonStyle.secondary, emoji=E_LEFT, row=3)
+        back_btn.callback = self._back_cb
+        self.add_item(back_btn)
+
+    async def _back_cb(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(
+            embed=build_category_embed(self.main_view.eco, "auction"),
+            view=SetupCategoryView(self.main_view, "auction")
+        )
+
+class AuctionLotActionView(discord.ui.View):
+    def __init__(self, main_view, lot: dict):
+        super().__init__(timeout=900)
+        self.main_view = main_view
+        self.lot = lot
+        
+        start_btn = discord.ui.Button(label="Запустити Аукціон зараз", style=discord.ButtonStyle.success, emoji="🚀")
+        start_btn.callback = self._start_cb
+        self.add_item(start_btn)
+        
+        del_btn = discord.ui.Button(label="Видалити з черги", style=discord.ButtonStyle.danger, emoji="<:trash:1477722148071145634>")
+        del_btn.callback = self._delete_cb
+        self.add_item(del_btn)
+        
+        back_btn = discord.ui.Button(label="Список Лотів", style=discord.ButtonStyle.secondary, emoji=E_LEFT, row=3)
+        back_btn.callback = self._back_list_cb
+        self.add_item(back_btn)
+
+    async def _delete_cb(self, interaction: discord.Interaction):
+        from modules.db import invalidate_guild_settings
+        await db.guild_settings.update_one(
+            {"_id": interaction.guild.id},
+            {"$pull": {"auction_queue": {"id": self.lot["id"]}}}
+        )
+        invalidate_guild_settings(interaction.guild.id)
+        await interaction.response.send_message(f"{E_CHECK} Лот видалено.", ephemeral=True)
+        
+        await self._back_list_cb(interaction, is_followup=True)
+
+    async def _start_cb(self, interaction: discord.Interaction):
+        from services.auction_manager import setup_auction_manager
+        am = setup_auction_manager(interaction.client)
+        
+        channel_id = self.main_view.eco.get("auction_channel_id", 0)
+        if channel_id == 0:
+            return await interaction.response.send_message(f"{E_CROSS} Спершу налаштуйте канал в меню Аукціону!", ephemeral=True)
+            
+        channel = interaction.guild.get_channel(channel_id)
+        if not channel:
+            return await interaction.response.send_message(f"{E_CROSS} Канал аукціону не знайдено (можливо видалений).", ephemeral=True)
+            
+        await db.guild_settings.update_one(
+            {"_id": interaction.guild.id},
+            {"$pull": {"auction_queue": {"id": self.lot["id"]}}}
+        )
+        
+        success, msg = await am.start_auction(interaction.guild.id, self.lot, channel, self.main_view.eco)
+        if not success:
+            
+            from modules.db import invalidate_guild_settings
+            await db.guild_settings.update_one(
+                {"_id": interaction.guild.id},
+                {"$push": {"auction_queue": self.lot}}
+            )
+            invalidate_guild_settings(interaction.guild.id)
+            return await interaction.response.send_message(f"{E_CROSS} Помилка: {msg}", ephemeral=True)
+            
+        await interaction.response.send_message(f"{E_CHECK} Аукціон на лот **{self.lot['name']}** успішно розпочато в каналі {channel.mention}!", ephemeral=True)
+        
+        embed = build_category_embed(self.main_view.eco, "auction")
+        await interaction.message.edit(embed=embed, view=SetupCategoryView(self.main_view, "auction"))
+
+    async def _back_list_cb(self, interaction: discord.Interaction, is_followup=False):
+        ctx = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
+        queue = ctx.get("auction_queue", [])
+        
+        if not queue:
+            embed = build_category_embed(self.main_view.eco, "auction")
+            view = SetupCategoryView(self.main_view, "auction")
+        else:
+            embed = discord.Embed(
+                title="📋 Керування чергою Аукціону",
+                description=f"В черзі зараз лотів: **{len(queue)}**\nВиберіть лот у списку нижче.",
+                color=EMBED_COLOR
+            )
+            view = AuctionManageView(self.main_view, queue)
+            
+        if is_followup:
+            await interaction.message.edit(embed=embed, view=view)
+        else:
+            await interaction.response.edit_message(embed=embed, view=view)
 
 # ── Керування Ролями Магазину ────────────────────────────────────────────────
 
@@ -1329,7 +1854,8 @@ class EconomySetup(commands.Cog):
     @app_commands.default_permissions(administrator=True)
     async def economy_setup(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        settings = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
+        from modules.db import get_guild_settings
+        settings = await get_guild_settings(db, interaction.guild.id)
         eco = get_eco(settings)
         embed = build_main_embed(eco)
         view  = EcoSetupView(eco)
@@ -1337,4 +1863,3 @@ class EconomySetup(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(EconomySetup(bot))
-

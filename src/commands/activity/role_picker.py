@@ -92,23 +92,23 @@ async def _assign_color_role(interaction: discord.Interaction, name: str, hex_co
                 pass
 
         except discord.Forbidden:
-            await interaction.followup.send("❌ У бота немає прав керувати ролями!", ephemeral=True)
+            await interaction.followup.send("<:cutiex:1480246146076119132> У бота немає прав керувати ролями!", ephemeral=True)
             return
         except (ValueError, discord.HTTPException) as e:
-            await interaction.followup.send(f"❌ Помилка при створенні ролі: {e}", ephemeral=True)
+            await interaction.followup.send(f"<:cutiex:1480246146076119132> Помилка при створенні ролі: {e}", ephemeral=True)
             return
 
     await _remove_old_colors(member)
 
     try:
         await member.add_roles(role, reason=f"Колір нікнейма: {name}")
-        await interaction.followup.send(f"✅ Колір встановлено: **{name}**", ephemeral=True)
+        await interaction.followup.send(f"<:cutiecheckmark:1479120440734650389> Колір встановлено: **{name}**", ephemeral=True)
     except discord.Forbidden:
         await interaction.followup.send(
-            "❌ Не вдалося видати роль — перевір позицію ролі бота.", ephemeral=True
+            "<:cutiex:1480246146076119132> Не вдалося видати роль — перевір позицію ролі бота.", ephemeral=True
         )
     except Exception as e:
-        await interaction.followup.send(f"❌ Помилка: {type(e).__name__}", ephemeral=True)
+        await interaction.followup.send(f"<:cutiex:1480246146076119132> Помилка: {type(e).__name__}", ephemeral=True)
 
 class CustomHexModal(discord.ui.Modal, title="Кастомний колір нікнейма"):
     hex_input = discord.ui.TextInput(
@@ -123,7 +123,7 @@ class CustomHexModal(discord.ui.Modal, title="Кастомний колір ні
         color_str = self.hex_input.value.strip().upper()
         if not re.match(r"^#?[0-9A-F]{6}$", color_str):
             await interaction.response.send_message(
-                "❌ Некоректний формат. Введи 6 символів HEX, наприклад `#E91E63`.",
+                "<:cutiex:1480246146076119132> Некоректний формат. Введи 6 символів HEX, наприклад `#E91E63`.",
                 ephemeral=True,
             )
             return
@@ -168,7 +168,7 @@ class ColorPickerView(discord.ui.View):
 
         if user_level < min_level:
             await interaction.response.send_message(
-                f"❌ Для кастомних кольорів потрібен **рівень {min_level}** (твій: {user_level}).",
+                f"<:cutiex:1480246146076119132> Для кастомних кольорів потрібен **рівень {min_level}** (твій: {user_level}).",
                 ephemeral=True,
             )
             return
@@ -185,12 +185,12 @@ class ColorPickerView(discord.ui.View):
         has_colors = any(_is_color_role(r) for r in member.roles)
 
         if not has_colors:
-            await interaction.response.send_message("❌ В тебе немає кольорової ролі.", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> В тебе немає кольорової ролі.", ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
         await _remove_old_colors(member)
-        await interaction.followup.send("✅ Твій колір знято.", ephemeral=True)
+        await interaction.followup.send("<:cutiecheckmark:1479120440734650389> Твій колір знято.", ephemeral=True)
 
 class RolePickerCommands(commands.Cog):
     def __init__(self, bot):

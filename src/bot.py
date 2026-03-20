@@ -93,7 +93,7 @@ class RestrictedTree(app_commands.CommandTree):
         ch_list = ", ".join(f"<#{c}>" for c in allowed_channels)
         log.info(f"[RESTRICT] BLOCKED: /{cmd_name} in ch={interaction.channel_id}, allowed={allowed_channels}")
         await interaction.response.send_message(
-            f"❌ Команду `/{cmd_name}` можна використовувати лише в: {ch_list}",
+            f"<:cutiex:1480246146076119132> Команду `/{cmd_name}` можна використовувати лише в: {ch_list}",
             ephemeral=True,
         )
         return False

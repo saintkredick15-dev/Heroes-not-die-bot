@@ -82,7 +82,7 @@ class QuestsView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message("❌ Це не ваші квести!", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> Це не ваші квести!", ephemeral=True)
             return False
         return True
 
@@ -105,7 +105,7 @@ class QuestsView(discord.ui.View):
                     claimed_count += 1
                     
         if claimed_count == 0:
-            return await interaction.response.send_message("❌ Немає виконаних квестів для отримання нагороди.", ephemeral=True)
+            return await interaction.response.send_message("<:cutiex:1480246146076119132> Немає виконаних квестів для отримання нагороди.", ephemeral=True)
             
         await db.users.update_one(
             {"guild_id": interaction.guild.id, "user_id": interaction.user.id},
@@ -118,7 +118,7 @@ class QuestsView(discord.ui.View):
         
         self.quests_obj = user_quests
         embed = build_quests_embed(interaction.user, user_quests, self.eco)
-        await interaction.response.edit_message(content=f"✅ Нагорода отримана: **{total_coins}** {self.eco.get('currency_emoji', '🪙')}", embed=embed, view=self)
+        await interaction.response.edit_message(content=f"<:cutiecheckmark:1479120440734650389> Нагорода отримана: **{total_coins}** {self.eco.get('currency_emoji', '<:coin:1478487028105482485>')}", embed=embed, view=self)
 
 def build_progress_bar(progress: int, target: int, length: int = 10) -> str:
     if target <= 0: return "█" * length
@@ -154,7 +154,7 @@ def build_quests_embed(user: discord.Member, quests_obj: dict, eco: dict) -> dis
             e_icon = get_emoji(q["action"])
             
             if q["claimed"]:
-                lines.append(f"✅ ~~**{q['desc']}**~~\n{q['progress']}/{q['target']} (100%) • `+{final_rew}` {curr}\n{pbar}")
+                lines.append(f"<:cutiecheckmark:1479120440734650389> ~~**{q['desc']}**~~\n{q['progress']}/{q['target']} (100%) • `+{final_rew}` {curr}\n{pbar}")
             else:
                 lines.append(f"{e_icon} **{q['desc']}**\n{q['progress']}/{q['target']} ({perc}%) • `+{final_rew}` {curr}\n{pbar}")
                 
@@ -175,7 +175,7 @@ class QuestsCommand(commands.Cog):
         settings = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
         eco = settings.get("economy", {})
         if not eco.get("enabled", True) or not eco.get("quests_enabled", True):
-            return await interaction.response.send_message("❌ Квести або економіка вимкнені.", ephemeral=True)
+            return await interaction.response.send_message("<:cutiex:1480246146076119132> Квести або економіка вимкнені.", ephemeral=True)
             
         quests_obj = await get_or_roll_quests(interaction.guild.id, interaction.user.id, eco)
         embed = build_quests_embed(interaction.user, quests_obj, eco)

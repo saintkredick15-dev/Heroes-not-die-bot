@@ -141,7 +141,7 @@ class DeployColorSelect(discord.ui.ChannelSelect):
             color=0x1a1a2e,
         )
         await ch.send(embed=embed, view=ColorPickerView())
-        await interaction.response.send_message(f"✅ Панель кольорів відправлена у {ch.mention}", ephemeral=True)
+        await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Панель кольорів відправлена у {ch.mention}", ephemeral=True)
 
 # ── Cog ───────────────────────────────────────────────────────────────────────
 

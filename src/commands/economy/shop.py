@@ -1,7 +1,3 @@
-"""
-/shop — Магазин з кнопками купівлі.
-/buy інтегровано: кнопки прямо в /shop embed.
-"""
 from __future__ import annotations
 
 import discord
@@ -33,7 +29,6 @@ SYSTEM_ITEMS = [
         "name":     "Щит",
         "desc":     "Захист від пограбування на 24 години",
         "emoji":    E_SHIELD,
-        "duration": 86400,
         "price_key":"shop_shield_price",
         "default":  5000,
     },
@@ -42,29 +37,36 @@ SYSTEM_ITEMS = [
         "name":     "Coin Буст",
         "desc":     "Подвійна нагорода за повідомлення з чату на 1 годину",
         "emoji":    E_STAR,
-        "duration": 3600,
         "price_key":"shop_xp_boost_price",
         "default":  2000,
     },
     {
-        "id":       "lottery",
-        "name":     "Лото-білет",
-        "desc":     "Миттєво отримай випадковий приз",
-        "emoji":    "🎟️",
-        "duration": None,
-        "price_key":"shop_lottery_price",
-        "default":  500,
+        "id":       "lootbox_common",
+        "name":     "Звичайний Лутбокс",
+        "desc":     "Може містити монети, предмети або невеликі бонуси",
+        "emoji":    "<:openlootbox:1479952212980535498>",
+        "price_key":"shop_lootbox_common_price",
+        "default":  2500,
+    },
+    {
+        "id":       "lootbox_rare",
+        "name":     "Рідкісний Лутбокс",
+        "desc":     "Цінний дроп, багато монет або унікальні ролі",
+        "emoji":    "<:gifttop:1479952511635820586>",
+        "price_key":"shop_lootbox_rare_price",
+        "default":  10000,
     },
     {
         "id":       "crime_pass",
         "name":     "Crime Pass",
-        "desc":     "Зняти штраф-блок після провалу /crime",
-        "emoji":    "🦹",
-        "duration": None,
+        "desc":     "Може зняти штраф-блок після провалу /crime",
+        "emoji":    "<:crimepass:1479951455543889970>",
         "price_key":"shop_crime_pass_price",
         "default":  3000,
     },
 ]
+
+ITEMS_REGISTRY = {item["id"]: item for item in SYSTEM_ITEMS}
 
 def get_item_price(eco: dict, item: dict) -> int:
     return eco.get(item["price_key"], item["default"])
@@ -84,14 +86,10 @@ def build_shop_embed(eco: dict, guild: discord.Guild) -> discord.Embed:
         price = get_item_price(eco, item)
         if price <= 0:
             continue
-        dur_str = ""
-        if item["duration"]:
-            h = item["duration"] // 3600
-            dur_str = f" • `{h}г`"
         embed.add_field(
             name=f"{item['emoji']}  {item['name']}",
             value=(
-                f"{item['desc']}{dur_str}\n"
+                f"{item['desc']}\n"
                 f"**{price:,}** {curr}"
             ),
             inline=True
@@ -160,65 +158,34 @@ class ShopView(discord.ui.View):
             user_data = await get_user(db, self.guild_id, interaction.user.id)
             wallet    = user_data.get("wallet", 0)
 
-            if wallet < price:
+            now = int(time.time())
+
+            log_entry = {"log": f"🔴 **{price}** | Придбано: {item['name']} | <t:{now}:t>"}
+            result = await db.users.find_one_and_update(
+                {"guild_id": self.guild_id, "user_id": interaction.user.id, "wallet": {"$gte": price}},
+                {
+                    "$inc": {"wallet": -price},
+                    "$push": {"eco_history": {"$each": [log_entry], "$slice": -50}}
+                }
+            )
+            
+            if not result:
                 await interaction.response.send_message(
-                    f"{E_CROSS} Недостатньо коштів. Баланс: **{wallet:,}** {curr}, потрібно **{price:,}** {curr}.",
+                    f"{E_CROSS} Недостатньо коштів або під час обробки ви вже витратили їх. Баланс: **{wallet:,}** {curr}, потрібно **{price:,}** {curr}.",
                     ephemeral=True
                 )
                 return
 
-            now = int(time.time())
+            from modules.db import invalidate_user_data
+            await invalidate_user_data(interaction.guild.id, interaction.user.id)
 
-            # ── Логіка кожного предмета ──
-            if item["id"] == "shield":
-                until = now + item["duration"]
-                await db.users.update_one(
-                    {"guild_id": self.guild_id, "user_id": interaction.user.id},
-                    {
-                        "$inc": {"wallet": -price},
-                        "$set": {"shield_until": until},
-                        "$push": {"eco_history": {"$each": [{"log": f"🔴 **{price}** | Купівля: Щит | <t:{now}:t>"}], "$slice": -10}}
-                    }
-                )
-                desc = f"{item['emoji']} **Щит** активний до <t:{until}:t>"
-
-            elif item["id"] == "coin_boost":
-                until = now + item["duration"]
-                await db.users.update_one(
-                    {"guild_id": self.guild_id, "user_id": interaction.user.id},
-                    {
-                        "$inc": {"wallet": -price},
-                        "$set": {"coin_boost_until": until},
-                        "$push": {"eco_history": {"$each": [{"log": f"ട **{price}** | Купівля: Coin Буст | <t:{now}:t>"}], "$slice": -10}}
-                    }
-                )
-                desc = f"{item['emoji']} **Coin Буст** активний до <t:{until}:t>"
-
-            elif item["id"] == "lottery":
-                prizes  = [50,  100, 200, 400,  800, 2000]
-                weights = [35,  30,  20,  10,   4,   1   ]
-                prize = random.choices(prizes, weights=weights, k=1)[0]
-                await db.users.update_one(
-                    {"guild_id": self.guild_id, "user_id": interaction.user.id},
-                    {
-                        "$inc": {"wallet": prize - price, "total_earned": prize},
-                        "$push": {"eco_history": {"$each": [{"log": f"🟢 **{prize}** | Лото виграш | <t:{now}:t>"}], "$slice": -10}}
-                    }
-                )
-                desc = f"🎟️ Твій виграш: **{prize:,}** {curr}!"
-
-            elif item["id"] == "crime_pass":
-                await db.users.update_one(
-                    {"guild_id": self.guild_id, "user_id": interaction.user.id},
-                    {
-                        "$inc": {"wallet": -price},
-                        "$unset": {"crime_ban_until": ""},
-                        "$push": {"eco_history": {"$each": [{"log": f"🔴 **{price}** | Купівля: Crime Pass | <t:{now}:t>"}], "$slice": -10}}
-                    }
-                )
-                desc = "🦹 Штраф-блок знятий. /crime знову доступний."
-            else:
-                desc = f"{E_CHECK} Придбано **{item['name']}**"
+            await db.inventory.update_one(
+                {"guild_id": self.guild_id, "user_id": interaction.user.id},
+                {"$inc": {f"items.{item['id']}": 1}},
+                upsert=True
+            )
+            
+            desc = f"{E_CHECK} Ви успішно купили **{item['name']}**.\n*Цей предмет відправлено до вашого Інвентарю (/economy).*"
 
             embed = discord.Embed(
                 title=f"{E_CHECK}  Успішна покупка",
@@ -243,40 +210,49 @@ class ShopView(discord.ui.View):
             user_data = await get_user(db, self.guild_id, interaction.user.id)
             wallet    = user_data.get("wallet", 0)
 
-            if wallet < price:
-                await interaction.response.send_message(
-                    f"{E_CROSS} Недостатньо коштів. Баланс: **{wallet:,}** {curr}, потрібно **{price:,}** {curr}.",
-                    ephemeral=True
-                )
-                return
-
-            inv_roles = user_data.get("inventory_roles", [])
-            if role_id in inv_roles or any(r.id == role_id for r in interaction.user.roles):
+            if inv_roles and role_id in inv_roles or any(r.id == role_id for r in interaction.user.roles):
                 await interaction.response.send_message(f"{E_CROSS} Ця роль вже є у тебе!", ephemeral=True)
                 return
 
             role_obj = interaction.guild.get_role(role_id)
-            if role_obj:
-                try:
-                    await interaction.user.add_roles(role_obj, reason="Купівля в магазині")
-                except discord.Forbidden:
-                    await interaction.response.send_message(
-                        f"{E_CROSS} У бота немає прав на видачу ролі {role_obj.name}! Покупку скасовано.",
-                        ephemeral=True
-                    )
-                    return
-                except discord.HTTPException:
-                    pass
+            if not role_obj:
+                return await interaction.response.send_message(f"{E_CROSS} Роль більше не існує на сервері.", ephemeral=True)
+
+            try:
+                await interaction.user.add_roles(role_obj, reason="Купівля в магазині")
+            except discord.Forbidden:
+                await interaction.response.send_message(
+                    f"{E_CROSS} У бота немає прав на видачу ролі {role_obj.name}! Покупку скасовано.",
+                    ephemeral=True
+                )
+                return
+            except discord.HTTPException:
+                pass
 
             now = int(time.time())
-            await db.users.update_one(
-                {"guild_id": self.guild_id, "user_id": interaction.user.id},
+
+            log_entry = {"log": f"🔴 **{price}** | Купівля ролі | <t:{now}:t>"}
+            result = await db.users.find_one_and_update(
+                {"guild_id": self.guild_id, "user_id": interaction.user.id, "wallet": {"$gte": price}},
                 {
                     "$inc": {"wallet": -price},
                     "$addToSet": {"inventory_roles": role_id},
-                    "$push": {"eco_history": {"$each": [{"log": f"🔴 **{price}** | Купівля ролі | <t:{now}:t>"}], "$slice": -10}}
+                    "$push": {"eco_history": {"$each": [log_entry], "$slice": -50}}
                 }
             )
+
+            if not result:
+                try:
+                    await interaction.user.remove_roles(role_obj, reason="Недостатньо коштів (Race Condition Guard)")
+                except:
+                    pass
+                return await interaction.response.send_message(
+                    f"{E_CROSS} Недостатньо коштів! Баланс: **{wallet:,}** {curr}, потрібно **{price:,}** {curr}.",
+                    ephemeral=True
+                )
+
+            from modules.db import invalidate_user_data
+            await invalidate_user_data(interaction.guild.id, interaction.user.id)
 
             embed = discord.Embed(
                 title=f"{E_CHECK}  Успішна покупка",
@@ -287,9 +263,10 @@ class ShopView(discord.ui.View):
 
         return callback
 
-# ── /inventory embed ──────────────────────────────────────────────────────────
+# ── /inventory embed та логіка ────────────────────────────────────────────────
 
-async def build_inventory_embed(user: discord.Member, guild_id: int, eco: dict) -> discord.Embed:
+async def build_inventory_embed_and_view(user: discord.Member, guild_id: int, eco: dict, main_eco_view=None):
+    
     user_data = await get_user(db, guild_id, user.id)
     curr      = eco.get("currency_emoji", E_COIN)
     now       = int(time.time())
@@ -322,10 +299,272 @@ async def build_inventory_embed(user: discord.Member, guild_id: int, eco: dict) 
         embed.add_field(name="🎭 Куплені ролі", value=roles_txt, inline=False)
         items_found = True
 
-    if not items_found:
-        embed.description = "*Інвентар порожній*"
+    inv_data = await db.inventory.find_one({"guild_id": guild_id, "user_id": user.id}) or {}
+    items_dict = inv_data.get("items", {}) 
+    
+    available_items = {k: v for k, v in items_dict.items() if isinstance(v, int) and v > 0}
+    
+    if available_items:
+        items_found = True
+        desc_lines = []
+        for i_id, count in available_items.items():
+            reg = ITEMS_REGISTRY.get(i_id)
+            if reg:
+                desc_lines.append(f"{reg['emoji']} **{reg['name']}**: `{count}` шт.")
+            else:
+                desc_lines.append(f"<:openlootbox:1479952212980535498> **Невідомий предмет ({i_id})**: `{count}` шт.")
+        
+        embed.add_field(name="🎒 Ваша сумка", value="\n".join(desc_lines), inline=False)
 
-    return embed
+    if not items_found:
+        embed.description = "*Тут порожньо. Завітайте до Магазину!*"
+        
+    view = InventoryView(user.id, guild_id, eco, available_items, main_eco_view)
+    return embed, view
+
+class InventorySelect(discord.ui.Select):
+    def __init__(self, available_items: dict):
+        options = []
+        for i_id, count in available_items.items():
+            reg = ITEMS_REGISTRY.get(i_id)
+            if reg:
+                options.append(discord.SelectOption(
+                    label=f"{reg['name']} (x{count})",
+                    value=i_id,
+                    emoji=discord.PartialEmoji.from_str(reg["emoji"]) if "<:" in reg["emoji"] else reg["emoji"],
+                    description=reg.get("desc", "")[:50]
+                ))
+                
+        super().__init__(placeholder="Оберіть предмет для використання...", options=options[:25])
+
+    async def callback(self, interaction: discord.Interaction):
+        item_id = self.values[0]
+        count = self.view.available_items.get(item_id, 0)
+        reg = ITEMS_REGISTRY.get(item_id)
+        
+        if not reg or count <= 0:
+            return await interaction.response.send_message(f"{E_CROSS} Помилка предмета.", ephemeral=True)
+            
+        embed = discord.Embed(
+            title=f"Використання: {reg['name']}",
+            description=f"У вас є: **{count}** шт.\n\n{reg['desc']}",
+            color=COLOR
+        )
+        
+        await interaction.response.edit_message(embed=embed, view=ItemActionView(self.view, item_id, count, reg))
+
+class InventoryView(discord.ui.View):
+    def __init__(self, owner_id: int, guild_id: int, eco: dict, available_items: dict, main_eco_view=None):
+        super().__init__(timeout=900)
+        self.owner_id = owner_id
+        self.guild_id = guild_id
+        self.eco = eco
+        self.available_items = available_items
+        self.main_eco_view = main_eco_view
+        
+        if available_items:
+            self.add_item(InventorySelect(available_items))
+            
+        btn_back = discord.ui.Button(label="Назад в Економіку", style=discord.ButtonStyle.secondary, emoji="◀️")
+        btn_back.callback = self._back_cb
+        self.add_item(btn_back)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("<:cutiex:1480246146076119132> Це не твій інвентар!", ephemeral=True)
+            return False
+        return True
+
+    async def _back_cb(self, interaction: discord.Interaction):
+        if self.main_eco_view:
+            from commands.economy.economy import build_economy_embed
+            user_data = await get_user(db, self.guild_id, interaction.user.id)
+            embed = build_economy_embed(interaction.user, user_data, self.eco)
+            await interaction.response.edit_message(embed=embed, view=self.main_eco_view)
+        else:
+            await interaction.response.edit_message(content="Меню закрито.", embed=None, view=None)
+
+class ItemActionView(discord.ui.View):
+    def __init__(self, parent_view: InventoryView, item_id: str, max_count: int, reg: dict):
+        super().__init__(timeout=900)
+        self.parent_view = parent_view
+        self.item_id = item_id
+        self.max_count = max_count
+        self.reg = reg
+        
+        action_name = "Відкрити" if "lootbox" in item_id else "Використати"
+        
+        btn_one = discord.ui.Button(label=f"{action_name} 1 шт.", style=discord.ButtonStyle.success)
+        btn_one.callback = self._use_one
+        self.add_item(btn_one)
+        
+        if max_count > 1:
+            btn_all = discord.ui.Button(label=f"{action_name} всі ({max_count})", style=discord.ButtonStyle.primary)
+            btn_all.callback = self._use_all
+            self.add_item(btn_all)
+            
+        btn_back = discord.ui.Button(label="Назад", style=discord.ButtonStyle.secondary, emoji="◀️")
+        btn_back.callback = self._back
+        self.add_item(btn_back)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await self.parent_view.interaction_check(interaction)
+
+    async def _back(self, interaction: discord.Interaction):
+        
+        embed, view = await build_inventory_embed_and_view(
+            interaction.user, self.parent_view.guild_id, self.parent_view.eco, self.parent_view.main_eco_view
+        )
+        await interaction.response.edit_message(embed=embed, view=view)
+
+    async def _use_one(self, interaction: discord.Interaction):
+        await self._process_use(interaction, 1)
+
+    async def _use_all(self, interaction: discord.Interaction):
+        await self._process_use(interaction, self.max_count)
+
+    async def _process_use(self, interaction: discord.Interaction, amount: int):
+        
+        inv_data = await db.inventory.find_one({"guild_id": self.parent_view.guild_id, "user_id": interaction.user.id}) or {}
+        items_dict = inv_data.get("items", {})
+        
+        actual_count = items_dict.get(self.item_id, 0)
+        if actual_count < amount:
+            return await interaction.response.send_message(f"{E_CROSS} У вас недостатньо цього предмета!", ephemeral=True)
+            
+        await db.inventory.update_one(
+            {"guild_id": self.parent_view.guild_id, "user_id": interaction.user.id},
+            {"$inc": {f"items.{self.item_id}": -amount}}
+        )
+        
+        now = int(time.time())
+        curr = self.parent_view.eco.get("currency_emoji", E_COIN)
+        
+        is_lootbox = "lootbox" in self.item_id
+        if is_lootbox:
+            await interaction.response.edit_message(
+                embed=discord.Embed(title="Відкриваємо...", description=f"<:openlootbox:1479952212980535498> {self.reg['name']} x{amount}...\n\n*Триває розпакування...*", color=discord.Color.gold()),
+                view=None
+            )
+            import asyncio
+            for step in ["⚡", "<:firecracker:1479953348185555077>", "✨"]:
+                await asyncio.sleep(1)
+                await interaction.edit_original_response(
+                    embed=discord.Embed(title="Відкриваємо...", description=f"{step} {self.reg['name']} x{amount}...\n\n*Триває розпакування...*", color=discord.Color.gold())
+                )
+            await asyncio.sleep(0.5)
+            
+        results = []
+        total_coins = 0
+        
+        for _ in range(amount):
+            if self.item_id == "shield":
+                await db.users.update_one(
+                    {"guild_id": self.parent_view.guild_id, "user_id": interaction.user.id},
+                    {"$set": {"shield_until": now + 86400}}
+                )
+                results.append("🛡️ Активовано Щит на 24 години.")
+            
+            elif self.item_id == "coin_boost":
+                await db.users.update_one(
+                    {"guild_id": self.parent_view.guild_id, "user_id": interaction.user.id},
+                    {"$set": {"xp_boost_until": now + 3600}}
+                )
+                results.append(f"⭐ Активовано Coin Буст на 1 годину.")
+                
+            elif self.item_id == "crime_pass":
+                user_u = await get_user(db, self.parent_view.guild_id, interaction.user.id)
+                if user_u.get("crime_ban_until", 0) > now:
+                    await db.users.update_one(
+                        {"guild_id": self.parent_view.guild_id, "user_id": interaction.user.id},
+                        {"$unset": {"crime_ban_until": ""}}
+                    )
+                    results.append("<:crimepass:1479951455543889970> Знято обмеження розслідування /crime.")
+                else:
+                    results.append("<:crimepass:1479951455543889970> Обмежень не було знайдено (витрачено дарма).")
+                    
+            elif self.item_id == "lootbox_common":
+                opts = [
+                    (500, 1500, "coins", 70),
+                    (0, 0, "shield", 20),
+                    (2000, 4000, "coins", 10)
+                ]
+                win = random.choices(opts, weights=[x[3] for x in opts], k=1)[0]
+                if win[2] == "coins":
+                    c = random.randint(win[0], win[1])
+                    total_coins += c
+                    results.append(f"🟢 +{c:,} монет")
+                else:
+                    await db.inventory.update_one(
+                        {"guild_id": self.parent_view.guild_id, "user_id": interaction.user.id},
+                        {"$inc": {"items.shield": 1}},
+                        upsert=True
+                    )
+                    results.append(f"🛡️ Отримано Щит (в інвентар)")
+                    
+            elif self.item_id == "lootbox_rare":
+                opts = [
+                    (5000, 12000, "coins", 60),
+                    (0, 0, "coin_boost", 25),
+                    (0, 0, "crime_pass", 10),
+                    (20000, 50000, "coins", 5)
+                ]
+                win = random.choices(opts, weights=[x[3] for x in opts], k=1)[0]
+                if win[2] == "coins":
+                    c = random.randint(win[0], win[1])
+                    total_coins += c
+                    results.append(f"🟢 +{c:,} монет")
+                elif win[2] == "coin_boost":
+                    await db.inventory.update_one(
+                        {"guild_id": self.parent_view.guild_id, "user_id": interaction.user.id},
+                        {"$inc": {"items.coin_boost": 1}},
+                        upsert=True
+                    )
+                    results.append(f"⭐ Отримано Coin Буст (в інвентар)")
+                else:
+                    await db.inventory.update_one(
+                        {"guild_id": self.parent_view.guild_id, "user_id": interaction.user.id},
+                        {"$inc": {"items.crime_pass": 1}},
+                        upsert=True
+                    )
+                    results.append(f"<:crimepass:1479951455543889970> Отримано Crime Pass (в інвентар)")
+                    
+        if total_coins > 0:
+            await db.users.update_one(
+                {"guild_id": self.parent_view.guild_id, "user_id": interaction.user.id},
+                {
+                    "$inc": {"wallet": total_coins},
+                    "$push": {"eco_history": {"$each": [{"log": f"🟢 **{total_coins}** | Лутбокс дроп | <t:{now}:t>"}], "$slice": -50}}
+                }
+            )
+            
+        log_res = "\n".join(results[:15])
+        if len(results) > 15:
+            log_res += f"\n*...та ще {len(results)-15} предметів*"
+            
+        if total_coins > 0:
+            log_res += f"\n\n<:Coins:1478486725113286899> **Загалом монет:** {total_coins:,} {curr}"
+            
+        embed = discord.Embed(
+            title=f"{E_CHECK} Успішно ({self.reg['name']} x{amount})",
+            description=log_res,
+            color=0x57f287 if is_lootbox else COLOR
+        )
+        
+        view_back = discord.ui.View()
+        btn_back = discord.ui.Button(label="Повернутися до Інвентарю", style=discord.ButtonStyle.secondary, emoji="🎒")
+        
+        async def _back_to_inv(i: discord.Interaction):
+            emb, vw = await build_inventory_embed_and_view(i.user, self.parent_view.guild_id, self.parent_view.eco, self.parent_view.main_eco_view)
+            await i.response.edit_message(embed=emb, view=vw)
+            
+        btn_back.callback = _back_to_inv
+        view_back.add_item(btn_back)
+        
+        if is_lootbox:
+            await interaction.edit_original_response(embed=embed, view=view_back)
+        else:
+            await interaction.response.edit_message(embed=embed, view=view_back)
 
 # ── Cog ───────────────────────────────────────────────────────────────────────
 

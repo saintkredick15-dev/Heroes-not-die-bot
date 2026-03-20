@@ -1,8 +1,3 @@
-"""
-/work — Робота з системою подій та КНП міні-грою.
-- Легка робота: базовий результат + 40% шанс на подію (КНП або монетка)
-- Складна робота: вибір стратегії → успіх/провал
-"""
 from __future__ import annotations
 
 import asyncio
@@ -21,21 +16,22 @@ from commands.economy.events import (
 from commands.economy.quests import quest_hook
 from commands.economy.minigames import get_random_minigame
 from commands.economy.crime import get_minigame_view  
-from utils.eco_helpers import make_log
+from utils.eco_helpers import make_log, apply_inflation
+from config.constants import Emojis as _E
 
 db = get_database()
 
 # ── Емодзі ────────────────────────────────────────────────────────────────────
-E_CHECK = "<:cutiecheckmark:1479120440734650389>"
-E_CROSS = "<:krestik:1476693091355463842>"
-E_WORK  = "<:work:1478489752020975626>"
-E_WORKS = "<:works:1478510456971857992>"
-E_COIN  = "<:coin:1478487028105482485>"
-E_CLOCK = "<:clock:1476209087804084328>"
-E_FLAME = "<:flame:1478490474145906800>"
-E_LEFT  = "<:totheleft:1478825190749110323>"
+E_CHECK = _E.CHECK.value
+E_CROSS = _E.CROSS.value
+E_WORK  = _E.WORK.value
+E_WORKS = _E.WORKS.value
+E_COIN  = _E.COIN.value
+E_CLOCK = _E.CLOCK.value
+E_FLAME = _E.FLAME.value
+E_LEFT  = _E.LEFT.value
 
-EMBED_COLOR_WIN  = 0x000000   
+EMBED_COLOR_WIN  = 0x000000
 EMBED_COLOR_LOSE = 0x000000
 EMBED_COLOR_BASE = 0x000000
 EMBED_COLOR_WORK = 0x000000
@@ -43,12 +39,6 @@ EMBED_COLOR_WORK = 0x000000
 RPS_CHOICES   = ["Камінь", "Ножиці", "Папір"]
 RPS_EMOJI     = {"Камінь": "🪨", "Ножиці": "✂️", "Папір": "📄"}
 RPS_BEATS     = {"Камінь": "Ножиці", "Ножиці": "Папір", "Папір": "Камінь"}
-
-def add_history(amount: int, desc: str) -> dict:
-    now = int(time.time())
-    color = "🟢" if amount >= 0 else "🔴"
-    val = abs(amount)
-    return {"log": f"{color} **{val}** | {desc} | <t:{now}:t>"}
 
 def get_full_eco(settings: dict) -> dict:
     from commands.administration.economy_setup import DEFAULT_ECO, get_eco
@@ -92,12 +82,21 @@ class WorkCommand(commands.Cog):
         curr     = eco.get("currency_emoji", E_COIN)
 
         earned   = random.randint(work_min, work_max)
+        # Віднімаємо відсотки на користь серверу згідно багатства гравця
+        from utils.eco_helpers import calculate_tax
+        wallet = user_data.get("wallet", 0)
+        bank = user_data.get("bank", 0)
+        final_earned, tax, tax_pct_str = calculate_tax(earned, wallet, bank)
         
         job = random.choice(JOBS_SIMPLE)
 
+        earned_text = f"**{final_earned}** {curr}"
+        if tax > 0:
+             earned_text += f"\n*(Стягнуто податок на багатство {tax_pct_str}: -{tax} {curr})*"
+
         embed = discord.Embed(
             title=f"{E_WORK} Зміна завершена!",
-            description=job["desc"].format(amount=earned, curr=curr),
+            description=job["desc"].format(amount=earned_text, curr=""),
             color=EMBED_COLOR_WIN
         )
 
@@ -109,18 +108,21 @@ class WorkCommand(commands.Cog):
             now = int(time.time())
             boost_active = now < user_data.get("coin_boost_until", 0)
             if boost_active:
-                earned = earned * 2
+                final_earned = final_earned * 2
 
             await db.users.update_one(
                 {"guild_id": interaction.guild.id, "user_id": interaction.user.id},
                 {
-                    "$inc": {"wallet": earned, "total_earned": earned},
+                    "$inc": {"wallet": final_earned, "total_earned": final_earned},
                     "$set": {"work_last": int(time.time())},
-                    "$push": {"eco_history": {"$each": [make_log(earned, "Легка робота")], "$slice": -50}}
+                    "$push": {"eco_history": {"$each": [make_log(final_earned, "Легка робота")], "$slice": -50}}
                 }
             )
+            from modules.db import invalidate_user_data
+            await invalidate_user_data(interaction.guild.id, interaction.user.id)
             await quest_hook(interaction.guild.id, interaction.user.id, "work")
-            embed.set_footer(text=f"Зараховано {earned} {eco.get('currency_name', 'монет')}" + (" 🌟 x2 Boost" if boost_active else ""))
+            await apply_inflation(db, interaction.guild.id, final_earned, eco)
+            embed.set_footer(text=f"Зараховано {final_earned} {eco.get('currency_name', 'монет')}" + (" 🌟 x2 Boost" if boost_active else ""))
             if interaction.response.is_done():
                 await interaction.edit_original_response(embed=embed, view=None)
             else:
@@ -135,7 +137,7 @@ class WorkCommand(commands.Cog):
         event_embed = discord.Embed(
             title=f"🛑 {scene['title']}",
             description=(
-                f"{job['desc'].format(amount=earned, curr=curr)}\n\n"
+                f"{job['desc'].format(amount=earned_text, curr='')}\n\n"
                 f"━━━━━━━━━━━━━━━━━━\n"
                 f"**Несподіванка!** {scene['desc']}\n"
             ),
@@ -152,7 +154,7 @@ class WorkCommand(commands.Cog):
                 if boost_active:
                     final_earned = final_earned * 2
 
-                res_embed.title = "✅ Ти впорався з ситуацією!"
+                res_embed.title = "<:cutiecheckmark:1479120440734650389> Ти впорався з ситуацією!"
                 res_embed.description = f"{res_embed.description}\n\nБазовий заробіток збільшено! Зараховано: **{final_earned:,}** {curr}"
                 res_embed.color = EMBED_COLOR_WIN
             elif outcome == "draw":
@@ -163,7 +165,7 @@ class WorkCommand(commands.Cog):
             else:
                 penalty = int(earned * fail_penalty)
                 final_earned = max(0, earned - penalty)
-                res_embed.title = "❌ Невдача!"
+                res_embed.title = "<:cutiex:1480246146076119132> Невдача!"
                 res_embed.description = f"{res_embed.description}\n\nЧастина заробітку втрачена. Зараховано: **{final_earned:,}** {curr}"
                 res_embed.color = EMBED_COLOR_LOSE
 
@@ -176,6 +178,8 @@ class WorkCommand(commands.Cog):
                 }
             )
             await quest_hook(interaction.guild.id, interaction.user.id, "work")
+            if outcome == "win" or outcome == "draw":
+                await apply_inflation(db, interaction.guild.id, final_earned, eco)
 
             if i is None:
                 try:
@@ -205,9 +209,7 @@ class WorkCommand(commands.Cog):
             pass
 
     async def execute_complex(self, interaction: discord.Interaction, eco: dict, user_data: dict):
-        """
-        Нарративна складна робота: N послідовних сцен з однієї сюжетної лінії.
-        """
+        
         mission    = random.choice(JOBS_COMPLEX)
         curr       = eco.get("currency_emoji", E_COIN)
         work_max   = eco.get("work_max", 500)
@@ -236,7 +238,7 @@ class WorkCommand(commands.Cog):
         await self._run_scene(interaction, eco, user_data, state, first_response=True)
 
     async def _run_scene(self, interaction: discord.Interaction, eco: dict, user_data: dict, state: dict, first_response: bool = False):
-        """Run the current scene of a complex mission."""
+        
         idx     = state["current_scene"]
         scenes  = state["scenes"]
         mission = state["mission"]
@@ -254,8 +256,8 @@ class WorkCommand(commands.Cog):
             description=(
                 f"{scene['desc']}\n\n"
                 f"━━━━━━━━━━━━━━━━━━\n"
-                f"💰 Поточна виплата: **{state['accumulated']:,}** {curr}\n"
-                f"✅ Успіх → ×{scene['reward_mult']} | ❌ Поразка → -{int(scene['fail_penalty']*100)}%"
+                f"<:Coins:1478486725113286899> Поточна виплата: **{state['accumulated']:,}** {curr}\n"
+                f"<:cutiecheckmark:1479120440734650389> Успіх → ×{scene['reward_mult']} | <:cutiex:1480246146076119132> Поразка → -{int(scene['fail_penalty']*100)}%"
             ),
             color=EMBED_COLOR_WORK
         )
@@ -320,8 +322,14 @@ class WorkCommand(commands.Cog):
                 pass
 
     async def _end_complex(self, interaction: discord.Interaction, eco: dict, user_data: dict, state: dict):
-        """Finalize complex work and pay out."""
+        
         final_pay = state["accumulated"]
+        # Віднімаємо податок, якщо гравець надто багато фармить
+        from utils.eco_helpers import calculate_tax
+        wallet = user_data.get("wallet", 0)
+        bank = user_data.get("bank", 0)
+        final_earned, tax, tax_pct_str = calculate_tax(final_pay, wallet, bank)
+        
         curr      = eco.get("currency_emoji", E_COIN)
         mission   = state["mission"]
         now       = int(time.time())
@@ -329,21 +337,28 @@ class WorkCommand(commands.Cog):
         await db.users.update_one(
             {"guild_id": interaction.guild.id, "user_id": interaction.user.id},
             {
-                "$inc": {"wallet": final_pay, "total_earned": final_pay, "week_earned": final_pay, "month_earned": final_pay},
+                "$inc": {"wallet": final_earned, "total_earned": final_earned, "week_earned": final_earned, "month_earned": final_earned},
                 "$set": {"work_last": now, "work_started_at": 0},
                 "$push": {"eco_history": {
-                    "$each": [{"log": f"🟢 **{final_pay}** | Складна робота: {mission['title']} | <t:{now}:t>"}],
+                    "$each": [{"log": f"🟢 **{final_earned}** | Складна робота: {mission['title']} | <t:{now}:t>"}],
                     "$slice": -50
                 }}
             }
         )
+        from modules.db import invalidate_user_data
+        await invalidate_user_data(interaction.guild.id, interaction.user.id)
         await quest_hook(interaction.guild.id, interaction.user.id, "work")
+        await apply_inflation(db, interaction.guild.id, final_pay, eco)
+
+        earned_text = f"**+{final_earned:,}** {curr}"
+        if tax > 0:
+            earned_text += f"\n*(Стягнуто податок на багатство {tax_pct_str}: -{tax:,} {curr})*"
 
         done_embed = discord.Embed(
-            title=f"✅ Місія завершена!",
+            title=f"<:cutiecheckmark:1479120440734650389> Місія завершена!",
             description=(
                 f"👷‍♂️ **{mission['title']}** — всі {len(state['scenes'])} етапи пройдено.\n\n"
-                f"💰 Підсумок: **+{final_pay:,}** {curr}"
+                f"<:Coins:1478486725113286899> Підсумок: {earned_text}"
             ),
             color=EMBED_COLOR_WIN
         )
@@ -355,14 +370,19 @@ class WorkCommand(commands.Cog):
     @app_commands.command(name="work", description="Працювати та заробляти валюту")
     async def work(self, interaction: discord.Interaction):
         try:
-            settings  = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
+            from modules.db import get_guild_settings
+            settings  = await get_guild_settings(db, interaction.guild.id)
             eco       = settings.get("economy", {})
 
             from commands.administration.economy_setup import DEFAULT_ECO, get_eco
             eco = get_eco(settings)
 
             if not eco.get("enabled", True):
-                await interaction.response.send_message("❌ Економіка вимкнена на цьому сервері.", ephemeral=True)
+                await interaction.response.send_message("<:cutiex:1480246146076119132> Економіка вимкнена на цьому сервері.", ephemeral=True)
+                return
+            # Фікс: не пускаємо новорегів, щоб не робили ферму твінків
+            from utils.eco_helpers import check_account_age
+            if not await check_account_age(interaction, eco):
                 return
 
             user_data = await get_user(db, interaction.guild.id, interaction.user.id)
@@ -427,9 +447,9 @@ class WorkCommand(commands.Cog):
 
         except Exception as e:
             if not interaction.response.is_done():
-                await interaction.response.send_message(f"⚠️ Помилка: `{e}`", ephemeral=True)
+                await interaction.response.send_message(f"<:warn:1477376152191373504> Помилка: `{e}`", ephemeral=True)
             else:
-                await interaction.followup.send(f"⚠️ Помилка: `{e}`", ephemeral=True)
+                await interaction.followup.send(f"<:warn:1477376152191373504> Помилка: `{e}`", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(WorkCommand(bot))

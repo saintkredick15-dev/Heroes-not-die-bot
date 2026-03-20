@@ -1,13 +1,7 @@
-"""
-Централізований репозиторій для роботи з даними користувачів.
-Замінює copy-paste get_user_data() в activity.py, admin.py та profile.py.
-"""
 from __future__ import annotations
 
 import discord
 
-
-# --- Дефолтна схема юзера (єдине місце визначення) ---
 DEFAULT_USER: dict = {
     "xp": 0,
     "level": 1,
@@ -16,34 +10,29 @@ DEFAULT_USER: dict = {
     "reactions": 0,
     "history": {},
     
-    # Економіка
     "wallet": 0,
     "bank": 0,
     "daily_streak": 0,
     "daily_last": 0,
     "work_last": 0,
     "total_earned": 0,
-    "levelup_notify": True,  # чи надсилати сповіщення про підвищення рівня
-    "eco_history": [] # Наприклад: [{"action": "Work", "amount": 500, "time": 16400000}]
+    "levelup_notify": True,  
+    "eco_history": [] 
 }
 
-
 def get_level_xp(level: int) -> int:
-    """Повертає кількість XP потрібну для підвищення з рівня `level`."""
+    
     return 5 * (level ** 2) + 50 * level + 100
 
-
 async def get_user(db, guild_id: int, user_id: int) -> dict:
-    """
-    Повертає дані юзера з БД. Якщо запису немає — створює з дефолтними значеннями.
-    Гарантує, що всі поля DEFAULT_USER присутні (forward-compatible).
-    """
-    user = await db.users.find_one({"guild_id": guild_id, "user_id": user_id})
-    if not user:
+    
+    from modules.db import get_user_data
+    user = await get_user_data(db, guild_id, user_id)
+    if not user or user.get("guild_id") != guild_id:
         user = {"guild_id": guild_id, "user_id": user_id, **DEFAULT_USER}
         await db.users.insert_one(user)
     else:
-        # Gapfill: нові поля з DEFAULT_USER яких ще немає в документі
+        # Довантажуємо поля, які вповадили після останнього оновлення
         missing = {k: v for k, v in DEFAULT_USER.items() if k not in user}
         if missing:
             await db.users.update_one(
@@ -53,7 +42,6 @@ async def get_user(db, guild_id: int, user_id: int) -> dict:
             user.update(missing)
     return user
 
-
 async def update_user(
     db,
     guild_id: int,
@@ -61,9 +49,7 @@ async def update_user(
     user_id: int,
     data: dict,
 ) -> None:
-    """
-    Оновлює поля юзера. Якщо передано `member` — зберігає актуальне ім'я і аватар.
-    """
+    # Беремо дані з Discord і записуємо в базу, потім витираємо давній кеш
     if member is not None:
         data["username"] = member.display_name
         data["avatar"] = member.display_avatar.url if member.display_avatar else None
@@ -72,11 +58,14 @@ async def update_user(
         {"guild_id": guild_id, "user_id": user_id},
         {"$set": data},
     )
-
+    from modules.db import invalidate_user_data
+    await invalidate_user_data(guild_id, user_id)
 
 async def update_user_raw(db, guild_id: int, user_id: int, data: dict) -> None:
-    """Оновлює поля юзера без збереження імені/аватару (для адмін-команд)."""
+    # Швидкий апдейт без перевірки ознак, потім очищаємо кеш
     await db.users.update_one(
         {"guild_id": guild_id, "user_id": user_id},
         {"$set": data},
     )
+    from modules.db import invalidate_user_data
+    await invalidate_user_data(guild_id, user_id)

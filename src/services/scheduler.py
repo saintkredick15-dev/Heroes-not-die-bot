@@ -8,7 +8,7 @@ from commands.administration.economy_setup import get_eco
 
 db = get_database()
 
-RANK_BADGES = {1: "🥇", 2: "🥈", 3: "🥉"}
+RANK_BADGES = {1: "<:trophy:1475953207782932602>", 2: "<:medal:1475953523039408360>", 3: "<:star:1475954213455532067>"}
 
 class SchedulerCog(commands.Cog):
     def __init__(self, bot):
@@ -106,7 +106,7 @@ async def perform_season_reset(guild: discord.Guild, eco: dict = None, gd: dict 
         eco = get_eco(gd)
 
     season_num = eco.get("season_number", 1)
-    curr = eco.get("currency_emoji", "🪙")
+    curr = eco.get("currency_emoji", "<:coin:1478487028105482485>")
     curr_name = eco.get("currency_name", "Coin")
 
     # 1. Знайти топ 3 гравців (за wallet + bank)
@@ -128,22 +128,32 @@ async def perform_season_reset(guild: discord.Guild, eco: dict = None, gd: dict 
         "top3": top3_data
     })
 
-    # 3. Видати роль переможцям та забрати у минулих
-    winner_role_id = eco.get("season_winner_role_id", 0)
-    if winner_role_id > 0 and guild:
-        role = guild.get_role(winner_role_id)
-        if role:
-            for m in role.members:
-                try:
-                    await m.remove_roles(role)
-                except:
-                    pass
-            for t_data in top3_data:
+    # 3. Видача ролей переможцям (якщо налаштовано)
+    winner_roles: dict = eco.get("season_winner_roles", {})
+    if winner_roles and guild:
+        # Спочатку знімаємо ВСІ налаштовані ролі з будь-яких членів сервера
+        for pos_str, role_id in winner_roles.items():
+            role = guild.get_role(int(role_id)) if role_id else None
+            if role:
+                for m in list(role.members):
+                    try:
+                        await m.remove_roles(role)
+                    except Exception:
+                        pass
+
+        # Видаємо нові ролі переможцям за позицією (0-індексований список)
+        for idx, t_data in enumerate(top3_data):
+            position = str(idx + 1)
+            role_id = winner_roles.get(position)
+            if not role_id:
+                continue
+            role = guild.get_role(int(role_id))
+            if role:
                 m = guild.get_member(t_data["user_id"])
                 if m:
                     try:
                         await m.add_roles(role)
-                    except:
+                    except Exception:
                         pass
 
     # 4. Скинути баланс та видати стартовий бонус
@@ -170,21 +180,15 @@ async def perform_season_reset(guild: discord.Guild, eco: dict = None, gd: dict 
         {"$set": {"economy": eco, "season_history": history}}
     )
 
-    # 6. Опублікувати підсумок сезону в канал
+    # 6. Публікуємо підсумок сезону — тільки якщо адмін вказав канал
     announce_channel_id = eco.get("season_announce_channel_id", 0)
     channel = None
     if announce_channel_id and guild:
         channel = guild.get_channel(announce_channel_id)
-    if channel is None and guild:
-        # Спробуємо знайти перший текстовий канал де бот може писати
-        for ch in guild.text_channels:
-            if ch.permissions_for(guild.me).send_messages:
-                channel = ch
-                break
 
     if channel:
         embed = discord.Embed(
-            title=f"🏆 Сезон {season_num} завершено!",
+            title=f"<:trophy:1475953207782932602> Сезон {season_num} завершено!",
             description=f"Розпочинається **Сезон {season_num + 1}**!\n\n"
                         f"{'▸ Стартовий бонус: `' + str(start_bonus) + '` ' + curr if start_bonus > 0 else ''}",
             color=0xFFD700

@@ -33,7 +33,7 @@ def _ok(description: str) -> discord.Embed:
     return discord.Embed(description=description, color=EMBED_COLOR)
 
 def _err(description: str) -> discord.Embed:
-    return discord.Embed(description=f"❌ {description}", color=0x2b2d31)
+    return discord.Embed(description=f"<:cutiex:1480246146076119132> {description}", color=0x2b2d31)
 
 UNIT_MAP = {"s": 1, "m": 60, "h": 3600, "d": 86400}
 def _parse_duration(text: str) -> int | None:
@@ -65,7 +65,7 @@ class CustomPurgeModal(discord.ui.Modal, title="Свій термін видал
         cutoff = discord.utils.utcnow() - datetime.timedelta(seconds=seconds)
         try:
             deleted = await interaction.channel.purge(after=cutoff)
-            await interaction.followup.send(embed=_ok(f"🗑️ Видалено **{len(deleted)}** повідомлень."), ephemeral=True)
+            await interaction.followup.send(embed=_ok(f"<:trash:1477722148071145634> Видалено **{len(deleted)}** повідомлень."), ephemeral=True)
         except discord.Forbidden:
             await interaction.followup.send(embed=_err("Немає прав на видалення."), ephemeral=True)
         except Exception as e:
@@ -124,7 +124,7 @@ class ModerationCog(commands.Cog):
                 days = {"1d": 1, "3d": 3, "7d": 7}.get(період.value)
                 cutoff = discord.utils.utcnow() - datetime.timedelta(days=days)
                 deleted = await interaction.channel.purge(after=cutoff)
-            await interaction.followup.send(embed=_ok(f"🗑️ Видалено **{len(deleted)}** повідомлень."), ephemeral=True)
+            await interaction.followup.send(embed=_ok(f"<:trash:1477722148071145634> Видалено **{len(deleted)}** повідомлень."), ephemeral=True)
         except Exception as e:
             await interaction.followup.send(embed=_err(f"Помилка: {e}"), ephemeral=True)
 

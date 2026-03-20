@@ -301,7 +301,7 @@ class DuelGame:
         final = discord.Embed(
             title="Переможець!",
             description=(
-                f"🏆 {winner.mention}\n\n"
+                f"<:trophy:1475953207782932602> {winner.mention}\n\n"
                 f"**{self.ch_wins} : {self.tg_wins}**\n"
                 f"Приз: **{prize:,}** {curr}"
             ),

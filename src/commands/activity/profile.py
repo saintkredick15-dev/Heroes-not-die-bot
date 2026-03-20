@@ -93,15 +93,14 @@ class ProfileCommands(commands.Cog):
 
             total_xp_val = sum(get_level_xp(l) for l in range(1, level)) + xp
             
-            eco_user = await db.economy_users.find_one({"guild_id": interaction.guild.id, "user_id": target.id}) or {}
-            wallet = eco_user.get("wallet", 0)
-            bank   = eco_user.get("bank", 0)
-            streak = eco_user.get("daily_streak", 0)
-            quests = eco_user.get("completed_quests", 0)
+            wallet = data.get("wallet", 0)
+            bank   = data.get("bank", 0)
+            streak = data.get("daily_streak", 0)
+            quests = data.get("completed_quests", 0)
             
             now = datetime.now()
-            shield_until = eco_user.get("shield_until")
-            boost_until  = eco_user.get("coin_boost_until")
+            shield_until = data.get("shield_until")
+            boost_until  = data.get("coin_boost_until")
             
             active_items = []
             if shield_until and isinstance(shield_until, datetime) and shield_until > now:
@@ -110,8 +109,8 @@ class ProfileCommands(commands.Cog):
                 active_items.append(f"{E_BOOST} Буст до <t:{int(boost_until.timestamp())}:R>")
                 
             eco_str = (
-                f"<:Wallet:1478483324392706201>Гаманець: **{wallet:,}** {E_COIN}\n"
-                f":bank: Банк: **{bank:,}**<:banknote:1478511186860572753>\n"
+                f"{E_COIN} Гаманець: **{wallet:,}**\n"
+                f"{E_BANK} Банк: **{bank:,}**\n"
                 f"{E_FLAME} Стрік: **{streak}** днів\n"
                 f"<:cutiecheckmark:1479120440734650389> Квестів: **{quests}**"
             )
@@ -138,10 +137,10 @@ class ProfileCommands(commands.Cog):
             await interaction.followup.send(embed=embed, file=file)
 
         except discord.HTTPException as e:
-            await interaction.followup.send(f"⚠️ Помилка Discord: `{e}`")
+            await interaction.followup.send(f"<:warn:1477376152191373504> Помилка Discord: `{e}`")
         except Exception as e:
             _log.error("Unexpected profile error for %s: %s", target, e, exc_info=True)
-            await interaction.followup.send("⚠️ Внутрішня помилка. Спробуйте пізніше.")
+            await interaction.followup.send("<:warn:1477376152191373504> Внутрішня помилка. Спробуйте пізніше.")
 
 async def setup(bot):
     await bot.add_cog(ProfileCommands(bot))

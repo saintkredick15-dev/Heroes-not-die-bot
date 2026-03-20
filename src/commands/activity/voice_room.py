@@ -35,11 +35,11 @@ class RoomNameModal(discord.ui.Modal, title="Змінити назву кімн�
                     {"owner_id": self.user_id, "active": True},
                     {"$set": {"name": new_name}}
                 )
-                await interaction.response.send_message(f"✅ Назву кімнати змінено на: **{new_name}**", ephemeral=True)
+                await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Назву кімнати змінено на: **{new_name}**", ephemeral=True)
             else:
-                await interaction.response.send_message("❌ Не вдалося знайти твою кімнату!", ephemeral=True)
+                await interaction.response.send_message("<:cutiex:1480246146076119132> Не вдалося знайти твою кімнату!", ephemeral=True)
         else:
-            await interaction.response.send_message("❌ У тебе немає активної приватної кімнати!", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> У тебе немає активної приватної кімнати!", ephemeral=True)
 
 class RoomLimitModal(discord.ui.Modal, title="Встановити ліміт користувачів"):
     limit_input = discord.ui.TextInput(
@@ -57,10 +57,10 @@ class RoomLimitModal(discord.ui.Modal, title="Встановити ліміт к
         try:
             limit = int(self.limit_input.value)
             if limit < 0 or limit > 99:
-                await interaction.response.send_message("❌ Ліміт має бути від 0 до 99!", ephemeral=True)
+                await interaction.response.send_message("<:cutiex:1480246146076119132> Ліміт має бути від 0 до 99!", ephemeral=True)
                 return
         except ValueError:
-            await interaction.response.send_message("❌ Введіть правильне число!", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> Введіть правильне число!", ephemeral=True)
             return
 
         user_room = await db.private_rooms.find_one({
@@ -77,11 +77,11 @@ class RoomLimitModal(discord.ui.Modal, title="Встановити ліміт к
                     {"$set": {"user_limit": limit}}
                 )
                 limit_text = f"{limit} користувачів" if limit > 0 else "без ліміту"
-                await interaction.response.send_message(f"✅ Ліміт кімнати встановлено: **{limit_text}**", ephemeral=True)
+                await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Ліміт кімнати встановлено: **{limit_text}**", ephemeral=True)
             else:
-                await interaction.response.send_message("❌ Не вдалося знайти твою кімнату!", ephemeral=True)
+                await interaction.response.send_message("<:cutiex:1480246146076119132> Не вдалося знайти твою кімнату!", ephemeral=True)
         else:
-            await interaction.response.send_message("❌ У тебе немає активної приватної кімнати!", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> У тебе немає активної приватної кімнати!", ephemeral=True)
 
 class UserMentionModal(discord.ui.Modal):
     user_input = discord.ui.TextInput(
@@ -117,7 +117,7 @@ class UserMentionModal(discord.ui.Modal):
                     target_user = discord.utils.get(interaction.guild.members, name=user_input)
 
         if not target_user:
-            await interaction.response.send_message("❌ Користувача не знайдено!", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> Користувача не знайдено!", ephemeral=True)
             return
 
         user_room = await db.private_rooms.find_one({
@@ -126,12 +126,12 @@ class UserMentionModal(discord.ui.Modal):
         })
         
         if not user_room:
-            await interaction.response.send_message("❌ У тебе немає активної приватної кімнати!", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> У тебе немає активної приватної кімнати!", ephemeral=True)
             return
 
         channel = interaction.guild.get_channel(user_room["channel_id"])
         if not channel:
-            await interaction.response.send_message("❌ Не вдалося знайти твою кімнату!", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> Не вдалося знайти твою кімнату!", ephemeral=True)
             return
 
         if self.action_type == "access":
@@ -141,12 +141,12 @@ class UserMentionModal(discord.ui.Modal):
                 
                 del overwrites[target_user]
                 await channel.edit(overwrites=overwrites)
-                await interaction.response.send_message(f"✅ Скинуто права доступу для {target_user.display_name}", ephemeral=True)
+                await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Скинуто права доступу для {target_user.display_name}", ephemeral=True)
             else:
                 
                 overwrites[target_user] = discord.PermissionOverwrite(connect=True, view_channel=True)
                 await channel.edit(overwrites=overwrites)
-                await interaction.response.send_message(f"✅ Надано доступ користувачеві {target_user.display_name}", ephemeral=True)
+                await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Надано доступ користувачеві {target_user.display_name}", ephemeral=True)
                 
         elif self.action_type == "mic":
             
@@ -157,21 +157,21 @@ class UserMentionModal(discord.ui.Modal):
                 current_perms.speak = True
                 overwrites[target_user] = current_perms
                 await channel.edit(overwrites=overwrites)
-                await interaction.response.send_message(f"✅ Повернуто право говорити для {target_user.display_name}", ephemeral=True)
+                await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Повернуто право говорити для {target_user.display_name}", ephemeral=True)
             else:
                 
                 current_perms.speak = False
                 overwrites[target_user] = current_perms
                 await channel.edit(overwrites=overwrites)
-                await interaction.response.send_message(f"✅ Заборонено говорити користувачеві {target_user.display_name}", ephemeral=True)
+                await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Заборонено говорити користувачеві {target_user.display_name}", ephemeral=True)
                 
         elif self.action_type == "kick":
             
             if target_user.voice and target_user.voice.channel == channel:
                 await target_user.move_to(None)
-                await interaction.response.send_message(f"✅ Користувача {target_user.display_name} вигнано з кімнати", ephemeral=True)
+                await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Користувача {target_user.display_name} вигнано з кімнати", ephemeral=True)
             else:
-                await interaction.response.send_message(f"❌ Користувач {target_user.display_name} не в твоїй кімнаті", ephemeral=True)
+                await interaction.response.send_message(f"<:cutiex:1480246146076119132> Користувач {target_user.display_name} не в твоїй кімнаті", ephemeral=True)
                 
         elif self.action_type == "reset":
             
@@ -179,9 +179,9 @@ class UserMentionModal(discord.ui.Modal):
             if target_user in overwrites:
                 del overwrites[target_user]
                 await channel.edit(overwrites=overwrites)
-                await interaction.response.send_message(f"✅ Скинуто всі права для {target_user.display_name}", ephemeral=True)
+                await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Скинуто всі права для {target_user.display_name}", ephemeral=True)
             else:
-                await interaction.response.send_message(f"❌ У користувача {target_user.display_name} немає особливих прав", ephemeral=True)
+                await interaction.response.send_message(f"<:cutiex:1480246146076119132> У користувача {target_user.display_name} немає особливих прав", ephemeral=True)
                 
         elif self.action_type == "owner":
             
@@ -201,7 +201,7 @@ class UserMentionModal(discord.ui.Modal):
             )
             await channel.edit(overwrites=overwrites)
             
-            await interaction.response.send_message(f"✅ Власність кімнати передано користувачеві {target_user.display_name}", ephemeral=True)
+            await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Власність кімнати передано користувачеві {target_user.display_name}", ephemeral=True)
 
 class RoomManagementView(discord.ui.View):
     def __init__(self):
@@ -215,7 +215,7 @@ class RoomManagementView(discord.ui.View):
         })
         
         if not user_room:
-            await interaction.response.send_message("❌ У тебе немає приватного каналу! Зайди в канал-створювач щоб створити свій.", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> У тебе немає приватного каналу! Зайди в канал-створювач щоб створити свій.", ephemeral=True)
             return False
         return True
 
@@ -365,9 +365,9 @@ class RoomManagementView(discord.ui.View):
                 )
                 await interaction.response.send_message(embed=embed, ephemeral=True)
             else:
-                await interaction.response.send_message("❌ Не вдалося знайти твою кімнату!", ephemeral=True)
+                await interaction.response.send_message("<:cutiex:1480246146076119132> Не вдалося знайти твою кімнату!", ephemeral=True)
         else:
-            await interaction.response.send_message("❌ У тебе немає активної приватної кімнати!", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> У тебе немає активної приватної кімнати!", ephemeral=True)
 
 class RoomManagementCommands(commands.Cog):
     def __init__(self, bot):
@@ -459,7 +459,7 @@ class RoomManagementCommands(commands.Cog):
         """Налаштування системи приватних кімнат для адмінів"""
         
         if not interaction.user.guild_permissions.manage_channels:
-            await interaction.response.send_message("❌ У тебе немає прав для використання цієї команди!", ephemeral=True)
+            await interaction.response.send_message("<:cutiex:1480246146076119132> У тебе немає прав для використання цієї команди!", ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -510,7 +510,7 @@ class RoomManagementCommands(commands.Cog):
         await management_channel.send(embed=embed, view=view)
 
         success_embed = discord.Embed(
-            title="✅ Система приватних кімнат налаштована!",
+            title="<:cutiecheckmark:1479120440734650389> Система приватних кімнат налаштована!",
             color=0x00ff00,
             description=(
                 f"**Канал-створювач:** {creator_channel.mention}\n"
@@ -535,6 +535,6 @@ async def setup(bot):
     
     view = RoomManagementView()
     bot.add_view(view)
-    print("✅ Room Management persistent view зареєстровано")
+    print("<:cutiecheckmark:1479120440734650389> Room Management persistent view зареєстровано")
     
     await bot.add_cog(RoomManagementCommands(bot))
