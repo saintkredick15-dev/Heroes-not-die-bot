@@ -2,6 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from modules.db import get_database
+from utils.ui_contract import add_section, compact_kv, set_surface_footer, surface_embed
 
 db = get_database()
 
@@ -188,102 +189,164 @@ async def save_eco(guild_id: int, updates: dict):
     await db.guild_settings.update_one(
         {"_id": guild_id}, {"$set": updates}, upsert=True
     )
-    invalidate_guild_settings(guild_id)
+    await invalidate_guild_settings(guild_id)
+
+
+def _status_text(enabled: bool) -> str:
+    return f"{E_CHECK} Увімкнено" if enabled else f"{E_CROSS} Вимкнено"
+
+
+def _range_text(value) -> str:
+    if isinstance(value, list) and len(value) == 2:
+        return f"{value[0]}-{value[1]}"
+    return str(value)
 
 # ── Embed головного меню ──────────────────────────────────────────────────────
 
 def build_main_embed(eco: dict) -> discord.Embed:
     curr = eco["currency_emoji"]
-    enabled_str = f"{E_CHECK} Увімкнена" if eco["enabled"] else f"{E_CROSS} Вимкнена"
+    work_modes = {"simple": "Легка", "complex": "Складна", "both": "Обидва режими"}
+    msg_str = _range_text(eco["msg_earn"])
+    interest_rate = eco.get("bank_interest_rate", 0)
+    interest_text = (
+        f"`{interest_rate}%` / {'день' if eco.get('bank_interest_interval') == 'daily' else 'тиждень'}"
+        if interest_rate > 0 else f"{E_CROSS} Вимкнено"
+    )
+    minigames_enabled = len(eco.get("enabled_minigames", []))
+    shop_roles = len(eco.get("shop_roles", []))
+    auction_channel = f"<#{eco['auction_channel_id']}>" if eco.get("auction_channel_id") else f"{E_CROSS} Не вибрано"
 
     embed = discord.Embed(
         title=f"{E_SETTING} Налаштування Економіки",
+        description="Детальний центр керування економікою. Для швидких preset-ів і patch-редагування використовуйте `/config`, а для глибоких змін — категорії нижче.",
         color=EMBED_COLOR
     )
-
-    msg_earn = eco["msg_earn"]
-    msg_str = f"{msg_earn[0]}–{msg_earn[1]}" if isinstance(msg_earn, list) else str(msg_earn)
-
-    work_modes = {"simple": "Лише Легка", "complex": "Лише Складна", "both": "Обидва режими"}
-
     embed.add_field(
-        name=f"{E_SETTING} Загальне",
+        name=f"{E_SETTING} Ядро",
         value=(
-            f"Статус: {enabled_str}\n"
-            f"Валюта: {curr} `{eco['currency_name']}`"
+            f"Економіка: {_status_text(eco['enabled'])}\n"
+            f"Валюта: {curr} `{eco['currency_name']}`\n"
+            f"Сезон: {_status_text(eco.get('season_enabled', False))}\n"
+            f"Перекази: податок `{eco.get('transfer_tax_percent', 0)}%`, ліміт `{eco.get('transfer_daily_limit', 0):,}` {curr}"
         ),
-        inline=True
+        inline=False
     )
     embed.add_field(
-        name=f"{E_INCOME} Пасивний дохід",
+        name=f"{E_INCOME} Заробіток",
         value=(
-            f"{E_CHAT} Чат: `{msg_str}` {curr}  КД: `{eco['msg_cooldown']}с`\n"
-            f"{E_MICRO} Войс: `{eco['voice_earn']}` {curr}/хв\n"
-            f"{E_STAR} Реакції: `{eco['reaction_earn']}` {curr}"
+            f"{E_CHAT} Чат: `{msg_str}` {curr} / `{eco['msg_cooldown']}с`\n"
+            f"{E_MICRO} Войс: `{eco['voice_earn']}` {curr}/хв, {E_STAR} Реакції: `{eco['reaction_earn']}` {curr}\n"
+            f"{E_WORK} Робота: `{eco['work_min']}-{eco['work_max']}` {curr}, `{work_modes.get(eco['work_type'], 'Обидва режими')}`\n"
+            f"{E_DAILY} Daily: `{eco['daily_amount']}` {curr}, стрік `+{eco['daily_streak_bonus']}`, captcha {'вкл' if eco['captcha_enabled'] else 'викл'}"
         ),
-        inline=True
-    )
-    embed.add_field(name="\u200b", value="\u200b", inline=False)
-    embed.add_field(
-        name=f"{E_WORK} Робота",
-        value=(
-            f"Сума: `{eco['work_min']}–{eco['work_max']}` {curr}\n"
-            f"КД: `{fmt_duration(eco['work_cooldown'])}`\n"
-            f"Режим: `{work_modes.get(eco['work_type'], 'Обидва')}`\n"
-            f"Шанс події: `{eco['event_chance']}%`  Ставка: `{eco['event_stake_percent']}%`"
-        ),
-        inline=True
+        inline=False
     )
     embed.add_field(
-        name=f"{E_DAILY} Daily",
+        name=f"{E_STATS} Ризик і ліміти",
         value=(
-            f"Сума: `{eco['daily_amount']}` {curr}\n"
-            f"Стрік-бонус: `+{eco['daily_streak_bonus']}` {curr}\n"
-            f"КД: `{fmt_duration(eco['daily_cooldown'])}`\n"
-            f"Captcha: {E_CHECK if eco['captcha_enabled'] else E_CROSS}"
+            f"{E_ROB} Пограбування: {_status_text(eco['rob_enabled'])}, шанс `{eco['rob_chance']}%`, штраф `{eco['rob_fine_percent']}%`\n"
+            f"{E_CRIME} Крайм: {_status_text(eco['crime_enabled'])}, КД `{fmt_duration(eco['crime_cooldown'])}`, бан `{fmt_duration(eco['crime_ban_duration'])}`\n"
+            f"{E_BANK} Банк: базовий ліміт `{eco['bank_base_limit']:,}` {curr}, +`{eco['bank_level_multiplier']:,}`/рівень\n"
+            f"{E_STATS} Гемблінг: {_status_text(eco['gambling_enabled'])}, макс. ставка `{eco['gambling_max_bet']:,}` {curr}"
         ),
-        inline=True
-    )
-    embed.add_field(name="\u200b", value="\u200b", inline=False)
-    embed.add_field(
-        name=f"{E_ROB} Пограбування",
-        value=(
-            f"Статус: {E_CHECK if eco['rob_enabled'] else E_CROSS}\n"
-            f"Шанс: `{eco['rob_chance']}%`  Штраф: `{eco['rob_fine_percent']}%`\n"
-            f"Мін. баланс: `{eco['rob_min_balance_percent']}%`"
-        ),
-        inline=True
+        inline=False
     )
     embed.add_field(
-        name=f"{E_CRIME} Крайм",
+        name=f"{E_BOOST} Довгі системи",
         value=(
-            f"Статус: {E_CHECK if eco['crime_enabled'] else E_CROSS}\n"
-            f"КД: `{fmt_duration(eco['crime_cooldown'])}`\n"
-            f"Бан-штраф: `{fmt_duration(eco['crime_ban_duration'])}`"
+            f"Фонд: {_status_text(eco.get('fund_enabled', False))}, ціль `{eco.get('fund_goal', 1000000):,}` {curr}\n"
+            f"Інфляція: {_status_text(eco.get('inflation_enabled', True))}, множник `{eco.get('inflation_multiplier', 1.0):.2f}x`\n"
+            f"Квести: {_status_text(eco.get('quests_enabled', True))}, daily `{eco.get('quests_daily_count', 3)}`, weekly `{eco.get('quests_weekly_count', 2)}`\n"
+            f"Відсоток банку: {interest_text}"
         ),
-        inline=True
-    )
-    embed.add_field(name="\u200b", value="\u200b", inline=False)
-    embed.add_field(
-        name=f"{E_BANK} Банк",
-        value=(
-            f"Базовий ліміт: `{eco['bank_base_limit']:,}` {curr}\n"
-            f"Множник рівня: `+{eco['bank_level_multiplier']:,}`"
-        ),
-        inline=True
+        inline=False
     )
     embed.add_field(
-        name=f"{E_STATS} Гемблінг",
+        name=f"{E_SHOP} Контент",
         value=(
-            f"Статус: {E_CHECK if eco['gambling_enabled'] else E_CROSS}\n"
-            f"Макс. ставка: `{eco['gambling_max_bet']:,}` {curr}"
+            f"Мініігри: `{minigames_enabled}` активних\n"
+            f"Shop roles: `{shop_roles}`\n"
+            f"Аукціон: {auction_channel}\n"
+            f"Anti-snipe: `{eco.get('auction_anti_snipe_seconds', 30)}с`"
         ),
-        inline=True
+        inline=False
     )
-    embed.set_footer(text="Оберіть категорію нижче для редагування")
+    embed.set_footer(text="Категорії нижче відкривають детальні налаштування. `/config` краще підходить для швидких preset-ів і patch-змін.")
     return embed
 
 # ── Embed підкатегорій ────────────────────────────────────────────────────────
+
+def build_main_embed(eco: dict) -> discord.Embed:
+    curr = eco["currency_emoji"]
+    work_modes = {"simple": "Легка", "complex": "Складна", "both": "Обидва режими"}
+    msg_str = _range_text(eco["msg_earn"])
+    interest_rate = eco.get("bank_interest_rate", 0)
+    interest_text = (
+        f"`{interest_rate}%` / {'день' if eco.get('bank_interest_interval') == 'daily' else 'тиждень'}"
+        if interest_rate > 0 else f"{E_CROSS} Вимкнено"
+    )
+    minigames_enabled = len(eco.get("enabled_minigames", []))
+    shop_roles = len(eco.get("shop_roles", []))
+    auction_channel = f"<#{eco['auction_channel_id']}>" if eco.get("auction_channel_id") else f"{E_CROSS} Не вибрано"
+
+    embed = surface_embed(
+        "admin",
+        f"{E_SETTING} Налаштування економіки",
+        "Огляд ключових систем. Для швидких preset-ів і patch-змін краще підійде `/config`, а тут лишається детальне редагування.",
+    )
+    add_section(
+        embed,
+        f"{E_SETTING} Ядро",
+        [
+            compact_kv("Економіка", _status_text(eco["enabled"])),
+            compact_kv("Валюта", f"{curr} `{eco['currency_name']}`"),
+            compact_kv("Сезон", _status_text(eco.get("season_enabled", False))),
+            compact_kv("Перекази", f"податок `{eco.get('transfer_tax_percent', 0)}%` • ліміт `{eco.get('transfer_daily_limit', 0):,}` {curr}"),
+        ],
+    )
+    add_section(
+        embed,
+        f"{E_INCOME} Заробіток",
+        [
+            compact_kv("Чат", f"`{msg_str}` {curr} / `{eco['msg_cooldown']}с`"),
+            compact_kv("Войс і реакції", f"`{eco['voice_earn']}`/хв • `{eco['reaction_earn']}` за реакцію"),
+            compact_kv("Робота", f"`{eco['work_min']}-{eco['work_max']}` {curr} • `{work_modes.get(eco['work_type'], 'Обидва режими')}`"),
+            compact_kv("Daily", f"`{eco['daily_amount']}` {curr} • streak `+{eco['daily_streak_bonus']}` • captcha {'вкл' if eco['captcha_enabled'] else 'викл'}"),
+        ],
+    )
+    add_section(
+        embed,
+        f"{E_STATS} Ризик і ліміти",
+        [
+            compact_kv("Пограбування", f"{_status_text(eco['rob_enabled'])} • шанс `{eco['rob_chance']}%` • штраф `{eco['rob_fine_percent']}%`"),
+            compact_kv("Крайм", f"{_status_text(eco['crime_enabled'])} • КД `{fmt_duration(eco['crime_cooldown'])}` • бан `{fmt_duration(eco['crime_ban_duration'])}`"),
+            compact_kv("Банк", f"ліміт `{eco['bank_base_limit']:,}` {curr} • +`{eco['bank_level_multiplier']:,}`/рівень"),
+            compact_kv("Гемблінг", f"{_status_text(eco['gambling_enabled'])} • макс. ставка `{eco['gambling_max_bet']:,}` {curr}"),
+        ],
+    )
+    add_section(
+        embed,
+        f"{E_BOOST} Довгі системи",
+        [
+            compact_kv("Фонд", f"{_status_text(eco.get('fund_enabled', False))} • ціль `{eco.get('fund_goal', 1000000):,}` {curr}"),
+            compact_kv("Інфляція", f"{_status_text(eco.get('inflation_enabled', True))} • множник `{eco.get('inflation_multiplier', 1.0):.2f}x`"),
+            compact_kv("Квести", f"{_status_text(eco.get('quests_enabled', True))} • daily `{eco.get('quests_daily_count', 3)}` • weekly `{eco.get('quests_weekly_count', 2)}`"),
+            compact_kv("Відсоток банку", interest_text),
+        ],
+    )
+    add_section(
+        embed,
+        f"{E_SHOP} Контент",
+        [
+            compact_kv("Мініігри", f"`{minigames_enabled}` активних"),
+            compact_kv("Shop roles", f"`{shop_roles}`"),
+            compact_kv("Аукціон", auction_channel),
+            compact_kv("Anti-snipe", f"`{eco.get('auction_anti_snipe_seconds', 30)}с`"),
+        ],
+    )
+    set_surface_footer(embed, "admin", "Огляд -> категорія -> модалка. `/config` краще підходить для quick preset-ів і patch-змін.")
+    return embed
+
 
 def build_category_embed(eco: dict, category: str) -> discord.Embed:
     curr = eco["currency_emoji"]
@@ -473,7 +536,7 @@ def build_category_embed(eco: dict, category: str) -> discord.Embed:
             f"*Використовуйте меню нижче, щоб вибрати, які міні-ігри можуть випадати під час легкої роботи.*"
         )
     
-    embed.set_footer(text="Оберіть категорію нижче для редагування")
+    embed.set_footer(text="Кнопки нижче змінюють лише цей блок. `Назад` повертає до загального огляду, а `/config` лишається швидким верхнім центром.")
     return embed
 
 # ── Модальні форми ────────────────────────────────────────────────────────────
@@ -887,7 +950,7 @@ class CategorySelect(discord.ui.Select):
             discord.SelectOption(label="Аукціон",        value="auction",   description="Канал, лоти та черга",                 emoji=discord.PartialEmoji.from_str("<:Auction:1479863712855621805>")),
             discord.SelectOption(label="Квести",         value="quests",   description="Налаштування денних/тижневих завдань", emoji=discord.PartialEmoji.from_str("<:reasonqiestion:1476209697919860777>")),
         ]
-        super().__init__(placeholder="Оберіть категорію...", options=options)
+        super().__init__(placeholder="Оберіть блок економіки для редагування...", options=options)
 
     async def callback(self, interaction: discord.Interaction):
         cat = self.values[0]
@@ -918,7 +981,7 @@ class MinigamesSelect(discord.ui.Select):
             discord.SelectOption(label="Відгадай число", value="guess", default="guess" in enabled),
             discord.SelectOption(label="Реакція", value="reaction", default="reaction" in enabled),
         ]
-        super().__init__(placeholder="Увімкнені міні-ігри...", min_values=1, max_values=10, options=options)
+        super().__init__(placeholder="Оберіть міні-ігри для легкої роботи...", min_values=1, max_values=10, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         await save_eco(interaction.guild.id, {"economy.enabled_minigames": self.values})
@@ -949,29 +1012,29 @@ class SetupCategoryView(discord.ui.View):
             sb.callback = lambda i: self._toggle_bool(i, "economy.season_enabled", not s_enabled, "general")
             self.add_item(sb)
 
-            self._add("Валюта", discord.ButtonStyle.secondary, self._general_cb)
+            self._add("Валюта та ядро", discord.ButtonStyle.secondary, self._general_cb)
             self._add("Перекази", discord.ButtonStyle.secondary, self._transfer_cb)
-            self._add("Інфляція та Твінки", discord.ButtonStyle.secondary, self._inflation_cb)
+            self._add("Інфляція та твіни", discord.ButtonStyle.secondary, self._inflation_cb)
             
             f_enabled = eco.get("fund_enabled", False)
             fb = discord.ui.Button(label="Фонд: ВКЛ" if f_enabled else "Фонд: ВИКЛ", style=discord.ButtonStyle.success if f_enabled else discord.ButtonStyle.secondary)
             fb.callback = lambda i: self._toggle_bool(i, "economy.fund_enabled", not f_enabled, "general")
             self.add_item(fb)
             
-            self._add("Налаштування Фонду", discord.ButtonStyle.secondary, self._fund_modal_cb)
-            self._add("Сезон", discord.ButtonStyle.secondary, self._season_cb)
+            self._add("Ціль фонду", discord.ButtonStyle.secondary, self._fund_modal_cb)
+            self._add("Параметри сезону", discord.ButtonStyle.secondary, self._season_cb)
             
-            reset_btn = discord.ui.Button(label="Скинути зараз", style=discord.ButtonStyle.secondary, row=1)
+            reset_btn = discord.ui.Button(label="Сезонний ресет зараз", style=discord.ButtonStyle.secondary, row=1)
             reset_btn.callback = self._season_reset_now
             self.add_item(reset_btn)
 
         elif category == "passive":
-            self._add("Змінити налаштування", discord.ButtonStyle.secondary, self._passive_cb)
+            self._add("Суми та кулдауни", discord.ButtonStyle.secondary, self._passive_cb)
 
         elif category == "work":
             self._add("Сума заробітку",       discord.ButtonStyle.secondary, self._work_amount_cb)
             self._add("Кулдаун",              discord.ButtonStyle.secondary, self._work_cd_cb)
-            self._add("Налаштування події",   discord.ButtonStyle.secondary, self._work_event_cb)
+            self._add("Подія та ризик",   discord.ButtonStyle.secondary, self._work_event_cb)
             
             mode = eco.get("work_type", "both")
             styles = {
@@ -1000,7 +1063,7 @@ class SetupCategoryView(discord.ui.View):
             self.add_item(b)
 
         elif category == "bank":
-            self._add("Змінити ліміти", discord.ButtonStyle.secondary, self._bank_cb)
+            self._add("Ліміти та відсоток", discord.ButtonStyle.secondary, self._bank_cb)
 
         elif category == "rob":
             rob_style = discord.ButtonStyle.success if eco["rob_enabled"] else discord.ButtonStyle.secondary
@@ -1008,8 +1071,8 @@ class SetupCategoryView(discord.ui.View):
             b = discord.ui.Button(label=rob_label, style=rob_style)
             b.callback = lambda i: self._toggle_bool(i, "economy.rob_enabled", not eco["rob_enabled"], "rob")
             self.add_item(b)
-            self._add("Основне", discord.ButtonStyle.secondary, self._rob_cb)
-            self._add("Відсоток та Кулдаун", discord.ButtonStyle.secondary, self._rob_adv_cb)
+            self._add("Шанс, штраф і таймер", discord.ButtonStyle.secondary, self._rob_cb)
+            self._add("Відсоток крадіжки та КД", discord.ButtonStyle.secondary, self._rob_adv_cb)
 
         elif category == "crime":
             crime_style = discord.ButtonStyle.success if eco["crime_enabled"] else discord.ButtonStyle.secondary
@@ -1017,7 +1080,7 @@ class SetupCategoryView(discord.ui.View):
             b = discord.ui.Button(label=crime_label, style=crime_style)
             b.callback = lambda i: self._toggle_bool(i, "economy.crime_enabled", not eco["crime_enabled"], "crime")
             self.add_item(b)
-            self._add("Налаштування КД", discord.ButtonStyle.secondary, self._crime_cb)
+            self._add("КД, бан і хабар", discord.ButtonStyle.secondary, self._crime_cb)
 
         elif category == "gambling":
             gamb_style = discord.ButtonStyle.success if eco["gambling_enabled"] else discord.ButtonStyle.secondary
@@ -1026,7 +1089,7 @@ class SetupCategoryView(discord.ui.View):
             b.callback = lambda i: self._toggle_bool(i, "economy.gambling_enabled", not eco["gambling_enabled"], "gambling")
             self.add_item(b)
             
-            self._add("Налаштування", discord.ButtonStyle.secondary, self._gambling_cb)
+            self._add("Ставки, RTP і ліміти", discord.ButtonStyle.secondary, self._gambling_cb)
             
             draw_refund   = eco.get("duel_draw_refund", True)
             draw_style    = discord.ButtonStyle.success if draw_refund else discord.ButtonStyle.secondary
@@ -1048,7 +1111,7 @@ class SetupCategoryView(discord.ui.View):
             self._add("Ціни предметів", discord.ButtonStyle.secondary, self._shop_cb)
             self._add("Лутбокси", discord.ButtonStyle.secondary, self._lootboxes_cb)
             
-            roles_btn = discord.ui.Button(label="Керування кастом-ролями", style=discord.ButtonStyle.primary, emoji="🎭")
+            roles_btn = discord.ui.Button(label="Кастомні ролі магазину", style=discord.ButtonStyle.primary, emoji="🎭")
             roles_btn.callback = self._shop_roles_cb
             self.add_item(roles_btn)
 
@@ -1059,7 +1122,7 @@ class SetupCategoryView(discord.ui.View):
             qb = discord.ui.Button(label=q_label, style=q_style)
             qb.callback = lambda i: self._toggle_bool(i, "economy.quests_enabled", not q_enabled, "quests")
             self.add_item(qb)
-            self._add("Налаштування", discord.ButtonStyle.secondary, self._quests_cb)
+            self._add("Нагороди та множник", discord.ButtonStyle.secondary, self._quests_cb)
 
         elif category == "season":
             # ── Toggle сезону ──────────────────────────────────────────────────
@@ -1079,17 +1142,18 @@ class SetupCategoryView(discord.ui.View):
 
         elif category == "auction":
             self.add_item(AuctionChannelSelect(self.main_view))
-            self._add("Anti-Snipe & Таймер", discord.ButtonStyle.secondary, self._auction_config_cb)
+            self._add("Anti-snipe", discord.ButtonStyle.secondary, self._auction_config_cb)
             
-            add_lot_btn = discord.ui.Button(label="Додати Лот", style=discord.ButtonStyle.primary, emoji="➕")
+            add_lot_btn = discord.ui.Button(label="Додати лот", style=discord.ButtonStyle.primary, emoji="➕")
             add_lot_btn.callback = self._auction_add_lot_cb
             self.add_item(add_lot_btn)
             
-            manage_lot_btn = discord.ui.Button(label="Керувати Чергою", style=discord.ButtonStyle.secondary, emoji="📋")
+            manage_lot_btn = discord.ui.Button(label="Черга лотів", style=discord.ButtonStyle.secondary, emoji="📋")
             manage_lot_btn.callback = self._auction_manage_cb
             self.add_item(manage_lot_btn)
 
         back = discord.ui.Button(
+            label="Назад",
             emoji=discord.PartialEmoji.from_str(E_LEFT),
             style=discord.ButtonStyle.secondary,
             row=4

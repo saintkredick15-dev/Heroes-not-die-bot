@@ -12,6 +12,7 @@ from commands.administration.economy_setup import get_eco
 from commands.economy.events import CRIMES
 from commands.economy.quests import quest_hook
 from utils.eco_helpers import make_log, apply_inflation, fmt_duration
+from utils.ui_contract import gameplay_result_embed, set_surface_footer, surface_embed
 from commands.economy.minigames import (
     MathQuizView, HigherLowerView, ShellGameView, DiceDuelView,
     OddEmojiView, UnscrambleView, TriviaView, TypingTestView,
@@ -93,8 +94,7 @@ class BribeView(discord.ui.View):
                 "$push": {"eco_history": {"$each": [make_log(-self.fine, f"Провал крайму: {self.mission['title']}")], "$slice": -50}}
             }
         )
-        embed = discord.Embed(title="🚨 Провал", color=COLOR_LOSE)
-        embed.description = f"{E_CROSS} Знято штраф: **{self.fine:,}** {self.curr}\nТи під слідством на **{fmt_duration(self.ban_dur)}**."
+        embed = gameplay_result_embed("🚨 Провал", f"{E_CROSS} Знято штраф: **{self.fine:,}** {self.curr}\nТи під слідством на **{fmt_duration(self.ban_dur)}**.", tone="danger")
         if timeout:
             embed.description = f"⏱ Час на обдумування вийшов.\n{embed.description}"
             
@@ -145,7 +145,7 @@ class BribeView(discord.ui.View):
             from modules.db import invalidate_user_data
             await invalidate_user_data(interaction.guild.id, self.owner_id)
 
-            embed = discord.Embed(title="🤝 Питання вирішено", description=f"{ev}\n\nВитрачено хабар: **{self.bribe_sum:,}** {self.curr}", color=COLOR_WIN)
+            embed = gameplay_result_embed("🤝 Питання вирішено", f"{ev}\n\nВитрачено хабар: **{self.bribe_sum:,}** {self.curr}", tone="success")
         elif r < 0.80: 
             ev = random.choice(neutral_events)
             ban_until = int(time.time()) + self.ban_dur
@@ -160,7 +160,7 @@ class BribeView(discord.ui.View):
             from modules.db import invalidate_user_data
             await invalidate_user_data(interaction.guild.id, self.owner_id)
 
-            embed = discord.Embed(title="🚨 Хабар не пройшов", description=f"{ev}\n\nЗнято штраф: **{self.fine:,}** {self.curr}\nТи під слідством на **{fmt_duration(self.ban_dur)}**.", color=COLOR_LOSE)
+            embed = gameplay_result_embed("🚨 Хабар не пройшов", f"{ev}\n\nЗнято штраф: **{self.fine:,}** {self.curr}\nТи під слідством на **{fmt_duration(self.ban_dur)}**.", tone="danger")
         elif r < 0.95: 
             ev = random.choice(critical_events)
             ban_until = int(time.time()) + (self.ban_dur * 2)
@@ -178,7 +178,7 @@ class BribeView(discord.ui.View):
             from modules.db import invalidate_user_data
             await invalidate_user_data(interaction.guild.id, self.owner_id)
 
-            embed = discord.Embed(title="⛓️ Критичний провал!", description=f"{ev}\n\nВтрачено хабар: **{self.bribe_sum:,}** {self.curr}\nТи під слідством на **{fmt_duration(self.ban_dur * 2)}**.", color=0x992d22)
+            embed = gameplay_result_embed("⛓️ Критичний провал!", f"{ev}\n\nВтрачено хабар: **{self.bribe_sum:,}** {self.curr}\nТи під слідством на **{fmt_duration(self.ban_dur * 2)}**.", tone="danger")
         else: 
             ev = random.choice(special_events)
             half = self.bribe_sum // 2
@@ -196,7 +196,7 @@ class BribeView(discord.ui.View):
             from modules.db import invalidate_user_data
             await invalidate_user_data(interaction.guild.id, self.owner_id)
 
-            embed = discord.Embed(title="🤝 Питання успішно вирішено", description=f"{ev}\n\nВитрачено: **{half:,}** {self.curr}", color=COLOR_WIN)
+            embed = gameplay_result_embed("🤝 Питання успішно вирішено", f"{ev}\n\nВитрачено: **{half:,}** {self.curr}", tone="success")
             
         for child in self.children: child.disabled = True
         try:
@@ -251,12 +251,8 @@ class CrimeCommand(commands.Cog):
             
             potential_reward = int(random.randint(int(work_max * 3), int(work_max * 6)))
 
-            embed = discord.Embed(
-                title=f"🚨 {mission['title']}",
-                description=mission['desc'],
-                color=0x1a1a2e
-            )
-            embed.set_footer(text="Починаємо операцію... готуйся!")
+            embed = surface_embed("gameplay", f"🚨 {mission['title']}", mission['desc'], tone="warning")
+            set_surface_footer(embed, "gameplay", "Починаємо операцію. Далі буде інтерактивне випробування.")
 
             async def on_minigame_complete(i: discord.Interaction, outcome: str, res_embed: discord.Embed, game_view):
                 

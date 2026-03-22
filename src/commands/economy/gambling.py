@@ -12,6 +12,8 @@ from modules.db import get_database
 from repositories.user import get_user
 from commands.administration.economy_setup import DEFAULT_ECO, get_eco
 from commands.economy.quests import quest_hook
+from utils.eco_helpers import make_log
+from utils.ui_contract import gameplay_result_embed, set_surface_footer, surface_embed
 
 db = get_database()
 
@@ -31,6 +33,16 @@ COLOR_WIN  = 0x57f287
 COLOR_LOSE = 0xed4245
 COLOR_BASE = 0x1a1a2e
 COLOR_DRAW = 0xffa500
+
+
+def _gameplay_tone_from_color(color: int) -> str:
+    if color == COLOR_WIN:
+        return "success"
+    if color == COLOR_LOSE:
+        return "danger"
+    if color == COLOR_DRAW:
+        return "warning"
+    return "base"
 
 async def check_economy(interaction: discord.Interaction) -> dict | None:
     from modules.db import get_guild_settings
@@ -133,7 +145,7 @@ async def finalize(guild_id: int, user_id: int, delta: int, desc: str, eco: dict
         inc["gambling_earned_today"] = delta
     upd = {
         "$inc": inc,
-        "$push": {"eco_history": {"$each": [add_history(delta, desc)], "$slice": -50}}
+        "$push": {"eco_history": {"$each": [make_log(delta, desc)], "$slice": -50}}
     }
     if delta > 0:
         upd["$set"] = {"gambling_cap_date": today}
@@ -249,7 +261,7 @@ class BlackjackView(discord.ui.View):
         p_tot = hand_total(self.p_cards)
         d_tot = hand_total(self.d_cards)
 
-        embed = discord.Embed(title="🃏 Blackjack", color=COLOR_BASE)
+        embed = surface_embed("gameplay", "🃏 Blackjack")
 
         if self.split_mode:
             marker_a = "▶ " if self.current_hand == "a" else ""
@@ -280,14 +292,14 @@ class BlackjackView(discord.ui.View):
                 value=f"`{self.d_cards[0][0]}{self.d_cards[0][1]}`  `🂠`",
                 inline=False
             )
-        embed.set_footer(text=f"Ставка: {self.bet:,} {self.eco['currency_name']}")
+        set_surface_footer(embed, "gameplay", f"Ставка: {self.bet:,} {self.eco['currency_name']}")
         return embed
 
     async def _end(self, interaction: discord.Interaction, payout: int, msg: str, color: int):
         for child in self.children:
             child.disabled = True
         curr  = self.eco.get("currency_emoji", E_COIN)
-        embed = discord.Embed(title="🃏 Blackjack — Результат", color=color)
+        embed = surface_embed("gameplay", "🃏 Blackjack — Результат", tone=_gameplay_tone_from_color(color))
         embed.add_field(name=f"Твоя рука ({hand_total(self.p_cards)})", value=fmt_hand(self.p_cards), inline=False)
         embed.add_field(name=f"Дилер ({hand_total(self.d_cards)})",     value=fmt_hand(self.d_cards),  inline=False)
         
@@ -349,7 +361,7 @@ class BlackjackView(discord.ui.View):
                 child.disabled = True
             curr = self.eco.get("currency_emoji", E_COIN)
             net_profit = total_delta - (self.bet * 2) 
-            embed = discord.Embed(title="🃏 Blackjack — Результат (Split)", color=COLOR_WIN if net_profit > 0 else COLOR_LOSE if net_profit < 0 else COLOR_DRAW)
+            embed = surface_embed("gameplay", "🃏 Blackjack — Результат (Split)", tone="success" if net_profit > 0 else "danger" if net_profit < 0 else "warning")
             embed.add_field(name=f"Рука A ({p_tot})", value=fmt_hand(self.p_cards), inline=True)
             embed.add_field(name=f"Рука B ({b_tot})", value=fmt_hand(self.split_hand_b), inline=True)
             embed.add_field(name=f"Дилер ({d_tot})", value=fmt_hand(self.d_cards), inline=False)
@@ -510,9 +522,9 @@ class RouletteView(discord.ui.View):
         def _spin_frame(step: int) -> discord.Embed:
             nums = [random.randint(0, 36) for _ in range(5)]
             slots = " | ".join(f"**{n}**" for n in nums)
-            e = discord.Embed(title="🎡 Рулетка крутиться...", color=COLOR_BASE)
+            e = surface_embed("gameplay", "🎡 Рулетка крутиться...")
             e.add_field(name=f"{'🔄' * step} Кулька летить...", value=f"[ {slots} ]", inline=False)
-            e.set_footer(text=f"Ставка: {self.bet:,} {self.eco['currency_name']}")
+            set_surface_footer(e, "gameplay", f"Ставка: {self.bet:,} {self.eco['currency_name']}")
             return e
 
         for step in range(1, 4):
@@ -523,10 +535,7 @@ class RouletteView(discord.ui.View):
         await finalize(self.guild_id, self.owner_id, payout, f"Roulette {'WIN' if won else 'LOSE'}", self.eco)
 
         result_color = "🔴" if result_num in RED_NUMS else ("⚫ Zero" if result_num == 0 else "⚫")
-        embed = discord.Embed(
-            title="🎡 Рулетка зупинилась!",
-            color=COLOR_WIN if won else COLOR_LOSE
-        )
+        embed = surface_embed("gameplay", "🎡 Рулетка зупинилась!", tone="success" if won else "danger")
         embed.add_field(name="Випало", value=f"**{result_num}** {result_color}", inline=True)
         embed.add_field(name="Ставка", value=f"`{bet_type}`  ×{mult}", inline=True)
         embed.add_field(
@@ -621,7 +630,7 @@ class HighLowView(discord.ui.View):
 
         await finalize(self.guild_id, self.owner_id, delta, f"HighLow {'WIN' if won else ('DRAW' if won is None else 'LOSE')}", self.eco)
 
-        embed = discord.Embed(title="📊 High or Low — Результат", description=result, color=color)
+        embed = gameplay_result_embed("📊 High or Low — Результат", result, tone=_gameplay_tone_from_color(color))
         await interaction.response.edit_message(embed=embed, view=self)
 
     @discord.ui.button(label="📈 Вище",  style=discord.ButtonStyle.success)
@@ -656,9 +665,9 @@ class GamblingCog(commands.Cog):
         reels = random.choices(SLOT_SYMBOLS, weights=SLOT_WEIGHTS, k=3)
         combo = tuple(reels)
 
-        spin_embed = discord.Embed(title=f"{E_SLOTS}  Slot Machine", color=COLOR_BASE)
+        spin_embed = surface_embed("gameplay", f"{E_SLOTS} Slot Machine", "Барабани вже крутяться.")
         spin_embed.add_field(name="Барабани", value="**[ ❓ | ❓ | ❓ ]**", inline=False)
-        spin_embed.set_footer(text=f"Ставка: {ставка:,} {eco['currency_name']}")
+        set_surface_footer(spin_embed, "gameplay", f"Ставка: {ставка:,} {eco['currency_name']}")
         await interaction.response.send_message(embed=spin_embed, ephemeral=True)
         msg = await interaction.original_response()
 
@@ -686,10 +695,10 @@ class GamblingCog(commands.Cog):
 
         user_data_new = await get_user(db, interaction.guild.id, interaction.user.id)
         new_wallet = user_data_new.get("wallet", 0)
-        final_embed = discord.Embed(title=f"{E_SLOTS}  Slot Machine", color=color)
+        final_embed = surface_embed("gameplay", f"{E_SLOTS} Slot Machine", tone=_gameplay_tone_from_color(color))
         final_embed.add_field(name="Барабани", value=f"**[ {reels[0]} | {reels[1]} | {reels[2]} ]**", inline=False)
         final_embed.add_field(name="Результат", value=result, inline=False)
-        final_embed.set_footer(text=f"Гаманець: {new_wallet:,} {eco['currency_name']}")
+        set_surface_footer(final_embed, "gameplay", f"Гаманець: {new_wallet:,} {eco['currency_name']}")
         await msg.edit(embed=final_embed)
 
     # ── /coinflip ─────────────────────────────────────────────────────────────
@@ -716,7 +725,7 @@ class GamblingCog(commands.Cog):
         delta = ставка * 2 if won else 0
         await finalize(interaction.guild.id, interaction.user.id, delta, f"Coinflip {'WIN' if won else 'LOSE'}", eco)
 
-        embed = discord.Embed(title="🪙 Монетка у повітрі...", color=COLOR_WIN if won else COLOR_LOSE)
+        embed = surface_embed("gameplay", "🪙 Монетка у повітрі...", tone="success" if won else "danger")
         embed.add_field(name="Випало",     value=result_name, inline=True)
         embed.add_field(name="Твій вибір", value=chosen_name, inline=True)
         embed.add_field(
@@ -724,6 +733,7 @@ class GamblingCog(commands.Cog):
             value=f"{'<:cutiecheckmark:1479120440734650389> **Виграш!** +' if won else '<:cutiex:1480246146076119132> **Програш.** -'}**{ставка:,}** {curr}",
             inline=False
         )
+        set_surface_footer(embed, "gameplay", f"Ставка: {ставка:,} {eco['currency_name']}")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     # ── /highlow ──────────────────────────────────────────────────────────────
@@ -740,15 +750,12 @@ class GamblingCog(commands.Cog):
         curr = eco.get("currency_emoji", E_COIN)
         first = random.randint(1, 100)
 
-        embed = discord.Embed(
-            title="📊 High or Low",
-            description=(
-                f"Поточне число: **{first}**\n\n"
-                f"Наступне число буде *вище* чи *нижче*?"
-            ),
-            color=COLOR_BASE
+        embed = surface_embed(
+            "gameplay",
+            "📊 High or Low",
+            f"Поточне число: **{first}**\n\nНаступне число буде *вище* чи *нижче*?",
         )
-        embed.set_footer(text=f"Ставка: {ставка:,} {eco['currency_name']}")
+        set_surface_footer(embed, "gameplay", f"Ставка: {ставка:,} {eco['currency_name']}")
 
         view = HighLowView(interaction.user.id, ставка, first, eco, interaction.guild.id, user_data)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
@@ -777,11 +784,7 @@ class GamblingCog(commands.Cog):
                     {"guild_id": interaction.guild.id, "user_id": interaction.user.id},
                     {"$inc": {"wallet": ставка}}
                 )
-                embed = discord.Embed(
-                    title="🃏 Blackjack — Нічия!",
-                    description=f"Обидва мають Blackjack. Ставку **{ставка:,}** {curr} повернено.",
-                    color=COLOR_DRAW
-                )
+                embed = gameplay_result_embed("🃏 Blackjack — Нічия!", f"Обидва мають Blackjack. Ставку **{ставка:,}** {curr} повернено.", tone="warning")
                 embed.add_field(name=f"Твоя рука ({hand_total(p_cards)})", value=fmt_hand(p_cards), inline=True)
                 embed.add_field(name=f"Дилер ({hand_total(d_cards)})", value=fmt_hand(d_cards), inline=True)
                 return await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -792,11 +795,7 @@ class GamblingCog(commands.Cog):
                     {"guild_id": interaction.guild.id, "user_id": interaction.user.id},
                     {"$inc": {"wallet": ставка + win_amount, "total_earned": win_amount, "week_earned": win_amount, "month_earned": win_amount}},
                 )
-                embed = discord.Embed(
-                    title="🃏 BLACKJACK! <:firecracker:1479953348185555077>",
-                    description=f"Натуральний Blackjack! Виплата **×1.5** = **+{win_amount:,}** {curr}",
-                    color=COLOR_WIN
-                )
+                embed = gameplay_result_embed("🃏 BLACKJACK! <:firecracker:1479953348185555077>", f"Натуральний Blackjack! Виплата **×1.5** = **+{win_amount:,}** {curr}", tone="success")
                 embed.add_field(name=f"Твоя рука ({hand_total(p_cards)})", value=fmt_hand(p_cards), inline=True)
                 embed.add_field(name=f"Дилер ({hand_total(d_cards)})", value=fmt_hand(d_cards), inline=True)
                 return await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -817,15 +816,12 @@ class GamblingCog(commands.Cog):
 
         user_data = await get_user(db, interaction.guild.id, interaction.user.id)
         curr = eco.get("currency_emoji", E_COIN)
-        embed = discord.Embed(
-            title="🎡 Рулетка",
-            description=(
-                f"Ставка: **{ставка:,}** {curr}\n\n"
-                "Обери тип ставки кнопками нижче:"
-            ),
-            color=COLOR_BASE
+        embed = surface_embed(
+            "gameplay",
+            "🎡 Рулетка",
+            f"Ставка: **{ставка:,}** {curr}\n\nОбери тип ставки кнопками нижче:",
         )
-        embed.set_footer(text="🔴/⚫ ×2  •  Odd/Even ×2  •  1-18/19-36 ×2  •  Дюжини ×3  •  Число ×35")
+        set_surface_footer(embed, "gameplay", "🔴/⚫ ×2  •  Odd/Even ×2  •  1-18/19-36 ×2  •  Дюжини ×3  •  Число ×35")
         view = RouletteView(interaction.user.id, ставка, eco, interaction.guild.id, user_data)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 

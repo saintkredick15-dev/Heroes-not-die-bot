@@ -58,6 +58,9 @@ _DEFAULTS = {
     "automod_rules": [],
 }
 
+RULE_TARGETS = {"message", "profile", "both"}
+RULE_MATCHERS = {"contains", "exact"}
+
 
 def _extract_settings(gd: dict) -> dict:
     """Витягує всі automod налаштування з документа БД."""
@@ -97,6 +100,76 @@ async def reload_guild_automod_cache(guild_id: int):
 
 def get_automod_config(guild_id: int) -> dict:
     return _RULES_CACHE.get(guild_id, {})
+
+
+def rule_targets(rule: dict) -> str:
+    target = str(rule.get("target", "both")).lower().strip()
+    return target if target in RULE_TARGETS else "both"
+
+
+def rule_matcher(rule: dict) -> str:
+    matcher = str(rule.get("match", "contains")).lower().strip()
+    return matcher if matcher in RULE_MATCHERS else "contains"
+
+
+def rule_scope_allows(
+    rule: dict,
+    *,
+    channel_id: int | None = None,
+    role_ids: set[int] | None = None,
+) -> bool:
+    role_ids = role_ids or set()
+    only_channels = set(rule.get("only_channels", []) or [])
+    ignore_channels = set(rule.get("ignore_channels", []) or [])
+    only_roles = set(rule.get("only_roles", []) or [])
+    ignore_roles = set(rule.get("ignore_roles", []) or [])
+
+    if channel_id is not None:
+        if only_channels and channel_id not in only_channels:
+            return False
+        if channel_id in ignore_channels:
+            return False
+
+    if only_roles and not role_ids.intersection(only_roles):
+        return False
+    if ignore_roles and role_ids.intersection(ignore_roles):
+        return False
+    return True
+
+
+def match_custom_rule(rule: dict, text: str) -> bool:
+    trigger = str(rule.get("trigger", "")).strip()
+    if not trigger:
+        return False
+
+    matcher = rule_matcher(rule)
+    normalized_text = normalize_string(text)
+    normalized_rule = normalize_string(trigger)
+    if not normalized_rule:
+        return False
+
+    if matcher == "exact":
+        return normalized_text == normalized_rule
+    return normalized_rule in normalized_text
+
+
+def find_matching_rule(
+    rules: list[dict],
+    text: str,
+    *,
+    target: str,
+    channel_id: int | None = None,
+    role_ids: set[int] | None = None,
+) -> dict | None:
+    for rule in rules:
+        rule_target = rule_targets(rule)
+        if rule_target not in {target, "both"}:
+            continue
+        if not rule_scope_allows(rule, channel_id=channel_id, role_ids=role_ids):
+            continue
+        if match_custom_rule(rule, text):
+            return rule
+    return None
 
 
 def check_member_tags(guild_id: int, member: discord.Member) -> dict | None:

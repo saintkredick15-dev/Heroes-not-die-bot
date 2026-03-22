@@ -19,6 +19,7 @@ from repositories.user import get_user
 from commands.administration.economy_setup import get_eco
 from commands.economy.quests import quest_hook
 from utils.eco_helpers import make_log
+from utils.ui_contract import gameplay_result_embed, set_surface_footer, surface_embed
 
 db = get_database()
 
@@ -89,10 +90,7 @@ class MoveView(discord.ui.View):
         self.rs.record(i.user.id, emoji)
         self._resp = i
         await i.response.edit_message(
-            embed=discord.Embed(
-                description=f"Ти обрав **{emoji}**\nЧекаємо на суперника...",
-                color=COLOR_BASE
-            ),
+            embed=gameplay_result_embed("Хід зафіксовано", f"Ти обрав **{emoji}**\nЧекаємо на суперника...", tone="warning"),
             view=self
         )
 
@@ -110,9 +108,10 @@ class MoveView(discord.ui.View):
             res = "Ти програв цей раунд."
         try:
             await self._resp.edit_original_response(
-                embed=discord.Embed(
-                    description=f"{my_emoji} vs {opp_emoji}\n**{res}**",
-                    color=COLOR_BASE
+                embed=gameplay_result_embed(
+                    "Результат раунду",
+                    f"{my_emoji} vs {opp_emoji}\n**{res}**",
+                    tone="success" if winner_id == self.player_id else "warning" if winner_id is None else "danger",
                 ),
                 view=None
             )
@@ -149,7 +148,7 @@ class RoundButton(discord.ui.View):
         mv = MoveView(i.user.id, self.rs)
         self.clicked[i.user.id] = mv
         await i.response.send_message(
-            embed=discord.Embed(description="Обери хід нижче. Видно тільки тобі.", color=COLOR_BASE),
+            embed=surface_embed("gameplay", "Твій хід", "Обери хід нижче. Це видно тільки тобі."),
             view=mv,
             ephemeral=True
         )
@@ -192,14 +191,10 @@ class DuelGame:
                     result_text = f"Ставки повернуто обом гравцям."
                 else:
                     result_text = f"Ставки згоріли."
-                draw_embed = discord.Embed(
-                    title="Нічия!",
-                    description=(
-                        f"Досягнуто ліміт `{max_rounds}` раундів при рівному рахунку\n"
-                        f"**{self.ch_wins} : {self.tg_wins}**\n\n"
-                        f"{result_text}"
-                    ),
-                    color=COLOR_BASE
+                draw_embed = gameplay_result_embed(
+                    "Нічия!",
+                    f"Досягнуто ліміт `{max_rounds}` раундів при рівному рахунку\n**{self.ch_wins} : {self.tg_wins}**\n\n{result_text}",
+                    tone="warning",
                 )
                 await msg.edit(embed=draw_embed, view=None)
                 return
@@ -211,14 +206,10 @@ class DuelGame:
                 for secs_left in range(timer, 0, -1):
                     if rs.both_chose():
                         break
-                    embed = discord.Embed(
-                        title=f"Раунд {n}",
-                        description=(
-                            f"{self._score()}\n\n"
-                            f"Тисніть **Зробити хід** та оберіть КНП\n"
-                            f"⏱ Залишилось: **{secs_left}с**"
-                        ),
-                        color=COLOR_BASE
+                    embed = surface_embed(
+                        "gameplay",
+                        f"Раунд {n}",
+                        f"{self._score()}\n\nТисніть **Зробити хід** та оберіть КНП\n⏱ Залишилось: **{secs_left}с**",
                     )
                     try:
                         await msg.edit(embed=embed, view=rbv)
@@ -260,19 +251,16 @@ class DuelGame:
                 round_line = "Нічия в раунді — не рахується"
 
             # ─ Результат раунду ─
-            res_embed = discord.Embed(
-                title=f"Раунд {n} завершено",
-                description=(
-                    f"{self.ch.display_name}: {ch_e}  **vs**  {tg_e} :{self.tg.display_name}\n"
-                    f"↳ {round_line}\n\n"
-                    f"{self._score()}"
-                ),
-                color=COLOR_BASE
+            res_embed = surface_embed(
+                "gameplay",
+                f"Раунд {n} завершено",
+                f"{self.ch.display_name}: {ch_e}  **vs**  {tg_e} :{self.tg.display_name}\n↳ {round_line}\n\n{self._score()}",
+                tone="success" if winner_id is not None else "warning",
             )
 
             next_needed = self.ch_wins < 3 and self.tg_wins < 3
             if next_needed:
-                res_embed.set_footer(text="Наступний раунд через 3с...")
+                set_surface_footer(res_embed, "gameplay", "Наступний раунд через 3с...")
 
             await msg.edit(embed=res_embed, view=None)
 
@@ -298,14 +286,10 @@ class DuelGame:
         await quest_hook(self.guild_id, winner.id, "duel")
         await quest_hook(self.guild_id, loser.id, "duel")
 
-        final = discord.Embed(
-            title="Переможець!",
-            description=(
-                f"<:trophy:1475953207782932602> {winner.mention}\n\n"
-                f"**{self.ch_wins} : {self.tg_wins}**\n"
-                f"Приз: **{prize:,}** {curr}"
-            ),
-            color=COLOR_BASE
+        final = gameplay_result_embed(
+            "Переможець!",
+            f"<:trophy:1475953207782932602> {winner.mention}\n\n**{self.ch_wins} : {self.tg_wins}**\nПриз: **{prize:,}** {curr}",
+            tone="success",
         )
         await msg.edit(embed=final, view=None)
 
@@ -339,13 +323,13 @@ class ChallengeView(discord.ui.View):
 
         if ch_data.get("wallet", 0) < self.bet:
             await i.response.edit_message(
-                embed=discord.Embed(description=f"{E_CROSS} {self.challenger.mention} вже не має достатньо монет.", color=COLOR_BASE),
+                embed=gameplay_result_embed("Дуель недоступна", f"{E_CROSS} {self.challenger.mention} вже не має достатньо монет.", tone="danger"),
                 view=None
             )
             return
         if tg_data.get("wallet", 0) < self.bet:
             await i.response.edit_message(
-                embed=discord.Embed(description=f"{E_CROSS} Тобі бракує **{self.bet:,}** {curr}.", color=COLOR_BASE),
+                embed=gameplay_result_embed("Дуель недоступна", f"{E_CROSS} Тобі бракує **{self.bet:,}** {curr}.", tone="danger"),
                 view=None
             )
             return
@@ -353,14 +337,12 @@ class ChallengeView(discord.ui.View):
         await db.users.update_one({"guild_id": self.guild_id, "user_id": self.challenger.id}, {"$inc": {"wallet": -self.bet}})
         await db.users.update_one({"guild_id": self.guild_id, "user_id": self.target.id},     {"$inc": {"wallet": -self.bet}})
 
-        start = discord.Embed(
-            title="Камінь Ножиці Папір",
-            description=(
-                f"{self.challenger.mention} **vs** {self.target.mention}\n"
-                f"Ставка: **{self.bet:,}** {curr} кожен  •  До **3 перемог**"
-            ),
-            color=COLOR_BASE
+        start = surface_embed(
+            "gameplay",
+            "Камінь Ножиці Папір",
+            f"{self.challenger.mention} **vs** {self.target.mention}\nСтавка: **{self.bet:,}** {curr} кожен  •  До **3 перемог**",
         )
+        set_surface_footer(start, "gameplay", "Раундовий матч. Обидва гравці роблять прихований вибір.")
         await i.response.edit_message(embed=start, view=None)
         msg = await i.original_response()
 
@@ -373,7 +355,7 @@ class ChallengeView(discord.ui.View):
         self.resolved = True
         for c in self.children: c.disabled = True
         await i.response.edit_message(
-            embed=discord.Embed(description=f"**{self.target.display_name}** відхилив виклик.", color=COLOR_BASE),
+            embed=gameplay_result_embed("Виклик відхилено", f"**{self.target.display_name}** відхилив виклик.", tone="warning"),
             view=None
         )
 
@@ -415,17 +397,19 @@ class DuelCommand(commands.Cog):
             )
             return
 
-        embed = discord.Embed(
-            title="Виклик на дуель",
-            description=(
+        embed = surface_embed(
+            "gameplay",
+            "Виклик на дуель",
+            (
                 f"{interaction.user.mention} викликає {суперник.mention}\n\n"
                 f"Гра: **Камінь Ножиці Папір** · до 3 перемог\n"
                 f"Ставка: **{ставка:,}** {curr} кожен\n"
                 f"Приз: **{ставка * 2:,}** {curr}\n\n"
                 f"*{суперник.mention}, у тебе 60 секунд.*"
             ),
-            color=COLOR_BASE
+            tone="warning",
         )
+        set_surface_footer(embed, "gameplay", "Прийняття запускає раундовий матч із прихованими ходами.")
         view = ChallengeView(interaction.user, суперник, ставка, eco, interaction.guild.id)
         await interaction.response.send_message(embed=embed, view=view)
 

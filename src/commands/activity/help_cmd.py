@@ -7,6 +7,7 @@ from __future__ import annotations
 import discord
 from discord import app_commands
 from discord.ext import commands
+from utils.ui_contract import add_section, set_surface_footer, surface_embed
 
 E_HAMMER  = "<:hammer:1477376411642761479>"
 E_SETTING = "<:settings:1476196821444591768>"
@@ -16,7 +17,6 @@ E_BUG     = "<:reasonqiestion:1476209697919860777>"
 E_CHAT    = "<:chat:1475953787687403716>"
 E_COIN    = "<:coin:1478487028105482485>"
 
-EMBED_COLOR = 0x1a1a2e
 SUPPORT_URL = "https://discord.gg/FJPkRjf5mA"
 
 BOT_INVITE  = "https://discord.com/oauth2/authorize?client_id=1396865832792887386&permissions=8&integration_type=0&scope=bot+applications.commands"
@@ -87,7 +87,7 @@ MODULES = {
             ("`/slots` `/blackjack` `/coinflip`", "Казино та гемблінг."),
             ("`/roulette` `/highlow` `/duel @user`", "Більше ігор та дуелі."),
             ("`/quests`", "Щоденні та тижневі квести."),
-            ("`/eco_top`", "Рейтинг економіки сервера."),
+            ("`/economy_leaderboard`", "Рейтинг економіки сервера."),
             ("`/faq`", "Детальний гайд по всіх механіках."),
         ],
     },
@@ -119,41 +119,46 @@ FEEDBACK = {
 }
 
 def _main_embed(user: discord.User, bot: discord.User) -> discord.Embed:
-    embed = discord.Embed(
+    embed = surface_embed(
+        "navigation",
         title="Меню допомоги",
         description=(
             f"{user.mention}, раді бачити вас у меню допомоги бота **Vangard**.\n\n"
-            "Я — технологічний помічник для вашого сервера.\n"
-            "**Оберіть** модуль знизу, або зверніться до підтримки.\n\n"
-            "*Для деяких модулів потрібні права адміністратора.*"
+            "Оберіть модуль або тип запиту нижче. Адмінські інструменти винесені окремо,"
+            " тому тут важливо швидко знайти потрібний напрям, а не читати стіну тексту."
         ),
-        color=EMBED_COLOR,
     )
     embed.set_thumbnail(url=bot.display_avatar.url)
-    embed.set_footer(text="Розробник: Kredick15")
+    add_section(embed, "Швидкий старт", [
+        "Модулі нижче показують, де шукати конкретну команду.",
+        "Зворотний зв'язок веде до баг-репорту або підтримки.",
+        "Для частини команд потрібні права адміністратора.",
+    ])
+    set_surface_footer(embed, "navigation", "Оберіть модуль, а не команду навмання.")
     return embed
 
 def _module_embed(key: str, bot: discord.User) -> discord.Embed:
     mod = MODULES[key]
     lines = [f"{cmd} — {desc}" for cmd, desc in mod["commands"]]
-    embed = discord.Embed(
+    embed = surface_embed(
+        "navigation",
         title=f"{mod['emoji']} {mod['label']}",
-        description=mod["desc"] + "\n\n" + "\n".join(lines),
-        color=EMBED_COLOR,
+        description=mod["desc"],
     )
     embed.set_thumbnail(url=bot.display_avatar.url)
-    embed.set_footer(text="Розробник: Kredick15")
+    add_section(embed, "Команди модуля", lines)
+    set_surface_footer(embed, "navigation", "Поверніться до списку модулів через селект вище.")
     return embed
 
 def _feedback_embed(key: str, bot: discord.User, user: discord.User) -> discord.Embed:
     fb = FEEDBACK[key]
-    embed = discord.Embed(
+    embed = surface_embed(
+        "navigation",
         title=f"{fb['emoji']} {fb['label']}",
         description=f"{user.mention}, {fb['text']}",
-        color=EMBED_COLOR,
     )
     embed.set_thumbnail(url=bot.display_avatar.url)
-    embed.set_footer(text="Розробник: Kredick15")
+    set_surface_footer(embed, "navigation", "Якщо це баг, додайте кроки відтворення та очікуваний результат.")
     return embed
 
 # ── View ──────────────────────────────────────────────────────────────────────

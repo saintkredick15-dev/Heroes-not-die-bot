@@ -9,6 +9,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from modules.db import get_database
+from utils.ui_contract import add_section, compact_kv, set_surface_footer, surface_embed
 
 db = get_database()
 _col = db.guild_settings
@@ -17,8 +18,6 @@ E_SETTING = "<:settings:1476196821444591768>"
 E_CHECK   = "<:check:1454140864627740834>"
 E_CROSS   = "<:krestik:1476693091355463842>"
 E_NOTIF   = "<:notification:1476256523519787161>"
-EMBED_COLOR = 0x1a1a2e
-
 RESTRICTABLE_COMMANDS = {
     "meme":        "Випадковий мем з Reddit",
     "avatar":      "Аватар користувача",
@@ -33,18 +32,15 @@ async def _set(guild_id: int, data: dict):
     await _col.update_one({"_id": guild_id}, {"$set": data}, upsert=True)
 
 def _build_main_embed(settings: dict) -> discord.Embed:
-    embed = discord.Embed(
+    embed = surface_embed(
+        "admin",
         title=f"{E_SETTING} Налаштування сервера",
-        color=EMBED_COLOR,
+        description="Це вузький server-level центр: level-up канал і обмеження окремих команд по каналах.",
     )
 
     lu_ch = settings.get("levelup_channel_id")
     lu_status = f"<#{lu_ch}>" if lu_ch else f"{E_CROSS} Вимкнено"
-    embed.add_field(
-        name=f"{E_NOTIF} Level Up сповіщення",
-        value=f"Канал: {lu_status}",
-        inline=False,
-    )
+    add_section(embed, f"{E_NOTIF} Level Up", compact_kv("Канал", lu_status), inline=False)
 
     restrictions = settings.get("command_restrictions", {})
     if restrictions:
@@ -54,12 +50,13 @@ def _build_main_embed(settings: dict) -> discord.Embed:
                 ch_list = ", ".join(f"<#{c}>" for c in ch_ids)
                 lines.append(f"`/{cmd_name}` → {ch_list}")
         if lines:
-            embed.add_field(name="📌 Обмеження команд", value="\n".join(lines), inline=False)
+            add_section(embed, "📌 Обмеження команд", lines, inline=False)
         else:
-            embed.add_field(name="📌 Обмеження команд", value=f"{E_CROSS} Не налаштовано.", inline=False)
+            add_section(embed, "📌 Обмеження команд", f"{E_CROSS} Не налаштовано.", inline=False)
     else:
-        embed.add_field(name="📌 Обмеження команд", value=f"{E_CROSS} Не налаштовано.", inline=False)
+        add_section(embed, "📌 Обмеження команд", f"{E_CROSS} Не налаштовано.", inline=False)
 
+    set_surface_footer(embed, "admin", "Для economy, automod, logs, welcome і warnings використовуйте /config.")
     return embed
 
 def _build_cmd_embed(cmd_name: str, settings: dict) -> discord.Embed:
@@ -67,19 +64,16 @@ def _build_cmd_embed(cmd_name: str, settings: dict) -> discord.Embed:
     restrictions = settings.get("command_restrictions", {})
     channels = restrictions.get(cmd_name, [])
 
-    embed = discord.Embed(
+    embed = surface_embed(
+        "admin",
         title=f"{E_SETTING} Обмеження: /{cmd_name}",
         description=f"{desc}\n\nОберіть канали де команда **дозволена**.\n*Пусто = доступна скрізь.*",
-        color=EMBED_COLOR,
     )
     if channels:
-        embed.add_field(
-            name=f"{E_CHECK} Дозволені канали",
-            value=", ".join(f"<#{c}>" for c in channels),
-            inline=False,
-        )
+        add_section(embed, f"{E_CHECK} Дозволені канали", ", ".join(f"<#{c}>" for c in channels), inline=False)
     else:
-        embed.add_field(name="Статус", value="Доступна в усіх каналах.", inline=False)
+        add_section(embed, "Статус", "Доступна в усіх каналах.", inline=False)
+    set_surface_footer(embed, "admin", "Тут задаються лише дозволені канали для конкретної команди.")
     return embed
 
 # ── Views ─────────────────────────────────────────────────────────────────────
@@ -191,7 +185,7 @@ class SettingsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="settings", description="Загальні налаштування сервера")
+    @app_commands.command(name="settings", description="Загальні налаштування сервера. Інші модулі винесені в /config")
     @app_commands.default_permissions(administrator=True)
     async def settings_cmd(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)

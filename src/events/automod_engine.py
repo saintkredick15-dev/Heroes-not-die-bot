@@ -9,7 +9,7 @@ import discord
 from discord.ext import commands
 from collections import defaultdict, deque
 import time
-from services.automod import get_automod_config, normalize_string
+from services.automod import find_matching_rule, get_automod_config, normalize_string
 from services.moderation import apply_case
 
 # ── In-memory tracking ────────────────────────────────────────────────────────
@@ -87,6 +87,36 @@ class AutomodEngine(commands.Cog):
 
     def _set_cooldown(self, user_id: int):
         _COOLDOWN[user_id] = time.time()
+
+    async def _send_rule_response(self, message: discord.Message, rule: dict):
+        response_text = str(rule.get("response_text", "")).strip()
+        if not response_text:
+            return
+        try:
+            await message.channel.send(
+                response_text.replace("{user}", message.author.mention),
+                allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+                delete_after=10,
+            )
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+
+    async def _send_rule_log(self, message: discord.Message, rule: dict, reason: str):
+        channel_id = rule.get("log_channel_id")
+        if not isinstance(channel_id, int) or channel_id <= 0:
+            return
+        channel = message.guild.get_channel(channel_id)
+        if channel is None:
+            return
+        embed = discord.Embed(title="Automod Rule Triggered", color=0xED4245)
+        embed.add_field(name="User", value=message.author.mention, inline=True)
+        embed.add_field(name="Channel", value=message.channel.mention, inline=True)
+        embed.add_field(name="Reason", value=reason[:1024], inline=False)
+        embed.add_field(name="Content", value=(message.content or "*empty*")[:1024], inline=False)
+        try:
+            await channel.send(embed=embed)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
 
     # ── Checks ────────────────────────────────────────────────────────────────
 
@@ -198,7 +228,7 @@ class AutomodEngine(commands.Cog):
     # ── Punish ────────────────────────────────────────────────────────────────
 
     async def _punish(self, message: discord.Message, reason: str,
-                      action: str = "warn", mute_dur: str = ""):
+                      action: str = "warn", mute_dur: str = "", rule: dict | None = None):
         # Delete the message (завжди, для будь-якої комбінації)
         try:
             await message.delete()
@@ -228,6 +258,10 @@ class AutomodEngine(commands.Cog):
                 reason=f"[Automod] {reason}",
                 duration_hours=duration_hours,
             )
+
+        if rule is not None:
+            await self._send_rule_response(message, rule)
+            await self._send_rule_log(message, rule, reason)
 
     # ── Main listener ────────────────────────────────────────────────────────
 
@@ -315,6 +349,26 @@ class AutomodEngine(commands.Cog):
         # 8. Заборонені слова/фрази
         rules = config.get("automod_rules", [])
         if rules:
+            scoped_rule = find_matching_rule(
+                rules,
+                content,
+                target="message",
+                channel_id=message.channel.id,
+                role_ids={role.id for role in message.author.roles},
+            )
+            if scoped_rule:
+                reason = scoped_rule.get("reason", "Заборонене слово.")
+                r_action = scoped_rule.get("action", "warn")
+                r_mute = scoped_rule.get("mute_dur", "")
+                return await self._punish(
+                    message,
+                    f"Заборонений тег: {scoped_rule['trigger']} ({reason})",
+                    r_action,
+                    r_mute,
+                    rule=scoped_rule,
+                )
+            rules = []
+        if rules:
             normalized_text = normalize_string(content)
             for rule in rules:
                 normalized_rule = normalize_string(rule["trigger"])
@@ -340,6 +394,26 @@ class AutomodEngine(commands.Cog):
             return
 
         rules = config.get("automod_rules", [])
+        if rules:
+            scoped_rule = find_matching_rule(
+                rules,
+                text_to_check,
+                target="profile",
+                role_ids={role.id for role in after.roles},
+            )
+            if scoped_rule:
+                action = scoped_rule.get("action", "warn")
+                reason = f"Заборонений тег в профілі: {scoped_rule['trigger']}"
+                await apply_case(
+                    bot=self.bot,
+                    guild=after.guild,
+                    user=after,
+                    moderator=self.bot.user,
+                    action=action,
+                    reason=f"[Automod] {reason}"
+                )
+                return
+            rules = []
         if not rules:
             return
 

@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 
 from modules.logger import Logger
 from modules.db import get_database
+from utils.ui_contract import add_section, compact_kv, gameplay_result_embed, set_surface_footer, surface_embed
 
 log = Logger("Tickets")
 db = get_database()
@@ -164,6 +165,35 @@ def _build_close_embed(
         f"{E_REASON}  **Reason**\n{reason}"
     )
     return embed
+
+def _build_close_embed(
+    guild: discord.Guild,
+    ticket_id: int,
+    opened_by,
+    closed_by: discord.Member,
+    opened_at,
+    claimed_by,
+    reason: str,
+) -> discord.Embed:
+    opened_at_str = opened_at.strftime("%d %B %Y  %I:%M %p") if opened_at else "Невідомо"
+    embed = surface_embed("admin", "Ticket closed", tone="warning")
+    embed.timestamp = datetime.now(timezone.utc)
+    embed.set_author(name=guild.name)
+    add_section(
+        embed,
+        "Підсумок",
+        [
+            compact_kv("Ticket ID", str(ticket_id)),
+            compact_kv("Opened by", opened_by.mention if opened_by else "Невідомо"),
+            compact_kv("Closed by", closed_by.mention),
+            compact_kv("Open time", opened_at_str),
+            compact_kv("Claimed by", claimed_by.mention if claimed_by else "Not claimed"),
+            compact_kv("Reason", reason),
+        ],
+    )
+    set_surface_footer(embed, "admin", "Лог і DM використовують той самий підсумковий шаблон.")
+    return embed
+
 
 async def _do_close_ticket(interaction: discord.Interaction, ticket_data: dict, reason: str):
     guild   = interaction.guild

@@ -5,6 +5,7 @@ from discord import app_commands
 from discord.ext import commands
 from modules.db import get_database
 from repositories.user import get_level_xp
+from utils.ui_contract import set_surface_footer, surface_embed
 
 db = get_database()
 
@@ -44,7 +45,7 @@ async def fetch_xp_leaderboard(guild: discord.Guild) -> list[tuple[int, dict, di
     return results
 
 async def fetch_xp_week(guild: discord.Guild) -> list[tuple[int, dict, discord.Member]]:
-    cursor = db.users.find({"guild_id": guild.id, "xp_week": {"$gt": 0}}).sort("xp_week", -1).limit(200)
+    cursor = db.users.find({"guild_id": guild.id}).sort("xp_week", -1).limit(200)
     results = []
     rank = 0
     async for doc in cursor:
@@ -56,7 +57,7 @@ async def fetch_xp_week(guild: discord.Guild) -> list[tuple[int, dict, discord.M
     return results
 
 async def fetch_xp_month(guild: discord.Guild) -> list[tuple[int, dict, discord.Member]]:
-    cursor = db.users.find({"guild_id": guild.id, "xp_month": {"$gt": 0}}).sort("xp_month", -1).limit(200)
+    cursor = db.users.find({"guild_id": guild.id}).sort("xp_month", -1).limit(200)
     results = []
     rank = 0
     async for doc in cursor:
@@ -78,53 +79,67 @@ def build_xp_embed(
 ) -> discord.Embed:
     start        = page * PAGE_SIZE
     page_entries = entries[start: start + PAGE_SIZE]
-    embed        = discord.Embed(color=0x1a1a2e)
-    mode_label = {"week": "ТИЖДЕНЬ", "month": "МІСЯЦЬ", "all": "ALL TIME"}.get(mode, "ALL TIME")
-    embed.set_author(name=f"LEADERBOARD  •  XP  •  {mode_label}  •  {page + 1}/{total_pages}", icon_url=guild_icon)
+    embed = surface_embed("gameplay", "", None)
+    mode_label = {"week": "7 DAYS", "month": "30 DAYS", "all": "ALL TIME"}.get(mode, "ALL TIME")
+    embed.set_author(name=f"LEADERBOARD  -  XP  -  {mode_label}  -  {page + 1}/{total_pages}", icon_url=guild_icon)
 
     lines: list[str] = []
     for rank, doc, member in page_entries:
-        level    = doc.get("level", 1)
-        xp       = doc.get("xp", 0)
-        needed   = get_level_xp(level)
-        badge    = RANK_BADGES.get(rank, f"`{rank:>2}.`")
-        name     = member.display_name[:20]
+        level = doc.get("level", 1)
+        xp = doc.get("xp", 0)
+        needed = get_level_xp(level)
+        badge = RANK_BADGES.get(rank, f"`{rank:>2}.`")
+        name = member.display_name[:20]
+        msgs = doc.get("messages", 0)
+        voice_h = round(doc.get("voice_minutes", 0) / 60, 1)
+        reactions = doc.get("reactions", 0)
 
         if mode == "week":
             xp_period = doc.get("xp_week", 0)
-            bar = make_xp_bar(xp_period, max(xp_period, 1))
+            bar = make_xp_bar(xp_period, max(xp_period, needed, 1))
             lines.append(
-                f"{badge} **{name}** — Lv.{level}\n"
-                f"　`{bar}` +{xp_period} XP цього тижня"
+                f"{badge} **{name}** - Lv.{level}\n"
+                f"  `{bar}` +{xp_period} XP this week\n"
+                f"  {EMOJI_CHAT} {msgs}  {EMOJI_MICRO} {voice_h}h  {EMOJI_STAR} {reactions}"
             )
         elif mode == "month":
             xp_period = doc.get("xp_month", 0)
-            bar = make_xp_bar(xp_period, max(xp_period, 1))
+            bar = make_xp_bar(xp_period, max(xp_period, needed, 1))
             lines.append(
-                f"{badge} **{name}** — Lv.{level}\n"
-                f"　`{bar}` +{xp_period} XP цього місяця"
+                f"{badge} **{name}** - Lv.{level}\n"
+                f"  `{bar}` +{xp_period} XP this month\n"
+                f"  {EMOJI_CHAT} {msgs}  {EMOJI_MICRO} {voice_h}h  {EMOJI_STAR} {reactions}"
             )
         else:
-            bar      = make_xp_bar(xp, needed)
-            msgs     = doc.get("messages", 0)
-            voice_h  = round(doc.get("voice_minutes", 0) / 60, 1)
-            reactions = doc.get("reactions", 0)
+            bar = make_xp_bar(xp, needed)
             lines.append(
-                f"{badge} **{name}** — Lv.{level}\n"
-                f"　`{bar}` {xp}/{needed} XP\n"
-                f"　{EMOJI_CHAT} {msgs}  {EMOJI_MICRO} {voice_h}г  {EMOJI_STAR} {reactions}"
+                f"{badge} **{name}** - Lv.{level}\n"
+                f"  `{bar}` {xp}/{needed} XP\n"
+                f"  {EMOJI_CHAT} {msgs}  {EMOJI_MICRO} {voice_h}h  {EMOJI_STAR} {reactions}"
             )
 
-    embed.description = "\n\n".join(lines) if lines else "*Тут поки нікого немає*"
+    embed.description = "\n\n".join(lines) if lines else "*Поки що немає записів у цьому режимі.*"
 
     if author_rank and author_data:
-        a_level  = author_data.get("level", 1)
-        a_xp     = author_data.get("xp", 0)
-        a_needed = get_level_xp(a_level)
-        embed.set_footer(text=f"Ти на #{author_rank} • Lv.{a_level} • {a_xp}/{a_needed} XP")
+        a_level = author_data.get("level", 1)
+        if mode == "week":
+            a_xp = author_data.get("xp_week", 0)
+            footer_text = f"You are #{author_rank} - Lv.{a_level} - +{a_xp} XP this week"
+        elif mode == "month":
+            a_xp = author_data.get("xp_month", 0)
+            footer_text = f"You are #{author_rank} - Lv.{a_level} - +{a_xp} XP this month"
+        else:
+            a_xp = author_data.get("xp", 0)
+            a_needed = get_level_xp(a_level)
+            footer_text = f"Ти #{author_rank} — рівень {a_level} — {a_xp}/{a_needed} XP"
+        if mode == "week":
+            footer_text = f"Ти #{author_rank} — рівень {a_level} — +{a_xp} XP за 7 днів"
+        elif mode == "month":
+            footer_text = f"Ти #{author_rank} — рівень {a_level} — +{a_xp} XP за 30 днів"
+        set_surface_footer(embed, "gameplay", footer_text)
+    else:
+        set_surface_footer(embed, "gameplay", f"Сторінка {page + 1}/{total_pages}")
     return embed
-
-# ── Economy Leaderboard ───────────────────────────────────────────────────────
 
 async def fetch_eco_leaderboard(guild: discord.Guild) -> list[tuple[int, dict, discord.Member]]:
     cursor = db.users.find({"guild_id": guild.id}).limit(300)
@@ -156,41 +171,58 @@ def build_eco_embed(
     page_entries = entries[start: start + PAGE_SIZE]
     curr         = eco_settings.get("currency_emoji", EMOJI_COIN)
     curr_name    = eco_settings.get("currency_name", "Coin")
-    embed        = discord.Embed(color=0x1a1a2e)
-    
-    title_mode = {"week": "7 ДНІВ", "month": "30 ДНІВ", "all": "ALL TIME"}.get(mode, "ALL TIME")
-    embed.set_author(name=f"LEADERBOARD  •  ECONOMY  •  {title_mode}  •  {page + 1}/{total_pages}", icon_url=guild_icon)
+    embed = surface_embed("gameplay", "", None)
+
+    title_mode = {"week": "7 DAYS", "month": "30 DAYS", "all": "ALL TIME"}.get(mode, "ALL TIME")
+    embed.set_author(name=f"LEADERBOARD  -  ECONOMY  -  {title_mode}  -  {page + 1}/{total_pages}", icon_url=guild_icon)
 
     lines: list[str] = []
     for rank, doc, member in page_entries:
         badge = RANK_BADGES.get(rank, f"`{rank:>2}.`")
-        name  = member.display_name[:20]
+        name = member.display_name[:20]
+        wallet = doc.get("wallet", 0)
+        bank = doc.get("bank", 0)
+        total = wallet + bank
 
         if mode == "week":
             earned = doc.get("week_earned", 0)
-            lines.append(f"{badge} **{name}** — Зароблено: `{earned:,}` {curr}")
+            line = f"{badge} **{name}** - `{earned:,}` {curr} in 7d"
+            if wallet > 0 and bank > 0:
+                line += f"\n  {EMOJI_COIN} `{wallet:,}`  {EMOJI_BANK} `{bank:,}`"
+            else:
+                line += f"\n  Total now: `{total:,}` {curr}"
+            lines.append(line)
         elif mode == "month":
             earned = doc.get("month_earned", 0)
-            lines.append(f"{badge} **{name}** — Зароблено: `{earned:,}` {curr}")
+            line = f"{badge} **{name}** - `{earned:,}` {curr} in 30d"
+            if wallet > 0 and bank > 0:
+                line += f"\n  {EMOJI_COIN} `{wallet:,}`  {EMOJI_BANK} `{bank:,}`"
+            else:
+                line += f"\n  Total now: `{total:,}` {curr}"
+            lines.append(line)
         else:
-            wallet = doc.get("wallet", 0)
-            bank   = doc.get("bank", 0)
-            total  = wallet + bank
-            lines.append(
-                f"{badge} **{name}** — `{total:,}` {curr}\n"
-                f"　{EMOJI_COIN} `{wallet:,}`  {EMOJI_BANK} `{bank:,}`"
-            )
+            line = f"{badge} **{name}** - `{total:,}` {curr}"
+            if wallet > 0 and bank > 0:
+                line += f"\n  {EMOJI_COIN} `{wallet:,}`  {EMOJI_BANK} `{bank:,}`"
+            lines.append(line)
 
-    embed.description = "\n\n".join(lines) if lines else "*Тут поки нікого немає*"
+    embed.description = "\n\n".join(lines) if lines else "*Поки що немає економічних записів у цьому режимі.*"
 
     if author_rank and author_data:
         if mode == "week":
             a_val = author_data.get("week_earned", 0)
+            footer_text = f"You are #{author_rank} - {a_val:,} {curr_name} in 7d"
         elif mode == "month":
             a_val = author_data.get("month_earned", 0)
+            footer_text = f"Ти #{author_rank} — {a_val:,} {curr_name} за 30 днів"
         else:
             a_val = author_data.get("wallet", 0) + author_data.get("bank", 0)
-        embed.set_footer(text=f"Ти на #{author_rank} \u2022 {a_val:,} {curr_name}")
+            footer_text = f"Ти #{author_rank} — {a_val:,} {curr_name}"
+        if mode == "week":
+            footer_text = f"Ти #{author_rank} — {a_val:,} {curr_name} за 7 днів"
+        set_surface_footer(embed, "gameplay", footer_text)
+    else:
+        set_surface_footer(embed, "gameplay", f"Сторінка {page + 1}/{total_pages}")
     return embed
 
 def build_history_embed(
@@ -204,7 +236,7 @@ def build_history_embed(
     start = page * PAGE_SIZE
     page_entries = history_entries[start: start + PAGE_SIZE]
     curr = eco_settings.get("currency_emoji", EMOJI_COIN)
-    embed = discord.Embed(color=0x1a1a2e)
+    embed = surface_embed("gameplay", "", None)
     embed.set_author(name=f"LEADERBOARD  •  ECONOMY  •  HISTORY  •  {page + 1}/{total_pages}", icon_url=guild_icon)
 
     lines = []
@@ -223,7 +255,8 @@ def build_history_embed(
             lines.append(f"　{badge} **{name}** — `{earned:,}` {curr}")
         lines.append("")
 
-    embed.description = "\n".join(lines).strip() if lines else "*Історія сезонів порожня*"
+    embed.description = "\n".join(lines).strip() if lines else "*Історія сезонів поки що порожня.*"
+    set_surface_footer(embed, "gameplay", f"Сторінка {page + 1}/{total_pages}")
     return embed
 
 async def fetch_eco_week(guild: discord.Guild):
@@ -234,8 +267,6 @@ async def fetch_eco_week(guild: discord.Guild):
     async for doc in cursor:
         member = guild.get_member(doc.get("user_id", 0))
         if not member or member.bot:
-            continue
-        if doc.get("week_earned", 0) <= 0:
             continue
         rank += 1
         results.append((rank, doc, member))
@@ -249,8 +280,6 @@ async def fetch_eco_month(guild: discord.Guild):
     async for doc in cursor:
         member = guild.get_member(doc.get("user_id", 0))
         if not member or member.bot:
-            continue
-        if doc.get("month_earned", 0) <= 0:
             continue
         rank += 1
         results.append((rank, doc, member))
@@ -470,33 +499,36 @@ class LeaderboardCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="leaderboard", description="Топ користувачів за рівнем XP")
+    async def _send_economy_leaderboard(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        entries = await fetch_eco_leaderboard(interaction.guild)
+        settings = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
+        eco_settings = settings.get("economy", {})
+
+        if not entries:
+            await interaction.followup.send("<:inbox:1479128004847341620> No economy data yet.", ephemeral=True)
+            return
+
+        view = EcoLeaderboardView(entries, interaction.guild, interaction.user.id, eco_settings)
+        msg = await interaction.followup.send(embed=view.build(), view=view, wait=True)
+        view.message = msg
+
+    @app_commands.command(name="leaderboard", description="XP leaderboard for this server")
     async def leaderboard(self, interaction: discord.Interaction):
         await interaction.response.defer()
         entries = await fetch_xp_leaderboard(interaction.guild)
 
         if not entries:
-            await interaction.followup.send("<:inbox:1479128004847341620> На сервері ще немає статистики.", ephemeral=True)
+            await interaction.followup.send("<:inbox:1479128004847341620> No XP data yet.", ephemeral=True)
             return
 
         view = XPLeaderboardView(entries, interaction.guild, interaction.user.id)
-        msg  = await interaction.followup.send(embed=view.build(), view=view, wait=True)
+        msg = await interaction.followup.send(embed=view.build(), view=view, wait=True)
         view.message = msg
 
-    @app_commands.command(name="eco_top", description="Топ найбагатших гравців сервера")
-    async def eco_top(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-        entries  = await fetch_eco_leaderboard(interaction.guild)
-        settings = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
-        eco_settings = settings.get("economy", {})
-
-        if not entries:
-            await interaction.followup.send("<:inbox:1479128004847341620> На сервері ще немає даних економіки.", ephemeral=True)
-            return
-
-        view = EcoLeaderboardView(entries, interaction.guild, interaction.user.id, eco_settings)
-        msg  = await interaction.followup.send(embed=view.build(), view=view, wait=True)
-        view.message = msg
+    @app_commands.command(name="economy_leaderboard", description="Economy leaderboard for this server")
+    async def economy_leaderboard(self, interaction: discord.Interaction):
+        await self._send_economy_leaderboard(interaction)
 
 async def setup(bot):
     await bot.add_cog(LeaderboardCommands(bot))

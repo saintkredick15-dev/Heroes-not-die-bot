@@ -3,6 +3,7 @@ import time
 import asyncio
 from modules.db import get_database
 from commands.administration.economy_setup import get_eco
+from repositories.user import get_user
 from utils.eco_helpers import make_log
 
 db = get_database()
@@ -59,25 +60,35 @@ class AuctionView(discord.ui.View):
         if self.highest_bidder == user_id:
             return await interaction.response.send_message(f"{E_CROSS} Ваша ставка вже є найвищою!", ephemeral=True)
             
-        user_bal = await db.balances.find_one({"guild_id": guild_id, "user_id": user_id}) or {}
+        user_bal = await get_user(db, guild_id, user_id)
         bank = user_bal.get("bank", 0)
-        cash = user_bal.get("balance", 0)
+        cash = user_bal.get("wallet", 0)
         
         if bank + cash < bid_amount:
             return await interaction.response.send_message(f"{E_CROSS} У вас недостатньо коштів! (Готівка + Банк: {bank+cash:,})", ephemeral=True)
             
         if self.highest_bidder:
-            await db.balances.update_one(
+            await db.users.update_one(
                 {"guild_id": guild_id, "user_id": self.highest_bidder},
-                {"$inc": {"bank": self.current_bid}} 
+                {"$inc": {"wallet": self.current_bid}}
             )
+            from modules.db import invalidate_user_data
+            await invalidate_user_data(guild_id, self.highest_bidder)
             
         to_deduct = bid_amount
         if bank >= to_deduct:
-            await db.balances.update_one({"guild_id": guild_id, "user_id": user_id}, {"$inc": {"bank": -to_deduct}})
+            await db.users.update_one(
+                {"guild_id": guild_id, "user_id": user_id},
+                {"$inc": {"bank": -to_deduct}},
+            )
         else:
             to_deduct -= bank
-            await db.balances.update_one({"guild_id": guild_id, "user_id": user_id}, {"$set": {"bank": 0}, "$inc": {"balance": -to_deduct}})
+            await db.users.update_one(
+                {"guild_id": guild_id, "user_id": user_id},
+                {"$set": {"bank": 0}, "$inc": {"wallet": -to_deduct}},
+            )
+        from modules.db import invalidate_user_data
+        await invalidate_user_data(guild_id, user_id)
             
         self.current_bid = bid_amount
         self.highest_bidder = user_id

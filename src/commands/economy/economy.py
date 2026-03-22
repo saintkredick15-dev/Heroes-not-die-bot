@@ -9,6 +9,7 @@ from repositories.user import get_user
 from commands.economy.events import ROB_STAGE_1, ROB_STAGE_2, ROB_STAGE_3
 from commands.economy.quests import quest_hook
 from utils.eco_helpers import make_log
+from utils.ui_contract import add_section, compact_kv, gameplay_result_embed, set_surface_footer, surface_embed
 
 db = get_database()
 
@@ -122,6 +123,7 @@ class ValueModal(discord.ui.Modal):
             import time as _time
             tax_pct  = self.eco.get("transfer_tax_percent", 0)
             day_lim  = self.eco.get("transfer_daily_limit", 0)
+            raw_id = self.target_id.value.strip()
 
             if not raw_id.isdigit():
                 return await interaction.response.send_message("<:cutiex:1480246146076119132> ID отримувача має складатися з цифр.", ephemeral=True)
@@ -172,6 +174,7 @@ class ValueModal(discord.ui.Modal):
             from modules.db import invalidate_user_data
             await invalidate_user_data(interaction.guild.id, interaction.user.id)
 
+            await get_user(db, interaction.guild.id, target_user_id)
             await db.users.update_one(
                 {"guild_id": interaction.guild.id, "user_id": target_user_id},
                 {"$inc": {"wallet": received}, "$push": {"eco_history": {
@@ -237,14 +240,14 @@ class HistoryPaginatorView(discord.ui.View):
     def _build_embed(self) -> discord.Embed:
         filtered = self._get_filtered_hist()
         max_page = max(0, (len(filtered) - 1) // self.per_page)
-        embed = discord.Embed(title=f"📜 Історія транзакцій", color=0x1a1a2e)
+        embed = surface_embed("gameplay", "📜 Історія транзакцій")
         if not filtered:
             embed.description = "Історія порожня."
         else:
             start = self.page * self.per_page
             lines = [h["log"] for h in filtered[start:start+self.per_page]]
             embed.description = "\n".join(lines)
-        embed.set_footer(text=f"Сторінка {self.page + 1}/{max_page + 1} | Всього: {len(filtered)}")
+        set_surface_footer(embed, "gameplay", f"Сторінка {self.page + 1}/{max_page + 1} • всього: {len(filtered)}")
         return embed
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -354,7 +357,7 @@ class RobModal(discord.ui.Modal, title="<:crimepass:1479951455543889970> Пог�
                 f"{E_CROSS} У **{target.display_name}** немає грошей.", ephemeral=True
             )
 
-        rob_chance  = eco.get("rob_success_chance", 40)
+        rob_chance  = eco.get("rob_chance", eco.get("rob_success_chance", 40))
         rob_pct_min = eco.get("rob_percent_min", 10)
         rob_pct_max = eco.get("rob_percent_max", 40)
         success     = random.random() * 100 < rob_chance
@@ -390,14 +393,10 @@ class RobModal(discord.ui.Modal, title="<:crimepass:1479951455543889970> Пог�
             await invalidate_user_data(interaction.guild.id, self.owner_id)
 
             await quest_hook(self.guild_id, self.owner_id, "economy.rob")
-            embed = discord.Embed(
-                title=f"{E_ROBBERY} Успішне пограбування!",
-                description=(
-                    f"{stage['success']}\n\n"
-                    f"Жертва: **{target.display_name}**\n"
-                    f"Вкрадено: **{stolen:,}** {curr} ({pct}%)"
-                ),
-                color=0x1a1a2e
+            embed = gameplay_result_embed(
+                f"{E_ROBBERY} Успішне пограбування!",
+                f"{stage['success']}\n\nЖертва: **{target.display_name}**\nВкрадено: **{stolen:,}** {curr} ({pct}%)",
+                tone="success",
             )
         else:
             fine = max(0, int(rob_data.get("wallet", 0) * 0.15))
@@ -420,13 +419,10 @@ class RobModal(discord.ui.Modal, title="<:crimepass:1479951455543889970> Пог�
             from modules.db import invalidate_user_data
             await invalidate_user_data(interaction.guild.id, self.owner_id)
 
-            embed = discord.Embed(
-                title=f"{E_CROSS} Спіймали!",
-                description=(
-                    f"{stage['fail']}\n\n"
-                    f"Штраф: **{fine:,}** {curr}"
-                ),
-                color=0x1a1a2e
+            embed = gameplay_result_embed(
+                f"{E_CROSS} Спіймали!",
+                f"{stage['fail']}\n\nШтраф: **{fine:,}** {curr}",
+                tone="danger",
             )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -515,18 +511,19 @@ def build_economy_embed(user: discord.Member, data: dict, eco: dict) -> discord.
     emoji = eco.get("currency_emoji", "<:coin:1478487028105482485>")
 
 
-    embed = discord.Embed(
-        title=f"Гаманець {user.display_name}",
-        color=0x1a1a2e
-    )
-    
-    embed.add_field(name="<:Wallet:1478483324392706201> Готівка", value=f"**{wallet:,}** {emoji}", inline=True)
-    embed.add_field(name="<:banknote:1478511186860572753> Банк", value=f"**{bank:,} / {bank_limit:,}** {emoji}", inline=True)
-    
     total = wallet + bank
-    embed.add_field(name="<:Coins:1478486725113286899> Загалом", value=f"**{total:,}** {emoji}", inline=False)
-    
+    embed = surface_embed("gameplay", f"Гаманець {user.display_name}", "Огляд готівки, банку і швидких дій по економіці.")
+    add_section(
+        embed,
+        "Баланс",
+        [
+            compact_kv("Готівка", f"**{wallet:,}** {emoji}"),
+            compact_kv("Банк", f"**{bank:,} / {bank_limit:,}** {emoji}"),
+            compact_kv("Загалом", f"**{total:,}** {emoji}"),
+        ],
+    )
     embed.set_thumbnail(url=user.display_avatar.url)
+    set_surface_footer(embed, "gameplay", "Швидкі дії нижче: банк, переказ, пограбування, інвентар, історія.")
     return embed
 
 class EconomyCommand(commands.Cog):

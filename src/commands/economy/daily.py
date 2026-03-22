@@ -15,6 +15,7 @@ from modules.db import get_database
 from repositories.user import get_user
 from commands.economy.quests import quest_hook
 from utils.eco_helpers import apply_inflation
+from utils.ui_contract import gameplay_result_embed, set_surface_footer, surface_embed
 
 db = get_database()
 
@@ -103,10 +104,10 @@ class DailyCommand(commands.Cog):
         if tax > 0:
             earned_text += f"\n*(Податок на багатство {tax_pct_str}: -{tax} {emoji})*"
 
-        embed = discord.Embed(
-            title=f"{calendar} Щоденна нагорода",
-            color=0x1a1a2e,
-            description=f"Ти успішно отримав свою щоденну нагороду!\n\n**Базова нагорода:** {base_amount} {emoji}\n**Бонус ({streak} {flame}):** +{streak_bonus} {emoji}\n\n**Всього зараховано:** {earned_text}"
+        embed = gameplay_result_embed(
+            f"{calendar} Щоденна нагорода",
+            f"Ти успішно отримав свою щоденну нагороду!\n\n**Базова нагорода:** {base_amount} {emoji}\n**Бонус ({streak} {flame}):** +{streak_bonus} {emoji}\n\n**Всього зараховано:** {earned_text}",
+            tone="success",
         )
         if interaction.response.is_done():
             await interaction.followup.send(embed=embed, ephemeral=True)
@@ -150,12 +151,14 @@ class DailyCommand(commands.Cog):
                 image_bytes = data.read()
                 
                 file = discord.File(fp=BytesIO(image_bytes), filename="captcha.png")
-                embed = discord.Embed(
-                    title="🤖 Перевірка",
-                    description="Розвʼяжи капчу щоб отримати щоденну нагороду.\nНатисни **Відповісти** коли будеш готовий.",
-                    color=0x1a1a2e
+                embed = surface_embed(
+                    "gameplay",
+                    "🤖 Перевірка",
+                    "Розвʼяжи капчу щоб отримати щоденну нагороду.\nНатисни **Відповісти** коли будеш готовий.",
+                    tone="warning",
                 )
                 embed.set_image(url="attachment://captcha.png")
+                set_surface_footer(embed, "gameplay", "Captcha потрібна лише для захисту від фарму.")
                 
                 async def daily_callback(inter):
                     await self.execute_daily(inter, eco, user_data, now, last_daily)

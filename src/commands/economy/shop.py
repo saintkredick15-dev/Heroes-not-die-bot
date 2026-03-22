@@ -9,6 +9,7 @@ import random
 from modules.db import get_database
 from repositories.user import get_user
 from commands.administration.economy_setup import get_eco
+from utils.ui_contract import add_section, gameplay_result_embed, set_surface_footer, surface_embed
 
 db = get_database()
 
@@ -76,39 +77,34 @@ def get_item_price(eco: dict, item: dict) -> int:
 def build_shop_embed(eco: dict, guild: discord.Guild) -> discord.Embed:
     curr = eco.get("currency_emoji", E_COIN)
     E_SHOP_ICON = "<:shop:1479222993027727564>"
-    embed = discord.Embed(
+    embed = surface_embed(
+        "gameplay",
         title=f"{E_SHOP_ICON}  Магазин сервера",
-        color=COLOR
+        description="Спочатку подивіться асортимент, потім оберіть предмет кнопкою нижче. Деталі покупки приходять окремим результатом.",
     )
     embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
 
+    system_lines = []
     for i, item in enumerate(SYSTEM_ITEMS, 1):
         price = get_item_price(eco, item)
         if price <= 0:
             continue
-        embed.add_field(
-            name=f"{item['emoji']}  {item['name']}",
-            value=(
-                f"{item['desc']}\n"
-                f"**{price:,}** {curr}"
-            ),
-            inline=True
-        )
+        system_lines.append(f"{item['emoji']} **{item['name']}** — `{price:,}` {curr}\n{item['desc']}")
+    if system_lines:
+        add_section(embed, "Системні предмети", system_lines, inline=False)
 
     shop_roles = eco.get("shop_roles", [])
     if shop_roles:
-        embed.add_field(name="\u200b", value="**🎭 Кастомні Ролі**", inline=False)
+        role_lines = []
         for r in shop_roles:
             role_obj = guild.get_role(r["role_id"])
-            if not role_obj: continue
-            
-            embed.add_field(
-                name=f"🎭 {role_obj.name}",
-                value=f"Купити роль назавжди\n**{r['price']:,}** {curr}",
-                inline=True
-            )
+            if not role_obj:
+                continue
+            role_lines.append(f"🎭 **{role_obj.name}** — `{r['price']:,}` {curr}\nКупити роль назавжди")
+        if role_lines:
+            add_section(embed, "Кастомні ролі", role_lines, inline=False)
 
-    embed.set_footer(text="Обери предмет кнопкою нижче")
+    set_surface_footer(embed, "gameplay", "Оберіть предмет кнопкою нижче.")
     return embed
 
 # ── View з кнопками купівлі ───────────────────────────────────────────────────
@@ -187,10 +183,11 @@ class ShopView(discord.ui.View):
             
             desc = f"{E_CHECK} Ви успішно купили **{item['name']}**.\n*Цей предмет відправлено до вашого Інвентарю (/economy).*"
 
-            embed = discord.Embed(
-                title=f"{E_CHECK}  Успішна покупка",
-                description=f"{desc}\n\nСплачено: **{price:,}** {curr}",
-                color=0x57f287
+            embed = gameplay_result_embed(
+                f"{E_CHECK}  Успішна покупка",
+                f"{desc}\n\nСплачено: **{price:,}** {curr}",
+                tone="success",
+                footer="Предмет уже в інвентарі або готовий до використання.",
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -254,10 +251,11 @@ class ShopView(discord.ui.View):
             from modules.db import invalidate_user_data
             await invalidate_user_data(interaction.guild.id, interaction.user.id)
 
-            embed = discord.Embed(
-                title=f"{E_CHECK}  Успішна покупка",
-                description=f"🎭 Придбано роль {role_obj.mention if role_obj else 'Unknown Role'}\n\nСплачено: **{price:,}** {curr}",
-                color=0x57f287
+            embed = gameplay_result_embed(
+                f"{E_CHECK}  Успішна покупка",
+                f"🎭 Придбано роль {role_obj.mention if role_obj else 'Unknown Role'}\n\nСплачено: **{price:,}** {curr}",
+                tone="success",
+                footer="Роль видана одразу після списання коштів.",
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -271,9 +269,10 @@ async def build_inventory_embed_and_view(user: discord.Member, guild_id: int, ec
     curr      = eco.get("currency_emoji", E_COIN)
     now       = int(time.time())
 
-    embed = discord.Embed(
+    embed = surface_embed(
+        "gameplay",
         title=f"<:inbox:1479128004847341620>  Інвентар — {user.display_name}",
-        color=COLOR
+        description="Тут зібрані активні бонуси, предмети та ролі, які вже були куплені.",
     )
 
     items_found = False
@@ -318,6 +317,7 @@ async def build_inventory_embed_and_view(user: discord.Member, guild_id: int, ec
 
     if not items_found:
         embed.description = "*Тут порожньо. Завітайте до Магазину!*"
+    set_surface_footer(embed, "gameplay", "Активні бафи показуються окремо від предметів у сумці.")
         
     view = InventoryView(user.id, guild_id, eco, available_items, main_eco_view)
     return embed, view
