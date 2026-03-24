@@ -29,9 +29,9 @@ E_CROSS  = "<:close:1485598320935174317>"
 
 COLOR_BASE = 0x1a1a2e
 
-ROCK     = "??"
-PAPER    = "??"
-SCISSORS = "??"
+ROCK     = "🪨"
+PAPER    = "📄"
+SCISSORS = "✂️"
 
 RPS_NAMES  = {ROCK: "Камінь", PAPER: "Папір", SCISSORS: "Ножиці"}
 BEATS      = {ROCK: SCISSORS, SCISSORS: PAPER, PAPER: ROCK}
@@ -118,13 +118,13 @@ class MoveView(discord.ui.View):
         except Exception:
             pass
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("??"), style=discord.ButtonStyle.secondary)
+    @discord.ui.button(emoji=ROCK, style=discord.ButtonStyle.secondary)
     async def rock(self, i, b): await self._pick(i, ROCK)
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("??"), style=discord.ButtonStyle.secondary)
+    @discord.ui.button(emoji=SCISSORS, style=discord.ButtonStyle.secondary)
     async def scissors(self, i, b): await self._pick(i, SCISSORS)
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("??"), style=discord.ButtonStyle.secondary)
+    @discord.ui.button(emoji=PAPER, style=discord.ButtonStyle.secondary)
     async def paper(self, i, b): await self._pick(i, PAPER)
 
 # ── Кнопка "Зробити хід" ─────────────────────────────────────────────────────

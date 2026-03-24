@@ -17,6 +17,7 @@ db = get_database()
 E_HISTORY = "<:history:1485601911599009893>"
 E_ROBBERY = "<:mask:1485625427014713394>"
 E_BACK    = "<:prevtotheleft:1485600254760980501>"
+E_NEXT    = "<:nexttotheright:1485600703052517376>"
 E_INBOX   = "<:inbox:1485599203815325836>"
 E_CHECK   = "<:check:1485597845883981905>"
 E_CROSS   = "<:close:1485598320935174317>"
@@ -269,7 +270,7 @@ class HistoryPaginatorView(discord.ui.View):
         embed = build_economy_embed(interaction.user, user_data, self.main_view.eco)
         await interaction.response.edit_message(embed=embed, view=self.main_view)
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str(E_LEFT), style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(E_BACK), style=discord.ButtonStyle.secondary, row=1)
     async def btn_prev(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.page -= 1
         self._update_buttons()

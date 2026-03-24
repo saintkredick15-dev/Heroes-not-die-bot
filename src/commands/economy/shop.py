@@ -217,7 +217,8 @@ class ShopView(discord.ui.View):
             user_data = await get_user(db, self.guild_id, interaction.user.id)
             wallet    = user_data.get("wallet", 0)
 
-            if inv_roles and role_id in inv_roles or any(r.id == role_id for r in interaction.user.roles):
+            inv_roles = user_data.get("inventory_roles", [])
+            if (role_id in inv_roles) or any(r.id == role_id for r in interaction.user.roles):
                 await interaction.response.send_message(f"{E_CROSS} Ця роль вже є у тебе!", ephemeral=True)
                 return
 
@@ -292,7 +293,7 @@ async def build_inventory_embed_and_view(user: discord.Member, guild_id: int, ec
         embed.add_field(name=f"{E_SHIELD} Щит", value=f"Активний до <t:{shield}:R>", inline=True)
         items_found = True
     
-    xpb = user_data.get("xp_boost_until", 0)
+    xpb = user_data.get("coin_boost_until", 0)
     if xpb and xpb > now:
         embed.add_field(name=f"{E_STAR} XP Буст", value=f"Активний до <t:{xpb}:R>", inline=True)
         items_found = True
@@ -478,7 +479,7 @@ class ItemActionView(discord.ui.View):
             elif self.item_id == "coin_boost":
                 await db.users.update_one(
                     {"guild_id": self.parent_view.guild_id, "user_id": interaction.user.id},
-                    {"$set": {"xp_boost_until": now + 3600}}
+                    {"$set": {"coin_boost_until": now + 3600}}
                 )
                 results.append(f"{E_STAR} Активовано Coin Буст на 1 годину.")
                 
