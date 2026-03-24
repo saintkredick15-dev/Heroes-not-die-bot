@@ -1,6 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+from config.constants import Emojis
 
 class UtilityCog(commands.Cog):
     def __init__(self, bot):
@@ -28,7 +29,7 @@ class UtilityCog(commands.Cog):
             label="Завантажити оригінал",
             url=avatar_url,
             style=discord.ButtonStyle.link,
-            emoji="🖼️"
+            emoji=discord.PartialEmoji.from_str(Emojis.SEARCH.value)
         ))
 
         await interaction.response.send_message(embed=embed, view=view)

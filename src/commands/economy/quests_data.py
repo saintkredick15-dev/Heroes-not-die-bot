@@ -1,4 +1,5 @@
 import random
+from config.constants import Emojis
 
 # ── Daily templates ────────────────────────────────────────────────────────────
 DAILY_TEMPLATES = [
@@ -132,7 +133,7 @@ def generate_dynamic_pool(q_type: str, count: int, eco: dict) -> list[dict]:
         feasible = [(t, 99) for t in templates if t[0] == "gambling"] or [(templates[0], 99)]
 
     pool = []
-    prefixes = ["", "", "🎯 Завдання: ", "🔥 Виклик: ", "⚡ Місія: "]
+    prefixes = ["", "", f"{Emojis.TARGET.value} Завдання: ", f"{Emojis.FLAME.value} Виклик: ", f"{Emojis.LIGHTNING.value} Місія: "]
 
     for i in range(count):
         tpl, max_f = feasible[i % len(feasible)]

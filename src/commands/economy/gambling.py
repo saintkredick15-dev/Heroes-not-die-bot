@@ -50,7 +50,7 @@ async def check_economy(interaction: discord.Interaction) -> dict | None:
     eco = get_eco(settings)
 
     if not eco.get("enabled", True):
-        await interaction.response.send_message("<:cutiex:1480246146076119132> Економіка вимкнена.", ephemeral=True)
+        await interaction.response.send_message("<:close:1485598320935174317> Економіка вимкнена.", ephemeral=True)
         return None
     if not eco.get("gambling_enabled", False):
         await interaction.response.send_message(
@@ -71,7 +71,7 @@ async def check_economy(interaction: discord.Interaction) -> dict | None:
             remaining = cooldown - (now - last_bet)
             from utils.eco_helpers import fmt_duration
             await interaction.response.send_message(
-                f"<:Hourglass:1479950504321745026> Почекай ще **{fmt_duration(remaining)}** між ставками.", ephemeral=True
+                f"<:hourglass:1485598603937579181> Почекай ще **{fmt_duration(remaining)}** між ставками.", ephemeral=True
             )
             return None
 
@@ -209,7 +209,7 @@ BJ_HELP_TEXT = (
     "• **Stand** — зупинитись, дилер добирає\n"
     "• **Double Down** — подвоїти ставку, взяти 1 карту і зупинитись\n"
     "• **Split** — якщо перші 2 карти однакові: розбити на 2 руки\n\n"
-    "**Blackjack** (А + 10/J/Q/K) = виплата **1.5×** ставки <:firecracker:1479953348185555077>\n"
+    "**Blackjack** (А + 10/J/Q/K) = виплата **1.5×** ставки <:celebration_Confetti:1485626240734855441>\n"
     "**Дилер** добирає до 17+."
 )
 
@@ -252,7 +252,7 @@ class BlackjackView(discord.ui.View):
 
     async def interaction_check(self, i: discord.Interaction) -> bool:
         if i.user.id != self.owner_id:
-            await i.response.send_message("<:cutiex:1480246146076119132> Це не твоя гра!", ephemeral=True)
+            await i.response.send_message("<:close:1485598320935174317> Це не твоя гра!", ephemeral=True)
             return False
         return True
 
@@ -365,17 +365,17 @@ class BlackjackView(discord.ui.View):
             embed.add_field(name=f"Рука A ({p_tot})", value=fmt_hand(self.p_cards), inline=True)
             embed.add_field(name=f"Рука B ({b_tot})", value=fmt_hand(self.split_hand_b), inline=True)
             embed.add_field(name=f"Дилер ({d_tot})", value=fmt_hand(self.d_cards), inline=False)
-            result_str = f"{'<:cutiecheckmark:1479120440734650389> +' if net_profit > 0 else ('🤝 ' if net_profit == 0 else '<:cutiex:1480246146076119132> -')}**{abs(net_profit):,}** {curr}"
+            result_str = f"{'<:check:1485597845883981905> +' if net_profit > 0 else ('🤝 ' if net_profit == 0 else '<:close:1485598320935174317> -')}**{abs(net_profit):,}** {curr}"
             embed.add_field(name="Підсумок", value=result_str, inline=False)
             await finalize(self.guild_id, self.owner_id, total_delta, f"Blackjack Split {'WIN' if net_profit > 0 else 'LOSE'}", self.eco)
             await interaction.response.edit_message(embed=embed, view=self)
         else:
             if d_tot > 21 or p_tot > d_tot:
-                await self._end(interaction, self.bet * 2, "<:cutiecheckmark:1479120440734650389> Виграш! +", COLOR_WIN)
+                await self._end(interaction, self.bet * 2, "<:check:1485597845883981905> Виграш! +", COLOR_WIN)
             elif p_tot == d_tot:
                 await self._end(interaction, self.bet, "🤝 Нічия.", COLOR_DRAW)
             else:
-                await self._end(interaction, 0, "<:cutiex:1480246146076119132> Дилер переміг. -", COLOR_LOSE)
+                await self._end(interaction, 0, "<:close:1485598320935174317> Дилер переміг. -", COLOR_LOSE)
 
     @discord.ui.button(label="2× Double", style=discord.ButtonStyle.danger, row=0)
     async def double_down(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -427,7 +427,7 @@ class BlackjackView(discord.ui.View):
         self._refresh_action_buttons()
         await interaction.response.edit_message(embed=self.build_embed(reveal_dealer=False), view=self)
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:reasonqiestion:1476209697919860777>"), style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:help:1485604736588583053>"), style=discord.ButtonStyle.secondary, row=1)
     async def help_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed = discord.Embed(description=BJ_HELP_TEXT, color=COLOR_BASE)
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -454,7 +454,7 @@ ROULETTE_HELP_TEXT = (
     "25-36           → ×3   (дюжини)\n"
     "0–36 (число)   → ×35  (пряме попадання)\n"
     "```\n"
-    "<:warn:1477376152191373504> Число **0** — програш для всіх ставок крім прямого `0`."
+    "<:warning:1485598476850040843> Число **0** — програш для всіх ставок крім прямого `0`."
 )
 
 def resolve_roulette_bet(bet_type: str, result_num: int):
@@ -497,7 +497,7 @@ class RouletteView(discord.ui.View):
 
     async def interaction_check(self, i: discord.Interaction) -> bool:
         if i.user.id != self.owner_id:
-            await i.response.send_message("<:cutiex:1480246146076119132> Це не твоя гра!", ephemeral=True)
+            await i.response.send_message("<:close:1485598320935174317> Це не твоя гра!", ephemeral=True)
             return False
         return True
 
@@ -508,7 +508,7 @@ class RouletteView(discord.ui.View):
         result_num   = random.randint(0, 36)
         res = resolve_roulette_bet(bet_type, result_num)
         if res is None:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> Помилка типу ставки.", ephemeral=True)
+            await interaction.response.send_message("<:close:1485598320935174317> Помилка типу ставки.", ephemeral=True)
             return
 
         won, mult = res
@@ -540,7 +540,7 @@ class RouletteView(discord.ui.View):
         embed.add_field(name="Ставка", value=f"`{bet_type}`  ×{mult}", inline=True)
         embed.add_field(
             name="Результат",
-            value=f"{'<:cutiecheckmark:1479120440734650389> **Виграш!** +' if won else '<:cutiex:1480246146076119132> **Програш.** -'}**{abs(net_profit):,}** {curr}",
+            value=f"{'<:check:1485597845883981905> **Виграш!** +' if won else '<:close:1485598320935174317> **Програш.** -'}**{abs(net_profit):,}** {curr}",
             inline=False
         )
         await interaction.edit_original_response(embed=embed, view=self)
@@ -576,7 +576,7 @@ class RouletteView(discord.ui.View):
     async def dozen3(self, i, b): await self._spin(i, "25-36")
 
     # ── Help ───────────────────────────────────────────────────────────────────
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:reasonqiestion:1476209697919860777>"), style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:help:1485604736588583053>"), style=discord.ButtonStyle.secondary, row=3)
     async def help_btn(self, i: discord.Interaction, b):
         embed = discord.Embed(description=ROULETTE_HELP_TEXT, color=COLOR_BASE)
         await i.response.send_message(embed=embed, ephemeral=True)
@@ -601,7 +601,7 @@ class HighLowView(discord.ui.View):
 
     async def interaction_check(self, i: discord.Interaction) -> bool:
         if i.user.id != self.owner_id:
-            await i.response.send_message("<:cutiex:1480246146076119132> Це не твоя гра!", ephemeral=True)
+            await i.response.send_message("<:close:1485598320935174317> Це не твоя гра!", ephemeral=True)
             return False
         return True
 
@@ -621,11 +621,11 @@ class HighLowView(discord.ui.View):
             color  = COLOR_DRAW
         elif won:
             delta  = self.bet * 2
-            result = f"<:cutiecheckmark:1479120440734650389> Правильно! Були **{self.first_num}** → **{second}**. +**{self.bet:,}** {curr}"
+            result = f"<:check:1485597845883981905> Правильно! Були **{self.first_num}** → **{second}**. +**{self.bet:,}** {curr}"
             color  = COLOR_WIN
         else:
             delta  = 0
-            result = f"<:cutiex:1480246146076119132> Неправильно! Були **{self.first_num}** → **{second}**. -**{self.bet:,}** {curr}"
+            result = f"<:close:1485598320935174317> Неправильно! Були **{self.first_num}** → **{second}**. -**{self.bet:,}** {curr}"
             color  = COLOR_LOSE
 
         await finalize(self.guild_id, self.owner_id, delta, f"HighLow {'WIN' if won else ('DRAW' if won is None else 'LOSE')}", self.eco)
@@ -685,7 +685,7 @@ class GamblingCog(commands.Cog):
             winnings = int(ставка * payout_mult)
             delta    = winnings - ставка
             color    = COLOR_WIN
-            result   = f"<:firecracker:1479953348185555077> Виграш! **+{delta:,}** {curr}  *(×{payout_mult})*"
+            result   = f"<:celebration_Confetti:1485626240734855441> Виграш! **+{delta:,}** {curr}  *(×{payout_mult})*"
         else:
             delta  = -ставка
             color  = COLOR_LOSE
@@ -730,7 +730,7 @@ class GamblingCog(commands.Cog):
         embed.add_field(name="Твій вибір", value=chosen_name, inline=True)
         embed.add_field(
             name="Результат",
-            value=f"{'<:cutiecheckmark:1479120440734650389> **Виграш!** +' if won else '<:cutiex:1480246146076119132> **Програш.** -'}**{ставка:,}** {curr}",
+            value=f"{'<:check:1485597845883981905> **Виграш!** +' if won else '<:close:1485598320935174317> **Програш.** -'}**{ставка:,}** {curr}",
             inline=False
         )
         set_surface_footer(embed, "gameplay", f"Ставка: {ставка:,} {eco['currency_name']}")
@@ -795,7 +795,7 @@ class GamblingCog(commands.Cog):
                     {"guild_id": interaction.guild.id, "user_id": interaction.user.id},
                     {"$inc": {"wallet": ставка + win_amount, "total_earned": win_amount, "week_earned": win_amount, "month_earned": win_amount}},
                 )
-                embed = gameplay_result_embed("🃏 BLACKJACK! <:firecracker:1479953348185555077>", f"Натуральний Blackjack! Виплата **×1.5** = **+{win_amount:,}** {curr}", tone="success")
+                embed = gameplay_result_embed("🃏 BLACKJACK! <:celebration_Confetti:1485626240734855441>", f"Натуральний Blackjack! Виплата **×1.5** = **+{win_amount:,}** {curr}", tone="success")
                 embed.add_field(name=f"Твоя рука ({hand_total(p_cards)})", value=fmt_hand(p_cards), inline=True)
                 embed.add_field(name=f"Дилер ({hand_total(d_cards)})", value=fmt_hand(d_cards), inline=True)
                 return await interaction.response.send_message(embed=embed, ephemeral=True)

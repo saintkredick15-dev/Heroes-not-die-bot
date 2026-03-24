@@ -9,8 +9,9 @@ from utils.ui_contract import add_section, gameplay_result_embed, set_surface_fo
 
 db = get_database()
 
-E_COIN = "<:coin:1478487028105482485>"
-E_CROSS = "<:krestik:1476693091355463842>"
+E_COIN = "<:coin:1485610808003133552>"
+E_CROSS = "<:close:1485598320935174317>"
+E_BANK = "<:bank_safe:1485637217132216571>"
 
 
 def generate_progress_bar(current: int, total: int, length: int = 20) -> str:
@@ -33,7 +34,7 @@ def build_fund_embed(eco: dict, guild: discord.Guild | None = None) -> discord.E
 
     embed = surface_embed(
         "gameplay",
-        "🏦 Фонд сервера",
+        f"{E_BANK} Фонд сервера",
         "Спільний резерв на великі серверні покращення та майбутні цілі.",
         tone="default",
     )
@@ -106,7 +107,7 @@ class FundView(discord.ui.View):
         super().__init__(timeout=None)
         self.eco = eco
 
-    @discord.ui.button(label="Внести кошти", style=discord.ButtonStyle.success, emoji="<:Coins:1478486725113286899>")
+    @discord.ui.button(label="Внести кошти", style=discord.ButtonStyle.success, emoji="<:coins:1485612564619727011>")
     async def donate_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(FundDonateModal(self.eco, self))
 

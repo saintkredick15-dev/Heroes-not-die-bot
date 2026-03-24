@@ -4,13 +4,15 @@ from datetime import datetime
 import time
 import random
 from pymongo import UpdateOne
+from config.constants import Emojis
 from modules.db import get_database
 from repositories.user import get_user, update_user, get_level_xp
 
 db = get_database()
 
 # ── Кастомний emoji для кнопки "вимкнути сповіщення" ────────────────────────
-E_OFFNOTIF = "<:offnotification:1476242115536097402>"
+E_OFFNOTIF = Emojis.NOTIFICATION_OFF.value
+E_NOTIF = Emojis.NOTIFICATION.value
 
 EMBED_COLOR = 0x1a1a2e
 
@@ -25,14 +27,14 @@ class LevelUpView(discord.ui.View):
         btn = self.toggle_notify
         if notify:
             btn.label = "Вимкнути сповіщення"
-            btn.emoji = discord.PartialEmoji.from_str("<:offnotification:1476242115536097402>")
+            btn.emoji = discord.PartialEmoji.from_str(E_OFFNOTIF)
         else:
             btn.label = "Ввімкнути сповіщення"
-            btn.emoji = discord.PartialEmoji.from_str("<:notification:1476256523519787161>")
+            btn.emoji = discord.PartialEmoji.from_str(E_NOTIF)
 
     @discord.ui.button(
         label="Вимкнути сповіщення",
-        emoji=discord.PartialEmoji.from_str("<:offnotification:1476242115536097402>"),
+        emoji=discord.PartialEmoji.from_str(E_OFFNOTIF),
         style=discord.ButtonStyle.secondary,
         custom_id="levelup_toggle_notify",
     )
@@ -42,7 +44,7 @@ class LevelUpView(discord.ui.View):
         
         if interaction.user.id != self.user_id:
             await interaction.response.send_message(
-                "<:cutiex:1480246146076119132> Це не твоє сповіщення.", ephemeral=True
+                f"{Emojis.CROSS.value} Це не твоє сповіщення.", ephemeral=True
             )
             return
 
@@ -61,10 +63,10 @@ class LevelUpView(discord.ui.View):
 
         if new_val:
             button.label = "Вимкнути сповіщення"
-            button.emoji = discord.PartialEmoji.from_str("<:offnotification:1476242115536097402>")
+            button.emoji = discord.PartialEmoji.from_str(E_OFFNOTIF)
         else:
             button.label = "Ввімкнути сповіщення"
-            button.emoji = discord.PartialEmoji.from_str("<:notification:1476256523519787161>")
+            button.emoji = discord.PartialEmoji.from_str(E_NOTIF)
 
         await interaction.response.edit_message(view=self)
 
@@ -88,7 +90,7 @@ async def send_level_up(
     
     name_str = member.mention if notify else f"**{member.display_name}**"
     embed = discord.Embed(
-        description=f"## <:firecracker:1479953348185555077> Level Up!\n{name_str} підвищився до **рівня {new_level}**!",
+        description=f"## <:celebration_Confetti:1485626240734855441> Level Up!\n{name_str} підвищився до **рівня {new_level}**!",
         color=EMBED_COLOR,
     )
     embed.set_thumbnail(url=member.display_avatar.url)

@@ -5,6 +5,7 @@ import datetime
 import discord
 from discord import app_commands
 from discord.ext import commands
+from config.constants import Emojis
 
 from modules.db import get_database
 from repositories.user import get_user
@@ -82,11 +83,11 @@ class QuestsView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> Це не ваші квести!", ephemeral=True)
+            await interaction.response.send_message("<:close:1485598320935174317> Це не ваші квести!", ephemeral=True)
             return False
         return True
 
-    @discord.ui.button(label="Отримати нагороди", style=discord.ButtonStyle.secondary, emoji=discord.PartialEmoji.from_str("<:prezent:1479463533099094056>"))
+    @discord.ui.button(label="Отримати нагороди", style=discord.ButtonStyle.secondary, emoji=discord.PartialEmoji.from_str("<:gift:1485614389984755772>"))
     async def claim_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_data = await get_user(db, interaction.guild.id, interaction.user.id)
         user_quests = user_data.get("quests", {})
@@ -105,20 +106,20 @@ class QuestsView(discord.ui.View):
                     claimed_count += 1
                     
         if claimed_count == 0:
-            return await interaction.response.send_message("<:cutiex:1480246146076119132> Немає виконаних квестів для отримання нагороди.", ephemeral=True)
+            return await interaction.response.send_message("<:close:1485598320935174317> Немає виконаних квестів для отримання нагороди.", ephemeral=True)
             
         await db.users.update_one(
             {"guild_id": interaction.guild.id, "user_id": interaction.user.id},
             {
                 "$inc": {"wallet": total_coins, "total_earned": total_coins},
                 "$set": {"quests": user_quests},
-                "$push": {"eco_history": {"$each": [{"log": f"🟢 **{total_coins}** | Нагороди за квести ({claimed_count} шт) | <t:{int(time.time())}:t>"}], "$slice": -50}}
+                "$push": {"eco_history": {"$each": [{"log": f"{Emojis.PLUS.value} **{total_coins}** | Нагороди за квести ({claimed_count} шт) | <t:{int(time.time())}:t>"}], "$slice": -50}}
             }
         )
         
         self.quests_obj = user_quests
         embed = build_quests_embed(interaction.user, user_quests, self.eco)
-        await interaction.response.edit_message(content=f"<:cutiecheckmark:1479120440734650389> Нагорода отримана: **{total_coins}** {self.eco.get('currency_emoji', '<:coin:1478487028105482485>')}", embed=embed, view=self)
+        await interaction.response.edit_message(content=f"<:check:1485597845883981905> Нагорода отримана: **{total_coins}** {self.eco.get('currency_emoji', '<:coin:1485610808003133552>')}", embed=embed, view=self)
 
 def build_progress_bar(progress: int, target: int, length: int = 10) -> str:
     if target <= 0: return "█" * length
@@ -126,9 +127,9 @@ def build_progress_bar(progress: int, target: int, length: int = 10) -> str:
     return "█" * filled + "░" * (length - filled)
 
 def build_quests_embed(user: discord.Member, quests_obj: dict, eco: dict) -> discord.Embed:
-    curr = eco.get("currency_emoji", "<:coin:1478487028105482485>")
+    curr = eco.get("currency_emoji", "<:coin:1485610808003133552>")
     embed = discord.Embed(
-        title=f"<:list:1454151067989184562> Завдання {user.display_name}", 
+        title=f"<:menuandlist:1485605053246083143> Завдання {user.display_name}", 
         color=0x000000
     )
     
@@ -136,12 +137,12 @@ def build_quests_embed(user: discord.Member, quests_obj: dict, eco: dict) -> dis
     
     def get_emoji(action: str) -> str:
         if action in ["crime", "economy.rob"]: 
-            return "<:robbery:1478496325887725814>"
-        return "<:flame:1478490474145906800>"
+            return "<:mask:1485625427014713394>"
+        return "<:flame:1485618663489929356>"
 
     for section, rew_key, title_emoji, title in [
-        ("daily", "quests_daily_reward", "<:daily:1478510858027143289>", "Денні завдання"), 
-        ("weekly", "quests_weekly_reward", "<:day7:1479248144112812124>", "Тижневі завдання")
+        ("daily", "quests_daily_reward", "<:clock:1485618008784113796>", "Денні завдання"), 
+        ("weekly", "quests_weekly_reward", "<:day7:1485604215496900639>", "Тижневі завдання")
     ]:
         base_rew = eco.get(rew_key, 200)
         qs = quests_obj.get(section, [])
@@ -154,7 +155,7 @@ def build_quests_embed(user: discord.Member, quests_obj: dict, eco: dict) -> dis
             e_icon = get_emoji(q["action"])
             
             if q["claimed"]:
-                lines.append(f"<:cutiecheckmark:1479120440734650389> ~~**{q['desc']}**~~\n{q['progress']}/{q['target']} (100%) • `+{final_rew}` {curr}\n{pbar}")
+                lines.append(f"<:check:1485597845883981905> ~~**{q['desc']}**~~\n{q['progress']}/{q['target']} (100%) • `+{final_rew}` {curr}\n{pbar}")
             else:
                 lines.append(f"{e_icon} **{q['desc']}**\n{q['progress']}/{q['target']} ({perc}%) • `+{final_rew}` {curr}\n{pbar}")
                 
@@ -175,7 +176,7 @@ class QuestsCommand(commands.Cog):
         settings = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
         eco = settings.get("economy", {})
         if not eco.get("enabled", True) or not eco.get("quests_enabled", True):
-            return await interaction.response.send_message("<:cutiex:1480246146076119132> Квести або економіка вимкнені.", ephemeral=True)
+            return await interaction.response.send_message("<:close:1485598320935174317> Квести або економіка вимкнені.", ephemeral=True)
             
         quests_obj = await get_or_roll_quests(interaction.guild.id, interaction.user.id, eco)
         embed = build_quests_embed(interaction.user, quests_obj, eco)

@@ -7,13 +7,14 @@ from __future__ import annotations
 import discord
 from discord import app_commands
 from discord.ext import commands
+from config.constants import Emojis
 from modules.db import get_database
 
 db = get_database()
 _col = db.guild_settings
 
-E_PALETTE  = "<:palette:1476196821444591768>"
-E_CROSS    = "<:krestik:1476693091355463842>"
+E_PALETTE  = Emojis.PALETTE.value
+E_CROSS    = Emojis.CANCEL.value
 EMBED_COLOR = 0x1a1a2e
 
 async def _get(guild_id: int) -> dict:
@@ -28,7 +29,7 @@ def _build_embed(settings: dict) -> discord.Embed:
     anchor_text = f"<@&{anchor_id}>" if anchor_id else "**Не встановлено** (буде під роллю бота)"
 
     embed = discord.Embed(
-        title="🎨 Кольори нікнеймів",
+        title=f"{E_PALETTE} Кольори нікнеймів",
         description=(
             "Система кастомних кольорів (Color Role Picker).\n"
             f"Мін. рівень для HEX-вводу: **{min_lvl}**\n"
@@ -141,7 +142,7 @@ class DeployColorSelect(discord.ui.ChannelSelect):
             color=0x1a1a2e,
         )
         await ch.send(embed=embed, view=ColorPickerView())
-        await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Панель кольорів відправлена у {ch.mention}", ephemeral=True)
+        await interaction.response.send_message(f"<:check:1485597845883981905> Панель кольорів відправлена у {ch.mention}", ephemeral=True)
 
 # ── Cog ───────────────────────────────────────────────────────────────────────
 

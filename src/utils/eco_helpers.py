@@ -1,9 +1,10 @@
 import time as _time
+from config.constants import Emojis
 
 def make_log(amount: int, desc: str) -> dict:
     
     now   = int(_time.time())
-    color = "🟢" if amount >= 0 else "🔴"
+    color = Emojis.PLUS.value if amount >= 0 else Emojis.MINUS.value
     return {"log": f"{color} **{abs(amount)}** | {desc} | <t:{now}:t>"}
 
 def fmt_duration(seconds: int) -> str:
@@ -51,7 +52,7 @@ async def check_account_age(interaction, eco: dict) -> bool:
 
     if age.days < min_days:
         await interaction.response.send_message(
-            f"<:cutiex:1480246146076119132> Твій акаунт Discord занадто новий для використання економіки.\n"
+            f"<:close:1485598320935174317> Твій акаунт Discord занадто новий для використання економіки.\n"
             f"Мінімальний вік акаунта — **{min_days} днів** (залишилось ще {min_days - age.days} днів).",
             ephemeral=True
         )

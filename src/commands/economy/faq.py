@@ -1,14 +1,29 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+from config.constants import Emojis
 
 COLOR = 0x1a1a2e
-E_INFO = "📘"
-E_COIN = "<:coin:1478487028105482485>"
+E_INFO = Emojis.INFO.value
+E_COIN = Emojis.COIN.value
+E_BANK = Emojis.BANK.value
+E_WORK = Emojis.WORK.value
+E_SHOP = Emojis.SHOP.value
+E_BACKPACK = Emojis.BACKPACK.value
+E_SHIELD = Emojis.SHIELD.value
+E_STAR = Emojis.STAR.value
+E_GIFT = Emojis.GIFT.value
+E_LOOTBOX = Emojis.LOOTBOX.value
+E_CLOCK = Emojis.CLOCK.value
+E_LIST = Emojis.HISTORY.value
+E_TROPHY = Emojis.TROPHY.value
+E_MASK = Emojis.MASK.value
+E_ROLE = Emojis.ROLE.value
+E_EVENT = Emojis.EVENT.value
 
 FAQ_DATA = {
     "basics": {
-        "title": "🪙 Основи Економіки",
+        "title": f"{E_COIN} Основи Економіки",
         "desc": (
             "Економіка на сервері дозволяє вам заробляти валюту, грати в ігри, торгувати та змагатися!\n\n"
             "**Основні команди:**\n"
@@ -20,7 +35,7 @@ FAQ_DATA = {
         )
     },
     "jobs_crimes": {
-        "title": "💼 Роботи та Злочини",
+        "title": f"{E_WORK} Роботи та Злочини",
         "desc": (
             "**Команда `/work` (Робота)**\n"
             "Є два види роботи: *Легка* та *Складна*.\n"
@@ -34,7 +49,7 @@ FAQ_DATA = {
         )
     },
     "games": {
-        "title": "🎮 Ігри та Казино",
+        "title": f"{Emojis.SLOTS_ALT.value} Ігри та Казино",
         "desc": (
             "Бажаєте подвоїти свій капітал? Спробуйте гемблінг!\n\n"
             "• `/slots` — Класичні слоти. Виб'єте 3 однакові емодзі — заберете великий множник!\n"
@@ -47,45 +62,45 @@ FAQ_DATA = {
         )
     },
     "shop": {
-        "title": "🛒 Магазин, Лутбокси та Інвентар",
+        "title": f"{E_SHOP} Магазин, Лутбокси та Інвентар",
         "desc": (
             "Витрачайте свої гроші з розумом у `/shop`!\n\n"
             "**Предмети:**\n"
-            "🛡️ **Щит** — повністю захищає від пограбувань на 24 години.\n"
-            "⭐ **Coin Буст** — подвоює нагороди за активність у чаті.\n"
-            "<:crimepass:1479951455543889970> **Crime Pass** — миттєво знімає заборону використання `/crime`.\n\n"
+            f"{E_SHIELD} **Щит** — повністю захищає від пограбувань на 24 години.\n"
+            f"{E_STAR} **Coin Буст** — подвоює нагороди за активність у чаті.\n"
+            "<:crimepass:1485614625025425529> **Crime Pass** — миттєво знімає заборону використання `/crime`.\n\n"
             "**Лутбокси:**\n"
-            "<:openlootbox:1479952212980535498> Звичайні та <:gifttop:1479952511635820586> Рідкісні лутбокси! Відкривайте їх через Інвентар для отримання грошей, предметів або унікальних ролей.\n\n"
-            "💼 **Інвентар**\n"
+            f"{E_LOOTBOX} Звичайні та {E_GIFT} Рідкісні лутбокси! Відкривайте їх через Інвентар для отримання грошей, предметів або унікальних ролей.\n\n"
+            f"{E_BACKPACK} **Інвентар**\n"
             "Усі куплені предмети потрапляють до вашого Інвентарю (кнопка в `/economy`). Там ви можете активувати їх у потрібний момент!"
         )
     },
     "quests": {
-        "title": "<:cutiecheckmark:1479120440734650389> Квести",
+        "title": "<:check:1485597845883981905> Квести",
         "desc": (
             "**Команда `/quests`**\n"
             "Щодня та щотижня ти отримуєш нові завдання: заробити певну суму, зіграти в казино, зробити пограбування тощо.\n\n"
             "Після виконання — натисни \"Забрати нагороду\" у панелі `/quests`.\n\n"
             "**Типи квестів:**\n"
-            "• <:clock:1476209087804084328> **Денні** — скидаються кожні 24 години\n"
-            "• <:reactionstar:1475954213455532067> **Тижневі** — скидаються кожен тиждень, більша нагорода"
+            "• <:clock:1485618008784113796> **Денні** — скидаються кожні 24 години\n"
+            "• <:star:1485626121847574631> **Тижневі** — скидаються кожен тиждень, більша нагорода"
         )
     },
     "season": {
-        "title": "<:trophy:1475953207782932602> Сезони",
+        "title": "<:trophytop1:1485625873880191067> Сезони",
         "desc": (
             "**Що таке Сезон?**\n"
             "Сезон — це змагання між гравцями за монети. Хто накопичить найбільше до кінця сезону — отримує спеціальну роль.\n\n"
-            "<:cutiex:1480246146076119132> **За замовчуванням сезони вимкнені.** Адміністратор може увімкнути їх через `/economy_setup → Сезон`.\n\n"
+            "<:close:1485598320935174317> **За замовчуванням сезони вимкнені.** Адміністратор може увімкнути їх через `/economy_setup → Сезон`.\n\n"
             "**Що скидається в кінці сезону:**\n"
-            "• <:coin:1478487028105482485> Монети (гаманець та банк — до нуля або стартового бонусу)\n"
+            "• <:coin:1485610808003133552> Монети (гаманець та банк — до нуля або стартового бонусу)\n"
             "• Архів результатів зберігається в `/economy_leaderboard → Архів сезонів`\n\n"
             "**Що НЕ скидається:** XP, рівень, хорошки в інвентарі.\n\n"
             "**Тривалість:** Зазвичай 30-90 днів."
         )
     },
     "vault": {
-        "title": "🏦 Фонд Сервера та Аукціони",
+        "title": f"{E_BANK} Фонд Сервера та Аукціони",
         "desc": (
             "**Аукціон (/auction)**\n"
             "Спеціальний канал, де адміни виставляють цінні предмети або рідкісні кастомні ролі на торги. Хто поставить найбільше (переб'є ставку) до кінця таймеру — отримує лот!\n\n"
@@ -98,13 +113,13 @@ FAQ_DATA = {
 class FaqSelect(discord.ui.Select):
     def __init__(self):
         options = [
-            discord.SelectOption(label="Про Економіку", description="Основи, баланс та банк", value="basics", emoji="🪙"),
-            discord.SelectOption(label="Роботи та Крайм", description="Легка/Складна робота, пограбування", value="jobs_crimes", emoji="💼"),
-            discord.SelectOption(label="Ігри та Казино", description="Слоти, Дуелі, Блекджек...", value="games", emoji="🎮"),
-            discord.SelectOption(label="Магазин та Інвентар", description="Предмети, Бусти, Лутбокси", value="shop", emoji="🛒"),
-            discord.SelectOption(label="Квести", description="Денні та тижневі завдання", value="quests", emoji="<:cutiecheckmark:1479120440734650389>"),
-            discord.SelectOption(label="Сезони", description="Змагання та скидання монет", value="season", emoji="<:trophy:1475953207782932602>"),
-            discord.SelectOption(label="Аукціон та Фонд", description="Загальний фонд сервера", value="vault", emoji="<:bank:1478483868867891261>"),
+            discord.SelectOption(label="Про Економіку", description="Основи, баланс та банк", value="basics", emoji=discord.PartialEmoji.from_str(E_COIN)),
+            discord.SelectOption(label="Роботи та Крайм", description="Легка/Складна робота, пограбування", value="jobs_crimes", emoji=discord.PartialEmoji.from_str(E_WORK)),
+            discord.SelectOption(label="Ігри та Казино", description="Слоти, Дуелі, Блекджек...", value="games", emoji=discord.PartialEmoji.from_str(Emojis.SLOTS_ALT.value)),
+            discord.SelectOption(label="Магазин та Інвентар", description="Предмети, Бусти, Лутбокси", value="shop", emoji=discord.PartialEmoji.from_str(E_SHOP)),
+            discord.SelectOption(label="Квести", description="Денні та тижневі завдання", value="quests", emoji="<:check:1485597845883981905>"),
+            discord.SelectOption(label="Сезони", description="Змагання та скидання монет", value="season", emoji="<:trophytop1:1485625873880191067>"),
+            discord.SelectOption(label="Аукціон та Фонд", description="Загальний фонд сервера", value="vault", emoji="<:bank_safe:1485637217132216571>"),
         ]
         super().__init__(placeholder="Виберіть розділ для навчання...", options=options)
 

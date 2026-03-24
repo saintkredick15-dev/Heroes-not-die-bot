@@ -4,7 +4,9 @@ from discord.ext import commands
 import json
 import os
 import sys
+import traceback
 from dotenv import load_dotenv
+from config.constants import Emojis, OWNER_IDS
 from modules.logger import Logger
 from rich.progress import Progress
 
@@ -49,6 +51,7 @@ db = get_database()
 # ── Command Tree з перевіркою обмежень ────────────────────────────────────────
 # Кеш: { guild_id: { "meme": [ch_ids], "avatar": [ch_ids], ... } }
 _restriction_cache: dict[int, dict] = {}
+_SYNC_MANAGER_IDS = set(OWNER_IDS) | {int(uid) for uid in config.get("dev", []) if isinstance(uid, int)}
 
 
 class RestrictedTree(app_commands.CommandTree):
@@ -93,10 +96,40 @@ class RestrictedTree(app_commands.CommandTree):
         ch_list = ", ".join(f"<#{c}>" for c in allowed_channels)
         log.info(f"[RESTRICT] BLOCKED: /{cmd_name} in ch={interaction.channel_id}, allowed={allowed_channels}")
         await interaction.response.send_message(
-            f"<:cutiex:1480246146076119132> Команду `/{cmd_name}` можна використовувати лише в: {ch_list}",
+            f"{Emojis.CROSS.value} Команду `/{cmd_name}` можна використовувати лише в: {ch_list}",
             ephemeral=True,
         )
         return False
+
+    async def on_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
+        original = getattr(error, "original", error)
+        command_name = getattr(interaction.command, "name", "unknown")
+        guild_id = getattr(interaction.guild, "id", "dm")
+        user_id = getattr(interaction.user, "id", "unknown")
+        log.error(f"[APP] /{command_name} failed for user={user_id} guild={guild_id}: {original}")
+        log.error("".join(traceback.format_exception(type(original), original, original.__traceback__)).strip())
+
+        if isinstance(error, app_commands.CommandOnCooldown):
+            message = f"{Emojis.HOURGLASS.value} Зачекай **{error.retry_after:.1f} с** і спробуй ще раз."
+        elif isinstance(error, app_commands.MissingPermissions):
+            message = f"{Emojis.CROSS.value} У тебе недостатньо прав для цієї команди."
+        elif isinstance(error, app_commands.BotMissingPermissions):
+            message = f"{Emojis.CROSS.value} Мені не вистачає прав для виконання цієї команди."
+        elif isinstance(error, app_commands.CheckFailure):
+            message = f"{Emojis.CROSS.value} Ця команда зараз недоступна."
+        else:
+            message = (
+                f"{Emojis.WARN.value} Щось зламалось під час виконання команди. "
+                "Спробуй ще раз трохи пізніше."
+            )
+
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(message, ephemeral=True)
+            else:
+                await interaction.response.send_message(message, ephemeral=True)
+        except discord.HTTPException:
+            pass
 
 
 class HeroesBot(commands.Bot):
@@ -161,8 +194,7 @@ class HeroesBot(commands.Bot):
 
         # Sync slash-команд глобально (до 1 год щоб з'явились у всіх)
         # Для dev — замінити на bot.tree.sync(guild=discord.Object(id=config["guild"]))
-        await self.tree.sync()
-        log.info("Synced slash commands globally")
+        log.info("Automatic slash sync disabled on startup. Use !sync manually when command schema changes.")
 
 
 bot = HeroesBot(
@@ -189,6 +221,10 @@ async def reload_restrictions_cache(guild_id: int):
     else:
         _restriction_cache.pop(guild_id, None)
 
+
+def _is_sync_manager(user_id: int) -> bool:
+    return user_id in _SYNC_MANAGER_IDS
+
 # Зберігаємо функцію в бот для доступу з інших модулів
 bot.reload_restrictions = reload_restrictions_cache
 
@@ -197,6 +233,32 @@ bot.reload_restrictions = reload_restrictions_cache
 async def on_ready():
     await _load_restrictions()
     log.info(f"Bot {bot.user} is ready! Loaded {len(bot.cogs)} cogs")
+
+
+@bot.command(name="sync", hidden=True)
+async def sync_commands(ctx: commands.Context, scope: str = "guild"):
+    if not _is_sync_manager(ctx.author.id):
+        return
+
+    normalized = scope.strip().lower()
+    if normalized in {"global", "g"}:
+        synced = await bot.tree.sync()
+        await ctx.send(f"{Emojis.CHECK.value} Global sync done. Synced **{len(synced)}** command(s).")
+        log.info(f"[SYNC] Global sync requested by {ctx.author} ({ctx.author.id}) -> {len(synced)} command(s)")
+        return
+
+    guild_id = int(config.get("guild", 0) or 0)
+    if guild_id <= 0:
+        await ctx.send(f"{Emojis.CROSS.value} У config.json не задано `guild` для dev sync.")
+        return
+
+    synced = await bot.tree.sync(guild=discord.Object(id=guild_id))
+    await ctx.send(
+        f"{Emojis.CHECK.value} Dev guild sync done for `{guild_id}`. Synced **{len(synced)}** command(s)."
+    )
+    log.info(
+        f"[SYNC] Dev guild sync requested by {ctx.author} ({ctx.author.id}) for guild={guild_id} -> {len(synced)} command(s)"
+    )
 
 
 bot.run(TOKEN)

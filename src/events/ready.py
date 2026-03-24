@@ -9,8 +9,8 @@ class ReadyEvents(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         print(f"Logged in as {self.bot.user}")
-        # Примітка: tree.sync() викликається в bot.py → setup_hook.
-        # Дублювати його тут не потрібно і шкідливо (витрачає ліміт 200 req/день).
+        # Automatic tree.sync() on startup is disabled.
+        # Use the owner/dev text command !sync after command schema changes.
 
 
 async def setup(bot):

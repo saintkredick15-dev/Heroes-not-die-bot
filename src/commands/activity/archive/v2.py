@@ -39,7 +39,7 @@ class LeaderboardView(discord.ui.View):
         user_position = None
         user_data = None
         
-        medals = ["<:trophy:1475953207782932602>", "<:medal:1475953523039408360>", "<:medal:1475953523039408360>"]
+        medals = ["<:trophytop1:1485625873880191067>", "<:medal:1485625991274430574>", "<:medal:1485625991274430574>"]
         
         for i, data in enumerate(page_users):
             position = start + i + 1

@@ -1,68 +1,105 @@
 """
 automod_engine.py
-Automod V2 Engine. Слухає повідомлення та застосовує правила з конфігу.
-Читає ВСІ параметри з кешу (пороги, дії, тривалості, whitelists).
+Automod V2 engine.
 """
-import re
+
+from __future__ import annotations
+
 import hashlib
+import re
+import time
+from collections import defaultdict, deque
+
 import discord
 from discord.ext import commands
-from collections import defaultdict, deque
-import time
+
 from services.automod import find_matching_rule, get_automod_config, normalize_string
 from services.moderation import apply_case
 
-# ── In-memory tracking ────────────────────────────────────────────────────────
+_COOLDOWN_SECONDS = 10
+_FLOOD_CACHE_MAX_AGE = 300
+_DUP_CACHE_MAX_AGE = 300
+_ATTACH_CACHE_MAX_AGE = 300
 
-# Flood: { user_id: deque([timestamp, ...]) }
-_FLOOD_CACHE: dict[int, deque] = defaultdict(lambda: deque(maxlen=20))
+# Flood: { (guild_id, user_id): deque([timestamp, ...]) }
+_FLOOD_CACHE: dict[tuple[int, int], deque] = defaultdict(lambda: deque(maxlen=20))
 
-# Duplicate: { user_id: deque([msg_hash, ...]) }
-_DUP_CACHE: dict[int, deque] = defaultdict(lambda: deque(maxlen=10))
+# Duplicate: { (guild_id, user_id): deque([(msg_hash, timestamp), ...]) }
+_DUP_CACHE: dict[tuple[int, int], deque] = defaultdict(lambda: deque(maxlen=10))
 
-# Image/attachment spam: { user_id: deque([timestamp, ...]) }
-_ATTACH_CACHE: dict[int, deque] = defaultdict(lambda: deque(maxlen=20))
+# Image/attachment spam: { (guild_id, user_id): deque([timestamp, ...]) }
+_ATTACH_CACHE: dict[tuple[int, int], deque] = defaultdict(lambda: deque(maxlen=20))
 
-# Cooldown: { user_id: float(timestamp) } — після покарання не рахуємо 10 секунд
-_COOLDOWN: dict[int, float] = {}
+# Cooldown: { (guild_id, user_id): float(timestamp) }
+_COOLDOWN: dict[tuple[int, int], float] = {}
 
-# URL patterns
 _URL_RE = re.compile(r'https?://[^\s<>"{}|\\^`\[\]]+', re.IGNORECASE)
 _INVITE_RE = re.compile(
     r'(?:discord\.gg|discord\.com/invite|discordapp\.com/invite|dsc\.gg|discord\.io|invite\.gg)/([a-zA-Z0-9\-]+)',
-    re.IGNORECASE
+    re.IGNORECASE,
 )
-
-# Discord custom emoji pattern (to strip from caps analysis)
 _EMOJI_RE = re.compile(r'<a?:\w+:\d+>')
-
-# Emoji counting patterns
 _CUSTOM_EMOJI_COUNT_RE = re.compile(r'<a?:\w+:\d+>')
 _UNICODE_EMOJI_RE = re.compile(
-    '[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF'
-    '\U0001F1E0-\U0001F1FF\U00002702-\U000027B0\U0001F900-\U0001F9FF'
-    '\U0001FA00-\U0001FA6F\U0001FA70-\U0001FAFF\U00002600-\U000026FF]+')
-
-# Code block pattern (for caps analysis)
-_CODE_BLOCK_RE = re.compile(r'```[\s\S]*?```|`[^`]+`')
-
-# Duration parser for mute
+    "[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF"
+    "\U0001F1E0-\U0001F1FF\U00002702-\U000027B0\U0001F900-\U0001F9FF"
+    "\U0001FA00-\U0001FA6F\U0001FA70-\U0001FAFF\U00002600-\U000026FF]+"
+)
+_CODE_BLOCK_RE = re.compile(r"```[\s\S]*?```|`[^`]+`")
 _DUR_UNITS = {"m": 60, "h": 3600, "d": 86400}
 
+
 def _parse_mute_seconds(raw: str) -> int:
-    """Парсить '10m', '1h', '1d' у секунди. За замовч. 1 годину."""
+    """Parse '10m', '1h', '1d' into seconds. Defaults to 1 hour."""
     if not raw:
         return 3600
     raw = raw.strip().lower()
-    match = re.match(r'^(\d+)\s*([mhd])$', raw)
+    match = re.match(r"^(\d+)\s*([mhd])$", raw)
     if not match:
         return 3600
     return int(match.group(1)) * _DUR_UNITS.get(match.group(2), 3600)
 
 
+def _cache_key(guild_id: int, user_id: int) -> tuple[int, int]:
+    return guild_id, user_id
+
+
+def _trim_timestamp_record(record: deque, now: float, max_age: int) -> None:
+    while record and (now - record[0]) > max_age:
+        record.popleft()
+
+
+def _trim_duplicate_record(record: deque, now: float, max_age: int) -> None:
+    while record and (now - record[0][1]) > max_age:
+        record.popleft()
+
+
 class AutomodEngine(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+
+    def _cleanup_state(self, now: float | None = None):
+        now = now or time.time()
+
+        expired_cooldowns = [key for key, ts in _COOLDOWN.items() if (now - ts) >= _COOLDOWN_SECONDS]
+        for key in expired_cooldowns:
+            _COOLDOWN.pop(key, None)
+
+        for cache, max_age in (
+            (_FLOOD_CACHE, _FLOOD_CACHE_MAX_AGE),
+            (_ATTACH_CACHE, _ATTACH_CACHE_MAX_AGE),
+        ):
+            for key in list(cache.keys()):
+                record = cache[key]
+                _trim_timestamp_record(record, now, max_age)
+                if not record:
+                    cache.pop(key, None)
+
+        for key in list(_DUP_CACHE.keys()):
+            record = _DUP_CACHE[key]
+            _trim_duplicate_record(record, now, _DUP_CACHE_MAX_AGE)
+            if not record:
+                _DUP_CACHE.pop(key, None)
 
     def _is_whitelisted(self, message: discord.Message, config: dict) -> bool:
         if message.author.bot:
@@ -79,14 +116,12 @@ class AutomodEngine(commands.Cog):
             return True
         return False
 
-    def _in_cooldown(self, user_id: int) -> bool:
-        ts = _COOLDOWN.get(user_id)
-        if ts and (time.time() - ts) < 10:
-            return True
-        return False
+    def _in_cooldown(self, guild_id: int, user_id: int) -> bool:
+        ts = _COOLDOWN.get(_cache_key(guild_id, user_id))
+        return bool(ts and (time.time() - ts) < _COOLDOWN_SECONDS)
 
-    def _set_cooldown(self, user_id: int):
-        _COOLDOWN[user_id] = time.time()
+    def _set_cooldown(self, guild_id: int, user_id: int):
+        _COOLDOWN[_cache_key(guild_id, user_id)] = time.time()
 
     async def _send_rule_response(self, message: discord.Message, rule: dict):
         response_text = str(rule.get("response_text", "")).strip()
@@ -118,29 +153,34 @@ class AutomodEngine(commands.Cog):
         except (discord.Forbidden, discord.HTTPException):
             pass
 
-    # ── Checks ────────────────────────────────────────────────────────────────
-
-    def _check_flood(self, author_id: int, count: int, interval: int) -> bool:
+    def _check_flood(self, guild_id: int, author_id: int, count: int, interval: int) -> bool:
         now = time.time()
-        record = _FLOOD_CACHE[author_id]
+        key = _cache_key(guild_id, author_id)
+        record = _FLOOD_CACHE[key]
+        _trim_timestamp_record(record, now, max(_FLOOD_CACHE_MAX_AGE, interval * 3))
         record.append(now)
         if len(record) >= count:
             window = list(record)[-count:]
             if (window[-1] - window[0]) <= float(interval):
                 record.clear()
+                _FLOOD_CACHE.pop(key, None)
                 return True
         return False
 
-    def _check_duplicate(self, author_id: int, text: str) -> bool:
+    def _check_duplicate(self, guild_id: int, author_id: int, text: str) -> bool:
         if not text.strip():
             return False
-        h = hashlib.md5(text.lower().strip().encode()).hexdigest()
-        record = _DUP_CACHE[author_id]
-        record.append(h)
-        # Якщо останні 3 повідомлення однакові
-        recent = list(record)[-3:]
+
+        now = time.time()
+        key = _cache_key(guild_id, author_id)
+        msg_hash = hashlib.md5(text.lower().strip().encode()).hexdigest()
+        record = _DUP_CACHE[key]
+        _trim_duplicate_record(record, now, _DUP_CACHE_MAX_AGE)
+        record.append((msg_hash, now))
+        recent = [item_hash for item_hash, _ts in list(record)[-3:]]
         if len(recent) == 3 and len(set(recent)) == 1:
             record.clear()
+            _DUP_CACHE.pop(key, None)
             return True
         return False
 
@@ -150,23 +190,19 @@ class AutomodEngine(commands.Cog):
             return False
 
         code = match.group(1)
+        allowed_ids = {own_guild_id}
+        for server in allowed_servers:
+            if isinstance(server, dict):
+                allowed_ids.add(server.get("guild_id"))
+            elif isinstance(server, (int, float)):
+                allowed_ids.add(int(server))
 
-        # Витягуємо дозволені guild_id
-        allowed_ids = {own_guild_id}  # Свій сервер завжди дозволено
-        for s in allowed_servers:
-            if isinstance(s, dict):
-                allowed_ids.add(s.get("guild_id"))
-            elif isinstance(s, (int, float)):
-                allowed_ids.add(int(s))
-
-        # Резолвимо invite через API
         try:
             invite = await self.bot.fetch_invite(code)
             if invite.guild and invite.guild.id in allowed_ids:
-                return False  # Дозволений сервер
+                return False
         except (discord.NotFound, discord.HTTPException):
-            pass  # Невалідний/прострочений invite — блокуємо
-
+            pass
         return True
 
     def _check_links(self, content: str, allowed_domains: list) -> bool:
@@ -174,47 +210,44 @@ class AutomodEngine(commands.Cog):
         if not urls:
             return False
         allowed_lower = [d.lower().strip() for d in allowed_domains if d.strip()]
-        # Завжди дозволяємо Discord CDN
         allowed_lower.extend(["cdn.discordapp.com", "media.discordapp.net"])
         for url in urls:
-            domain = re.sub(r'https?://', '', url).split('/')[0].lower()
-            domain = domain.lstrip("www.")
-            # Subdomain match: m.youtube.com -> youtube.com
-            if not any(domain == a or domain.endswith("." + a) for a in allowed_lower):
-                return True  # Заблокований URL знайдено
+            domain = re.sub(r"https?://", "", url).split("/")[0].lower().lstrip("www.")
+            if not any(domain == allowed or domain.endswith("." + allowed) for allowed in allowed_lower):
+                return True
         return False
 
     def _check_caps(self, content: str, percent: int, minlen: int) -> bool:
-        # Видаляємо code blocks, custom emoji та посилання
-        clean = _CODE_BLOCK_RE.sub('', content)
-        clean = _EMOJI_RE.sub('', clean)
-        clean = _URL_RE.sub('', clean)
-        # Залишаємо лише літери
-        letters = [c for c in clean if c.isalpha()]
+        clean = _CODE_BLOCK_RE.sub("", content)
+        clean = _EMOJI_RE.sub("", clean)
+        clean = _URL_RE.sub("", clean)
+        letters = [char for char in clean if char.isalpha()]
         if len(letters) < minlen:
             return False
-        uppers = sum(1 for c in letters if c.isupper())
+        uppers = sum(1 for char in letters if char.isupper())
         ratio = uppers / len(letters) * 100
         return ratio >= percent
 
     def _check_emojis(self, content: str, max_emojis: int) -> bool:
         custom = len(_CUSTOM_EMOJI_COUNT_RE.findall(content))
         unicode_matches = _UNICODE_EMOJI_RE.findall(content)
-        unicode_count = sum(len(m) for m in unicode_matches)
+        unicode_count = sum(len(match) for match in unicode_matches)
         return (custom + unicode_count) >= max_emojis
 
-    def _check_image_spam(self, author_id: int, attachment_count: int,
-                          max_count: int, interval: int) -> bool:
+    def _check_image_spam(self, guild_id: int, author_id: int, attachment_count: int, max_count: int, interval: int) -> bool:
         if attachment_count == 0:
             return False
         now = time.time()
-        record = _ATTACH_CACHE[author_id]
+        key = _cache_key(guild_id, author_id)
+        record = _ATTACH_CACHE[key]
+        _trim_timestamp_record(record, now, max(_ATTACH_CACHE_MAX_AGE, interval * 3))
         for _ in range(attachment_count):
             record.append(now)
         if len(record) >= max_count:
             window = list(record)[-max_count:]
             if (window[-1] - window[0]) <= float(interval):
                 record.clear()
+                _ATTACH_CACHE.pop(key, None)
                 return True
         return False
 
@@ -225,30 +258,27 @@ class AutomodEngine(commands.Cog):
         count += len(message.role_mentions)
         return count >= max_mentions
 
-    # ── Punish ────────────────────────────────────────────────────────────────
-
-    async def _punish(self, message: discord.Message, reason: str,
-                      action: str = "warn", mute_dur: str = "", rule: dict | None = None):
-        # Delete the message (завжди, для будь-якої комбінації)
+    async def _punish(
+        self,
+        message: discord.Message,
+        reason: str,
+        action: str = "warn",
+        mute_dur: str = "",
+        rule: dict | None = None,
+    ):
         try:
             await message.delete()
         except (discord.NotFound, discord.Forbidden):
             pass
 
-        self._set_cooldown(message.author.id)
-
-        # Підтримка кількох дій через кому: "delete,warn", "mute,warn"
-        actions = [a.strip().lower() for a in action.split(",")]
+        self._set_cooldown(message.guild.id, message.author.id)
+        actions = [item.strip().lower() for item in action.split(",")]
 
         for act in actions:
             if act == "delete":
-                continue  # вже видалили зверху
+                continue
 
-            duration_hours = None
-            if act == "mute":
-                secs = _parse_mute_seconds(mute_dur)
-                duration_hours = max(1, secs // 3600)
-
+            duration_seconds = _parse_mute_seconds(mute_dur) if act == "mute" else None
             await apply_case(
                 bot=self.bot,
                 guild=message.guild,
@@ -256,47 +286,44 @@ class AutomodEngine(commands.Cog):
                 moderator=self.bot.user,
                 action=act,
                 reason=f"[Automod] {reason}",
-                duration_hours=duration_hours,
+                duration_seconds=duration_seconds,
+                source="auto",
+                origin_text=f"Повідомлення в #{message.channel.name}",
             )
 
         if rule is not None:
             await self._send_rule_response(message, rule)
             await self._send_rule_log(message, rule, reason)
 
-    # ── Main listener ────────────────────────────────────────────────────────
-
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if not message.guild or message.author.bot:
             return
 
+        self._cleanup_state()
         config = get_automod_config(message.guild.id)
         if not config:
             return
-
         if self._is_whitelisted(message, config):
             return
-
-        if self._in_cooldown(message.author.id):
+        if self._in_cooldown(message.guild.id, message.author.id):
             return
 
         content = message.content
 
-        # 1. Антиспам (флуд + дублікати)
         if config.get("am_antispam", False):
             count = config.get("am_antispam_count", 5)
             interval = config.get("am_antispam_interval", 5)
             action = config.get("am_antispam_action", "warn")
             mute_dur = config.get("am_antispam_mute_dur", "")
 
-            if self._check_flood(message.author.id, count, interval):
+            if self._check_flood(message.guild.id, message.author.id, count, interval):
                 return await self._punish(message, "Флуд повідомленнями.", action, mute_dur)
 
             if config.get("am_antispam_duplicates", False):
-                if self._check_duplicate(message.author.id, content):
+                if self._check_duplicate(message.guild.id, message.author.id, content):
                     return await self._punish(message, "Повторювані повідомлення.", action, mute_dur)
 
-        # 2. Антизапрошення
         if config.get("am_antiinvite", False):
             allowed = config.get("am_antiinvite_allowed_servers", [])
             action = config.get("am_antiinvite_action", "delete")
@@ -304,7 +331,6 @@ class AutomodEngine(commands.Cog):
             if await self._check_invite(content, allowed, message.guild.id):
                 return await self._punish(message, "Discord-запрошення заборонені.", action, mute_dur)
 
-        # 3. Анти-посилання
         if config.get("am_antilink", False):
             allowed = config.get("am_antilink_allowed_domains", [])
             action = config.get("am_antilink_action", "delete")
@@ -312,7 +338,6 @@ class AutomodEngine(commands.Cog):
             if self._check_links(content, allowed):
                 return await self._punish(message, "Посилання заборонені.", action, mute_dur)
 
-        # 4. Анти-капс
         if config.get("am_caps", False):
             percent = config.get("am_caps_percent", 70)
             minlen = config.get("am_caps_minlen", 8)
@@ -321,124 +346,103 @@ class AutomodEngine(commands.Cog):
             if self._check_caps(content, percent, minlen):
                 return await self._punish(message, "Надмірне використання CAPS.", action, mute_dur)
 
-        # 5. Анти-згадки
         if config.get("am_mentions", False):
-            max_m = config.get("am_mentions_max", 5)
+            max_mentions = config.get("am_mentions_max", 5)
             action = config.get("am_mentions_action", "warn")
             mute_dur = config.get("am_mentions_mute_dur", "")
-            if self._check_mentions(message, max_m):
+            if self._check_mentions(message, max_mentions):
                 return await self._punish(message, "Масові згадки.", action, mute_dur)
 
-        # 6. Emoji-спам
         if config.get("am_emojispam", False):
-            max_e = config.get("am_emojispam_max", 10)
+            max_emojis = config.get("am_emojispam_max", 10)
             action = config.get("am_emojispam_action", "delete")
             mute_dur = config.get("am_emojispam_mute_dur", "")
-            if self._check_emojis(content, max_e):
+            if self._check_emojis(content, max_emojis):
                 return await self._punish(message, "Надмірна кількість емодзі.", action, mute_dur)
 
-        # 7. Image/Attachment-спам
         if config.get("am_imagespam", False):
-            max_c = config.get("am_imagespam_count", 5)
+            max_count = config.get("am_imagespam_count", 5)
             interval = config.get("am_imagespam_interval", 10)
             action = config.get("am_imagespam_action", "warn")
             mute_dur = config.get("am_imagespam_mute_dur", "")
-            if self._check_image_spam(message.author.id, len(message.attachments), max_c, interval):
+            if self._check_image_spam(message.guild.id, message.author.id, len(message.attachments), max_count, interval):
                 return await self._punish(message, "Масове закидання файлів.", action, mute_dur)
 
-        # 8. Заборонені слова/фрази
         rules = config.get("automod_rules", [])
-        if rules:
-            scoped_rule = find_matching_rule(
-                rules,
-                content,
-                target="message",
-                channel_id=message.channel.id,
-                role_ids={role.id for role in message.author.roles},
-            )
-            if scoped_rule:
-                reason = scoped_rule.get("reason", "Заборонене слово.")
-                r_action = scoped_rule.get("action", "warn")
-                r_mute = scoped_rule.get("mute_dur", "")
-                return await self._punish(
-                    message,
-                    f"Заборонений тег: {scoped_rule['trigger']} ({reason})",
-                    r_action,
-                    r_mute,
-                    rule=scoped_rule,
-                )
-            rules = []
-        if rules:
-            normalized_text = normalize_string(content)
-            for rule in rules:
-                normalized_rule = normalize_string(rule["trigger"])
-                if normalized_rule and normalized_rule in normalized_text:
-                    reason = rule.get("reason", "Заборонене слово.")
-                    r_action = rule.get("action", "warn")
-                    return await self._punish(
-                        message, f"Заборонений тег: {rule['trigger']} ({reason})", r_action)
+        if not rules:
+            return
 
-    # ── Member tag check ──────────────────────────────────────────────────────
+        scoped_rule = find_matching_rule(
+            rules,
+            content,
+            target="message",
+            channel_id=message.channel.id,
+            role_ids={role.id for role in message.author.roles},
+        )
+        if not scoped_rule:
+            return
+
+        reason = scoped_rule.get("reason", "Заборонене слово.")
+        r_action = scoped_rule.get("action", "warn")
+        r_mute = scoped_rule.get("mute_dur", "")
+        await self._punish(
+            message,
+            f"Заборонений тег: {scoped_rule['trigger']} ({reason})",
+            r_action,
+            r_mute,
+            rule=scoped_rule,
+        )
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         if after.bot:
             return
-        if (before.display_name == after.display_name and
-                before.global_name == after.global_name and
-                str(before.activities) == str(after.activities)):
+        if (
+            before.display_name == after.display_name
+            and before.global_name == after.global_name
+            and str(before.activities) == str(after.activities)
+        ):
             return
 
+        self._cleanup_state()
         config = get_automod_config(after.guild.id)
         if not config:
             return
 
         rules = config.get("automod_rules", [])
-        if rules:
-            scoped_rule = find_matching_rule(
-                rules,
-                text_to_check,
-                target="profile",
-                role_ids={role.id for role in after.roles},
-            )
-            if scoped_rule:
-                action = scoped_rule.get("action", "warn")
-                reason = f"Заборонений тег в профілі: {scoped_rule['trigger']}"
-                await apply_case(
-                    bot=self.bot,
-                    guild=after.guild,
-                    user=after,
-                    moderator=self.bot.user,
-                    action=action,
-                    reason=f"[Automod] {reason}"
-                )
-                return
-            rules = []
         if not rules:
             return
 
         text_to_check = f"{after.display_name} {after.global_name or ''} "
         for activity in after.activities:
-            if hasattr(activity, 'name') and activity.name:
+            if hasattr(activity, "name") and activity.name:
                 text_to_check += f"{activity.name} "
-            if hasattr(activity, 'state') and activity.state:
+            if hasattr(activity, "state") and activity.state:
                 text_to_check += f"{activity.state} "
+            if hasattr(activity, "details") and activity.details:
+                text_to_check += f"{activity.details} "
 
-        normalized_text = normalize_string(text_to_check)
-        for rule in rules:
-            normalized_rule = normalize_string(rule["trigger"])
-            if normalized_rule and normalized_rule in normalized_text:
-                action = rule.get("action", "warn")
-                reason = f"Заборонений тег в профілі: {rule['trigger']}"
-                await apply_case(
-                    bot=self.bot,
-                    guild=after.guild,
-                    user=after,
-                    moderator=self.bot.user,
-                    action=action,
-                    reason=f"[Automod] {reason}"
-                )
-                return
+        scoped_rule = find_matching_rule(
+            rules,
+            text_to_check,
+            target="profile",
+            role_ids={role.id for role in after.roles},
+        )
+        if not scoped_rule:
+            return
+
+        action = scoped_rule.get("action", "warn")
+        reason = f"Заборонений тег в профілі: {scoped_rule['trigger']}"
+        await apply_case(
+            bot=self.bot,
+            guild=after.guild,
+            user=after,
+            moderator=self.bot.user,
+            action=action,
+            reason=f"[Automod] {reason}",
+            source="auto",
+            origin_text="Профіль користувача",
+        )
 
 
 async def setup(bot: commands.Bot):

@@ -1,77 +1,144 @@
 from enum import Enum
 from typing import List
 
-OWNER_IDS: List[int] = [961262391314755665] 
+
+OWNER_IDS: List[int] = [961262391314755665]
+
 
 class Colors(Enum):
-    
-    DEFAULT = 0x2b2d31    
-    SUCCESS = 0x57F287    
-    ERROR = 0xED4245      
-    WARNING = 0xFEE75C    
-    INFO = 0x5865F2       
-    PREMIUM = 0xFFD700    
-    DARK = 0x1A1A2E       
+    DEFAULT = 0x2B2D31
+    SUCCESS = 0x57F287
+    ERROR = 0xED4245
+    WARNING = 0xFEE75C
+    INFO = 0x5865F2
+    PREMIUM = 0xFFD700
+    DARK = 0x1A1A2E
+
 
 class EcoOptions(Enum):
-    
     CRIME_WIN_CHANCE = 0.40
     CRIME_FAIL_CHANCE = 0.40
     CRIME_CRIT_FAIL_CHANCE = 0.15
     CRIME_SPECIAL_CHANCE = 0.05
-    
+
     WORK_EVENT_CHANCE = 0.40
-    
-    TAX_BRACKET_0 = (0, 0.0)             
-    TAX_BRACKET_1 = (100_000, 0.10)      
-    TAX_BRACKET_2 = (500_000, 0.25)      
-    TAX_BRACKET_3 = (1_000_000, 0.50)    
-    TAX_BRACKET_4 = (5_000_000, 0.75)    
 
-    ACCOUNT_AGE_MIN_DAYS = 14  
+    TAX_BRACKET_0 = (0, 0.0)
+    TAX_BRACKET_1 = (100_000, 0.10)
+    TAX_BRACKET_2 = (500_000, 0.25)
+    TAX_BRACKET_3 = (1_000_000, 0.50)
+    TAX_BRACKET_4 = (5_000_000, 0.75)
 
+    ACCOUNT_AGE_MIN_DAYS = 14
     DEFAULT_INFLATION_LIMIT = 3.0
 
+
 class Emojis(Enum):
+    # Status / feedback
+    CHECK = "<:check:1485597845883981905>"
+    CROSS = "<:close:1485598320935174317>"
+    CANCEL = "<:close:1485598320935174317>"
+    WARN = "<:warning:1485598476850040843>"
+    HOURGLASS = "<:hourglass:1485598603937579181>"
+    TRASH = "<:trash:1485598963590758420>"
+    INBOX = "<:inbox:1485599203815325836>"
+    EDIT = "<:edit:1485599665822109766>"
 
-    # ── Статуси ──────────────────────────────────────────────────────────────
-    CHECK       = "<:cutiecheckmark:1479120440734650389>"
-    CROSS       = "<:cutiex:1480246146076119132>"
-    WARN        = "<:warn:1477376152191373504>"
-    HOURGLASS   = "<:Hourglass:1479950504321745026>"
-    TRASH       = "<:trash:1477722148071145634>"
-    INBOX       = "<:inbox:1479128004847341620>"
+    # Ranking / highlights
+    TROPHY = "<:trophytop1:1485625873880191067>"
+    MEDAL = "<:medal:1485625991274430574>"
+    STAR = "<:star:1485626121847574631>"
+    REACTION_STAR = "<:star:1485626121847574631>"
+    FIRECRACKER = "<:celebration_Confetti:1485626240734855441>"
+    CELEBRATION = "<:celebration_Confetti:1485626240734855441>"
 
-    # ── Нагороди / Рейтинг ───────────────────────────────────────────────────
-    TROPHY      = "<:trophy:1475953207782932602>"
-    MEDAL       = "<:medal:1475953523039408360>"
-    FIRECRACKER = "<:firecracker:1479953348185555077>"
+    # Economy
+    COIN = "<:coin:1485610808003133552>"
+    COINS = "<:coins:1485612564619727011>"
+    COINS_ALT = "<:coins:1485612564619727011>"
+    BANK = "<:bank_safe:1485637217132216571>"
+    WALLET = "<:wallet:1485625593574850720>"
+    CARD = "<:card:1485625713087221830>"
+    LOOTBOX = "<:lootbox:1485614292664320070>"
+    GIFT = "<:gift:1485614389984755772>"
+    SHIELD = "<:shield:1485606277081071666>"
+    CRIMEPASS = "<:crimepass:1485614625025425529>"
+    AUCTION = "<:hammer:1485606127696609412>"
+    SHOP = "<:shop:1485636864844107846>"
 
-    # ── Економіка ────────────────────────────────────────────────────────────
-    COIN      = "<:coin:1478487028105482485>"
-    COINS     = "<:Coins:1478486725113286899>"
-    BANK      = "<:bank:1478483868867891261>"
-    LOOTBOX   = "<:openlootbox:1479952212980535498>"
-    GIFT      = "<:gifttop:1479952511635820586>"
-    SHIELD    = "<:shield:1478800925664612372>"
-    STAR      = "<:reactionstar:1475954213455532067>"
-    CRIMEPASS = "<:crimepass:1479951455543889970>"
+    # Work / crime / pacing
+    CLOCK = "<:clock:1485618008784113796>"
+    FLAME = "<:flame:1485618663489929356>"
+    WORK = "<:work:1485618886899400814>"
+    WORKS = "<:work:1485618886899400814>"
+    ROBBERY = "<:mask:1485625427014713394>"
+    MASK = "<:mask:1485625427014713394>"
 
-    # ── Робота / Злочин ──────────────────────────────────────────────────────
-    CLOCK   = "<:clock:1476209087804084328>"
-    FLAME   = "<:flame:1478490474145906800>"
-    WORK    = "<:work:1478489752020975626>"
-    WORKS   = "<:works:1478510456971857992>"
-    ROBBERY = "<:robbery:1478496325887725814>"
+    # Navigation
+    LEFT = "<:prevtotheleft:1485600254760980501>"
+    PREV = "<:prevtotheleft:1485600254760980501>"
+    NEXT = "<:nexttotheright:1485600703052517376>"
+    HISTORY = "<:history:1485601911599009893>"
+    SLOTS = "<:card:1485625713087221830>"
+    HELP = "<:help:1485604736588583053>"
+    DAY7 = "<:day7:1485604215496900639>"
+    DAY31 = "<:day31:1485604517281140846>"
 
-    # ── Навігація ────────────────────────────────────────────────────────────
-    LEFT    = "<:totheleft:1478825190749110323>"
-    HISTORY = "<:historylist:1478824658332684510>"
-    SLOTS   = "<:slot_machine:1479149411832565841>"
-    HELP    = "<:reasonqiestion:1476209697919860777>"
+    # Admin / utility / moderation
+    STATS = "<:stats:1485607826964353144>"
+    DEV_STATS = "<:stats:1485607826964353144>"
+    SETTINGS = "<:settings:1485606007668342865>"
+    HAMMER = "<:hammer:1485606127696609412>"
+    TICKET = "<:ticket:1485608010192519300>"
+    CHAT = "<:chat:1485608210202361976>"
+    MICRO = "<:micro:1485608331484729344>"
+    AUTOROLE = "<:members:1485607710035542118>"
+    MEMBERS = "<:members:1485607710035542118>"
+    SHIELD_CHECK = "<:shield_check:1485606912073400330>"
+    PALETTE = "<:palette:1485608515409285140>"
+    MUTE = "<:mute:1485607049504227369>"
+    BAN = "<:ban:1485607222414282822>"
+    KICK = "<:kick:1485607557291704341>"
+    BROOM = "<:broom:1485712261443096777>"
+    ROOM = "<:house:1485711554124054672>"
+    OWNER = "<:crown_owner:1485711821737558127>"
+    DETECTIVE = "<:detective:1485712517161287881>"
+    STOP = "<:stop:1485716135478427728>"
+    BACKPACK = "<:backpack:1485716305410789527>"
+    MAGIC = "<:magic:1485716850435424277>"
+    RELOAD = "<:reload:1485717010271961189>"
+    TYPING = "<:typing_keyboard:1485717155080175616>"
+    PLUS = "<:plus:1485717562699550780>"
+    MINUS = "<:minus:1485718143803457576>"
+    GLOBE = "<:search:1485637936165949543>"
+    SEARCH = "<:search:1485637936165949543>"
+    INFO = "<:info:1485638054201921536>"
+    IMAGE = "<:svgviewerpngoutput20260324T19312:1486069946634207292>"
+    TEXT_STYLE = "<:textstyle:1486070201249300565>"
+    EXIT = "<:exit:1486070564723364040>"
+    LOCK = "<:shield_check:1485606912073400330>"
+    UNLOCK = "<:shield:1485606277081071666>"
+    EYE = "<:eye_visible:1485710709617721374>"
+    EYE_OFF = "<:eyeclosed_hidden:1485710827217752389>"
 
-    # ── Адмін / Дев ──────────────────────────────────────────────────────────
-    DEV_STATS = "<:statistics:1477721796857041067>"
-    GLOBE     = "<:planet:1479905429055340564>"
-    LOCK      = "<:lockopen:1479905741874921672>"
-    UNLOCK    = "<:lock:1479905802318774505>"
+    # Notifications / social
+    NOTIFICATION_GENERIC = "<:notification:1485627853839142972>"
+    NOTIFICATION = "<:notification_on:1485609281062572142>"
+    NOTIFICATION_OFF = "<:notification_off:1485608969660796958>"
+    BOOST = "<:boost:1485610043033518131>"
+
+    # Gameplay extras
+    SLOTS_ALT = "<:slots:1485721079044378634>"
+    ROULETTE = "<:roulette:1485719452598276267>"
+    DICE = "<:dice:1485719993659297963>"
+    CARDS = "<:cards:1485722934420181002>"
+    CHIP = "<:chip:1485723774958567424>"
+    MATH = "<:math:1485724432176513044>"
+    QUIZ = "<:question_quiz:1485724950210940928>"
+    LIGHTNING = "<:lightning:1485725198362607847>"
+    TARGET = "<:target:1485725855434149938>"
+    NUMBER = "<:number:1485726635050275006>"
+    SWORDS = "<:svords:1485727012751671458>"
+    ROLE = "<:role_masks:1485727278116900946>"
+    EVENT = "<:event_star:1485728236091740180>"
+    CLIPBOARD = "<:clipboard:1485728386453340331>"

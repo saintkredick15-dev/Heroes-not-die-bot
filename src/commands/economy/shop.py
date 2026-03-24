@@ -13,12 +13,23 @@ from utils.ui_contract import add_section, gameplay_result_embed, set_surface_fo
 
 db = get_database()
 
-E_COIN   = "<:coin:1478487028105482485>"
-E_CROSS  = "<:krestik:1476693091355463842>"
-E_CHECK  = "<:cutiecheckmark:1479120440734650389>"
-E_SHIELD = "<:shield:1478800925664612372>"
-E_STAR   = "<:reactionstar:1475954213455532067>"
-E_BANK   = "<:bank:1478483868867891261>"
+E_COIN   = "<:coin:1485610808003133552>"
+E_CROSS  = "<:close:1485598320935174317>"
+E_CHECK  = "<:check:1485597845883981905>"
+E_SHIELD = "<:shield:1485606277081071666>"
+E_STAR   = "<:star:1485626121847574631>"
+E_BANK   = "<:bank_safe:1485637217132216571>"
+E_ROLE   = "<:role_masks:1485727278116900946>"
+E_BACKPACK = "<:backpack:1485716305410789527>"
+E_STOP = "<:stop:1485716135478427728>"
+E_PLUS = "<:plus:1485717562699550780>"
+E_MAGIC = "<:magic:1485716850435424277>"
+E_PREV = "<:prevtotheleft:1485600254760980501>"
+E_CELEBRATION = "<:celebration_Confetti:1485626240734855441>"
+E_CRIMEPASS = "<:crimepass:1485614625025425529>"
+E_LOOTBOX = "<:lootbox:1485614292664320070>"
+E_GIFT = "<:gift:1485614389984755772>"
+E_SHOP = "<:shop:1485636864844107846>"
 
 COLOR    = 0x1a1a2e
 
@@ -45,7 +56,7 @@ SYSTEM_ITEMS = [
         "id":       "lootbox_common",
         "name":     "Звичайний Лутбокс",
         "desc":     "Може містити монети, предмети або невеликі бонуси",
-        "emoji":    "<:openlootbox:1479952212980535498>",
+        "emoji":    E_LOOTBOX,
         "price_key":"shop_lootbox_common_price",
         "default":  2500,
     },
@@ -53,7 +64,7 @@ SYSTEM_ITEMS = [
         "id":       "lootbox_rare",
         "name":     "Рідкісний Лутбокс",
         "desc":     "Цінний дроп, багато монет або унікальні ролі",
-        "emoji":    "<:gifttop:1479952511635820586>",
+        "emoji":    E_GIFT,
         "price_key":"shop_lootbox_rare_price",
         "default":  10000,
     },
@@ -61,7 +72,7 @@ SYSTEM_ITEMS = [
         "id":       "crime_pass",
         "name":     "Crime Pass",
         "desc":     "Може зняти штраф-блок після провалу /crime",
-        "emoji":    "<:crimepass:1479951455543889970>",
+        "emoji":    E_CRIMEPASS,
         "price_key":"shop_crime_pass_price",
         "default":  3000,
     },
@@ -76,10 +87,9 @@ def get_item_price(eco: dict, item: dict) -> int:
 
 def build_shop_embed(eco: dict, guild: discord.Guild) -> discord.Embed:
     curr = eco.get("currency_emoji", E_COIN)
-    E_SHOP_ICON = "<:shop:1479222993027727564>"
     embed = surface_embed(
         "gameplay",
-        title=f"{E_SHOP_ICON}  Магазин сервера",
+        title=f"{E_SHOP}  Магазин сервера",
         description="Спочатку подивіться асортимент, потім оберіть предмет кнопкою нижче. Деталі покупки приходять окремим результатом.",
     )
     embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
@@ -100,7 +110,7 @@ def build_shop_embed(eco: dict, guild: discord.Guild) -> discord.Embed:
             role_obj = guild.get_role(r["role_id"])
             if not role_obj:
                 continue
-            role_lines.append(f"🎭 **{role_obj.name}** — `{r['price']:,}` {curr}\nКупити роль назавжди")
+            role_lines.append(f"{E_ROLE} **{role_obj.name}** — `{r['price']:,}` {curr}\nКупити роль назавжди")
         if role_lines:
             add_section(embed, "Кастомні ролі", role_lines, inline=False)
 
@@ -134,7 +144,7 @@ class ShopView(discord.ui.View):
         for r in shop_roles:
             btn = discord.ui.Button(
                 label=f"Роль — {r['price']:,}",
-                emoji="🎭",
+                emoji=discord.PartialEmoji.from_str(E_ROLE),
                 style=discord.ButtonStyle.secondary,
                 custom_id=f"buy_role_{r['role_id']}"
             )
@@ -156,7 +166,7 @@ class ShopView(discord.ui.View):
 
             now = int(time.time())
 
-            log_entry = {"log": f"🔴 **{price}** | Придбано: {item['name']} | <t:{now}:t>"}
+            log_entry = {"log": f"<:minus:1485718143803457576> **{price}** | Придбано: {item['name']} | <t:{now}:t>"}
             result = await db.users.find_one_and_update(
                 {"guild_id": self.guild_id, "user_id": interaction.user.id, "wallet": {"$gte": price}},
                 {
@@ -228,7 +238,7 @@ class ShopView(discord.ui.View):
 
             now = int(time.time())
 
-            log_entry = {"log": f"🔴 **{price}** | Купівля ролі | <t:{now}:t>"}
+            log_entry = {"log": f"<:minus:1485718143803457576> **{price}** | Купівля ролі | <t:{now}:t>"}
             result = await db.users.find_one_and_update(
                 {"guild_id": self.guild_id, "user_id": interaction.user.id, "wallet": {"$gte": price}},
                 {
@@ -253,7 +263,7 @@ class ShopView(discord.ui.View):
 
             embed = gameplay_result_embed(
                 f"{E_CHECK}  Успішна покупка",
-                f"🎭 Придбано роль {role_obj.mention if role_obj else 'Unknown Role'}\n\nСплачено: **{price:,}** {curr}",
+                f"{E_ROLE} Придбано роль {role_obj.mention if role_obj else 'Unknown Role'}\n\nСплачено: **{price:,}** {curr}",
                 tone="success",
                 footer="Роль видана одразу після списання коштів.",
             )
@@ -271,7 +281,7 @@ async def build_inventory_embed_and_view(user: discord.Member, guild_id: int, ec
 
     embed = surface_embed(
         "gameplay",
-        title=f"<:inbox:1479128004847341620>  Інвентар — {user.display_name}",
+        title=f"<:inbox:1485599203815325836>  Інвентар — {user.display_name}",
         description="Тут зібрані активні бонуси, предмети та ролі, які вже були куплені.",
     )
 
@@ -289,13 +299,13 @@ async def build_inventory_embed_and_view(user: discord.Member, guild_id: int, ec
     
     cb = user_data.get("crime_ban_until", 0)
     if cb and cb > now:
-        embed.add_field(name="⛔ Розслідування", value=f"Знімається <t:{cb}:R>", inline=True)
+        embed.add_field(name=f"{E_STOP} Розслідування", value=f"Знімається <t:{cb}:R>", inline=True)
         items_found = True
     
     inv_roles = user_data.get("inventory_roles", [])
     if inv_roles:
         roles_txt = "\n".join(f"<@&{r}>" for r in inv_roles)
-        embed.add_field(name="🎭 Куплені ролі", value=roles_txt, inline=False)
+        embed.add_field(name=f"{E_ROLE} Куплені ролі", value=roles_txt, inline=False)
         items_found = True
 
     inv_data = await db.inventory.find_one({"guild_id": guild_id, "user_id": user.id}) or {}
@@ -311,9 +321,9 @@ async def build_inventory_embed_and_view(user: discord.Member, guild_id: int, ec
             if reg:
                 desc_lines.append(f"{reg['emoji']} **{reg['name']}**: `{count}` шт.")
             else:
-                desc_lines.append(f"<:openlootbox:1479952212980535498> **Невідомий предмет ({i_id})**: `{count}` шт.")
+                desc_lines.append(f"{E_LOOTBOX} **Невідомий предмет ({i_id})**: `{count}` шт.")
         
-        embed.add_field(name="🎒 Ваша сумка", value="\n".join(desc_lines), inline=False)
+        embed.add_field(name=f"{E_BACKPACK} Ваша сумка", value="\n".join(desc_lines), inline=False)
 
     if not items_found:
         embed.description = "*Тут порожньо. Завітайте до Магазину!*"
@@ -365,13 +375,13 @@ class InventoryView(discord.ui.View):
         if available_items:
             self.add_item(InventorySelect(available_items))
             
-        btn_back = discord.ui.Button(label="Назад в Економіку", style=discord.ButtonStyle.secondary, emoji="◀️")
+        btn_back = discord.ui.Button(label="Назад в Економіку", style=discord.ButtonStyle.secondary, emoji=discord.PartialEmoji.from_str(E_PREV))
         btn_back.callback = self._back_cb
         self.add_item(btn_back)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> Це не твій інвентар!", ephemeral=True)
+            await interaction.response.send_message("<:close:1485598320935174317> Це не твій інвентар!", ephemeral=True)
             return False
         return True
 
@@ -403,7 +413,7 @@ class ItemActionView(discord.ui.View):
             btn_all.callback = self._use_all
             self.add_item(btn_all)
             
-        btn_back = discord.ui.Button(label="Назад", style=discord.ButtonStyle.secondary, emoji="◀️")
+        btn_back = discord.ui.Button(label="Назад", style=discord.ButtonStyle.secondary, emoji=discord.PartialEmoji.from_str(E_PREV))
         btn_back.callback = self._back
         self.add_item(btn_back)
 
@@ -443,11 +453,11 @@ class ItemActionView(discord.ui.View):
         is_lootbox = "lootbox" in self.item_id
         if is_lootbox:
             await interaction.response.edit_message(
-                embed=discord.Embed(title="Відкриваємо...", description=f"<:openlootbox:1479952212980535498> {self.reg['name']} x{amount}...\n\n*Триває розпакування...*", color=discord.Color.gold()),
+                embed=discord.Embed(title="Відкриваємо...", description=f"{E_LOOTBOX} {self.reg['name']} x{amount}...\n\n*Триває розпакування...*", color=discord.Color.gold()),
                 view=None
             )
             import asyncio
-            for step in ["⚡", "<:firecracker:1479953348185555077>", "✨"]:
+            for step in ["<:lightning:1485725198362607847>", E_CELEBRATION, E_MAGIC]:
                 await asyncio.sleep(1)
                 await interaction.edit_original_response(
                     embed=discord.Embed(title="Відкриваємо...", description=f"{step} {self.reg['name']} x{amount}...\n\n*Триває розпакування...*", color=discord.Color.gold())
@@ -463,14 +473,14 @@ class ItemActionView(discord.ui.View):
                     {"guild_id": self.parent_view.guild_id, "user_id": interaction.user.id},
                     {"$set": {"shield_until": now + 86400}}
                 )
-                results.append("🛡️ Активовано Щит на 24 години.")
+                results.append(f"{E_SHIELD} Активовано Щит на 24 години.")
             
             elif self.item_id == "coin_boost":
                 await db.users.update_one(
                     {"guild_id": self.parent_view.guild_id, "user_id": interaction.user.id},
                     {"$set": {"xp_boost_until": now + 3600}}
                 )
-                results.append(f"⭐ Активовано Coin Буст на 1 годину.")
+                results.append(f"{E_STAR} Активовано Coin Буст на 1 годину.")
                 
             elif self.item_id == "crime_pass":
                 user_u = await get_user(db, self.parent_view.guild_id, interaction.user.id)
@@ -479,9 +489,9 @@ class ItemActionView(discord.ui.View):
                         {"guild_id": self.parent_view.guild_id, "user_id": interaction.user.id},
                         {"$unset": {"crime_ban_until": ""}}
                     )
-                    results.append("<:crimepass:1479951455543889970> Знято обмеження розслідування /crime.")
+                    results.append(f"{E_CRIMEPASS} Знято обмеження розслідування /crime.")
                 else:
-                    results.append("<:crimepass:1479951455543889970> Обмежень не було знайдено (витрачено дарма).")
+                    results.append(f"{E_CRIMEPASS} Обмежень не було знайдено (витрачено дарма).")
                     
             elif self.item_id == "lootbox_common":
                 opts = [
@@ -493,14 +503,14 @@ class ItemActionView(discord.ui.View):
                 if win[2] == "coins":
                     c = random.randint(win[0], win[1])
                     total_coins += c
-                    results.append(f"🟢 +{c:,} монет")
+                    results.append(f"{E_PLUS} +{c:,} монет")
                 else:
                     await db.inventory.update_one(
                         {"guild_id": self.parent_view.guild_id, "user_id": interaction.user.id},
                         {"$inc": {"items.shield": 1}},
                         upsert=True
                     )
-                    results.append(f"🛡️ Отримано Щит (в інвентар)")
+                    results.append(f"{E_SHIELD} Отримано Щит (в інвентар)")
                     
             elif self.item_id == "lootbox_rare":
                 opts = [
@@ -513,28 +523,28 @@ class ItemActionView(discord.ui.View):
                 if win[2] == "coins":
                     c = random.randint(win[0], win[1])
                     total_coins += c
-                    results.append(f"🟢 +{c:,} монет")
+                    results.append(f"{E_PLUS} +{c:,} монет")
                 elif win[2] == "coin_boost":
                     await db.inventory.update_one(
                         {"guild_id": self.parent_view.guild_id, "user_id": interaction.user.id},
                         {"$inc": {"items.coin_boost": 1}},
                         upsert=True
                     )
-                    results.append(f"⭐ Отримано Coin Буст (в інвентар)")
+                    results.append(f"{E_STAR} Отримано Coin Буст (в інвентар)")
                 else:
                     await db.inventory.update_one(
                         {"guild_id": self.parent_view.guild_id, "user_id": interaction.user.id},
                         {"$inc": {"items.crime_pass": 1}},
                         upsert=True
                     )
-                    results.append(f"<:crimepass:1479951455543889970> Отримано Crime Pass (в інвентар)")
+                    results.append(f"{E_CRIMEPASS} Отримано Crime Pass (в інвентар)")
                     
         if total_coins > 0:
             await db.users.update_one(
                 {"guild_id": self.parent_view.guild_id, "user_id": interaction.user.id},
                 {
                     "$inc": {"wallet": total_coins},
-                    "$push": {"eco_history": {"$each": [{"log": f"🟢 **{total_coins}** | Лутбокс дроп | <t:{now}:t>"}], "$slice": -50}}
+                    "$push": {"eco_history": {"$each": [{"log": f"{E_PLUS} **{total_coins}** | Лутбокс дроп | <t:{now}:t>"}], "$slice": -50}}
                 }
             )
             
@@ -543,7 +553,7 @@ class ItemActionView(discord.ui.View):
             log_res += f"\n*...та ще {len(results)-15} предметів*"
             
         if total_coins > 0:
-            log_res += f"\n\n<:Coins:1478486725113286899> **Загалом монет:** {total_coins:,} {curr}"
+            log_res += f"\n\n<:coins:1485612564619727011> **Загалом монет:** {total_coins:,} {curr}"
             
         embed = discord.Embed(
             title=f"{E_CHECK} Успішно ({self.reg['name']} x{amount})",
@@ -552,7 +562,7 @@ class ItemActionView(discord.ui.View):
         )
         
         view_back = discord.ui.View()
-        btn_back = discord.ui.Button(label="Повернутися до Інвентарю", style=discord.ButtonStyle.secondary, emoji="🎒")
+        btn_back = discord.ui.Button(label="Повернутися до Інвентарю", style=discord.ButtonStyle.secondary, emoji=discord.PartialEmoji.from_str(E_BACKPACK))
         
         async def _back_to_inv(i: discord.Interaction):
             emb, vw = await build_inventory_embed_and_view(i.user, self.parent_view.guild_id, self.parent_view.eco, self.parent_view.main_eco_view)

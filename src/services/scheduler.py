@@ -2,13 +2,14 @@ import discord
 from discord.ext import commands, tasks
 import time
 import datetime
+from config.constants import Emojis
 from modules.db import get_database
 from repositories.user import get_user
 from commands.administration.economy_setup import get_eco
 
 db = get_database()
 
-RANK_BADGES = {1: "<:trophy:1475953207782932602>", 2: "<:medal:1475953523039408360>", 3: "<:star:1475954213455532067>"}
+RANK_BADGES = {1: Emojis.TROPHY.value, 2: Emojis.MEDAL.value, 3: Emojis.STAR.value}
 
 class SchedulerCog(commands.Cog):
     def __init__(self, bot):
@@ -68,7 +69,7 @@ class SchedulerCog(commands.Cog):
                                 {"_id": u["_id"]},
                                 {
                                     "$inc": {"bank": profit, "total_earned": profit},
-                                    "$push": {"eco_history": {"$each": [{"log": f"🟢 **{profit}** | Банківські відсотки | <t:{now}:t>"}], "$slice": -50}}
+                                    "$push": {"eco_history": {"$each": [{"log": f"{Emojis.PLUS.value} **{profit}** | Банківські відсотки | <t:{now}:t>"}], "$slice": -50}}
                                 }
                             )
                     updates["scheduler_state.last_bank_interest"] = today_str
@@ -106,7 +107,7 @@ async def perform_season_reset(guild: discord.Guild, eco: dict = None, gd: dict 
         eco = get_eco(gd)
 
     season_num = eco.get("season_number", 1)
-    curr = eco.get("currency_emoji", "<:coin:1478487028105482485>")
+    curr = eco.get("currency_emoji", Emojis.COIN.value)
     curr_name = eco.get("currency_name", "Coin")
 
     # 1. Знайти топ 3 гравців (за wallet + bank)
@@ -188,7 +189,7 @@ async def perform_season_reset(guild: discord.Guild, eco: dict = None, gd: dict 
 
     if channel:
         embed = discord.Embed(
-            title=f"<:trophy:1475953207782932602> Сезон {season_num} завершено!",
+            title=f"{Emojis.TROPHY.value} Сезон {season_num} завершено!",
             description=f"Розпочинається **Сезон {season_num + 1}**!\n\n"
                         f"{'▸ Стартовий бонус: `' + str(start_bonus) + '` ' + curr if start_bonus > 0 else ''}",
             color=0xFFD700

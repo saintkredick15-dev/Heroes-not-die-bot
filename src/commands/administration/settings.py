@@ -14,10 +14,10 @@ from utils.ui_contract import add_section, compact_kv, set_surface_footer, surfa
 db = get_database()
 _col = db.guild_settings
 
-E_SETTING = "<:settings:1476196821444591768>"
-E_CHECK   = "<:check:1454140864627740834>"
-E_CROSS   = "<:krestik:1476693091355463842>"
-E_NOTIF   = "<:notification:1476256523519787161>"
+E_SETTING = "<:settings:1485606007668342865>"
+E_CHECK   = "<:check:1485597845883981905>"
+E_CROSS   = "<:close:1485598320935174317>"
+E_NOTIF   = "<:notification_on:1485609281062572142>"
 RESTRICTABLE_COMMANDS = {
     "meme":        "Випадковий мем з Reddit",
     "avatar":      "Аватар користувача",

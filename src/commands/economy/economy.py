@@ -3,6 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 import time
 import random
+import math
 
 from modules.db import get_database
 from repositories.user import get_user
@@ -13,12 +14,12 @@ from utils.ui_contract import add_section, compact_kv, gameplay_result_embed, se
 
 db = get_database()
 
-E_HISTORY = "<:historylist:1478824658332684510>"
-E_ROBBERY = "<:robbery:1478496325887725814>"
-E_BACK    = "<:totheleft:1478825190749110323>"
-E_INBOX   = "<:inbox:1479128004847341620>"
-E_CHECK   = "<:cutiecheckmark:1479120440734650389>"
-E_CROSS   = "<:krestik:1476693091355463842>"
+E_HISTORY = "<:history:1485601911599009893>"
+E_ROBBERY = "<:mask:1485625427014713394>"
+E_BACK    = "<:prevtotheleft:1485600254760980501>"
+E_INBOX   = "<:inbox:1485599203815325836>"
+E_CHECK   = "<:check:1485597845883981905>"
+E_CROSS   = "<:close:1485598320935174317>"
 
 class ValueModal(discord.ui.Modal):
     def __init__(self, owner_id: int, action: str, eco: dict, term: str = None):
@@ -56,7 +57,7 @@ class ValueModal(discord.ui.Modal):
         bank = user_data.get("bank", 0)
         level = user_data.get("level", 1)
         bank_limit = self.eco.get("bank_base_limit", 10000) + (self.eco.get("bank_level_multiplier", 1000) * level)
-        currency = self.eco.get("currency_emoji", "<:coin:1478487028105482485>")
+        currency = self.eco.get("currency_emoji", "<:coin:1485610808003133552>")
 
         val_str = self.amount.value.strip().lower()
         if val_str == 'all':
@@ -68,18 +69,18 @@ class ValueModal(discord.ui.Modal):
             try:
                 amount = int(val_str)
             except ValueError:
-                return await interaction.response.send_message("<:cutiex:1480246146076119132> Будь ласка, введіть число або 'all'.", ephemeral=True)
+                return await interaction.response.send_message("<:close:1485598320935174317> Будь ласка, введіть число або 'all'.", ephemeral=True)
 
         if amount <= 0:
-            return await interaction.response.send_message("<:cutiex:1480246146076119132> Сума має бути більшою за нуль.", ephemeral=True)
+            return await interaction.response.send_message("<:close:1485598320935174317> Сума має бути більшою за нуль.", ephemeral=True)
 
         log_item = None
         if self.action == "deposit":
             if bank + amount > bank_limit:
                 max_dep = bank_limit - bank
                 if max_dep <= 0:
-                    return await interaction.response.send_message("<:cutiex:1480246146076119132> Ваш банк переповнений!", ephemeral=True)
-                return await interaction.response.send_message(f"<:cutiex:1480246146076119132> Ви не можете покласти стільки. Доступне місце: **{max_dep}** {currency}", ephemeral=True)
+                    return await interaction.response.send_message("<:close:1485598320935174317> Ваш банк переповнений!", ephemeral=True)
+                return await interaction.response.send_message(f"<:close:1485598320935174317> Ви не можете покласти стільки. Доступне місце: **{max_dep}** {currency}", ephemeral=True)
             
             desc = f"Депозит у банк" + (f" (Термін: {self.term})" if self.term else "")
             log_item = make_log(-amount, desc)
@@ -90,13 +91,13 @@ class ValueModal(discord.ui.Modal):
             )
             
             if not result:
-                return await interaction.response.send_message(f"<:cutiex:1480246146076119132> Недостатньо коштів у гаманці. У вас: **{wallet}** {currency}", ephemeral=True)
+                return await interaction.response.send_message(f"<:close:1485598320935174317> Недостатньо коштів у гаманці. У вас: **{wallet}** {currency}", ephemeral=True)
 
             from modules.db import invalidate_user_data
             await invalidate_user_data(interaction.guild.id, interaction.user.id)
 
             await quest_hook(interaction.guild.id, interaction.user.id, "economy.deposit")
-            await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Ви успішно поклали **{amount}** {currency} у банк" + (f" на термін **{self.term}**" if self.term else "") + ".", ephemeral=True)
+            await interaction.response.send_message(f"<:check:1485597845883981905> Ви успішно поклали **{amount}** {currency} у банк" + (f" на термін **{self.term}**" if self.term else "") + ".", ephemeral=True)
 
         elif self.action == "withdraw":
             log_item = make_log(amount, "Зняття з банку")
@@ -107,12 +108,12 @@ class ValueModal(discord.ui.Modal):
             )
             
             if not result:
-                return await interaction.response.send_message(f"<:cutiex:1480246146076119132> Недостатньо коштів у банку. У вас: **{bank}** {currency}", ephemeral=True)
+                return await interaction.response.send_message(f"<:close:1485598320935174317> Недостатньо коштів у банку. У вас: **{bank}** {currency}", ephemeral=True)
 
             from modules.db import invalidate_user_data
             await invalidate_user_data(interaction.guild.id, interaction.user.id)
 
-            await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Ви успішно зняли **{amount}** {currency} з банку.", ephemeral=True)
+            await interaction.response.send_message(f"<:check:1485597845883981905> Ви успішно зняли **{amount}** {currency} з банку.", ephemeral=True)
 
         elif self.action == "transfer":
             # Анти-твінк захист: щоб малі рівні не перекидали віртуальну валюту туди-сюди
@@ -126,18 +127,23 @@ class ValueModal(discord.ui.Modal):
             raw_id = self.target_id.value.strip()
 
             if not raw_id.isdigit():
-                return await interaction.response.send_message("<:cutiex:1480246146076119132> ID отримувача має складатися з цифр.", ephemeral=True)
+                return await interaction.response.send_message("<:close:1485598320935174317> ID отримувача має складатися з цифр.", ephemeral=True)
             target_user_id = int(raw_id)
 
             if target_user_id == interaction.user.id:
-                return await interaction.response.send_message("<:cutiex:1480246146076119132> Не можна переказати кошти самому собі.", ephemeral=True)
+                return await interaction.response.send_message("<:close:1485598320935174317> Не можна переказати кошти самому собі.", ephemeral=True)
 
             target_member = interaction.guild.get_member(target_user_id)
             if not target_member or target_member.bot:
-                return await interaction.response.send_message("<:cutiex:1480246146076119132> Неможливо знайти такого користувача.", ephemeral=True)
+                return await interaction.response.send_message("<:close:1485598320935174317> Неможливо знайти такого користувача.", ephemeral=True)
 
-            tax_amount = int(amount * tax_pct / 100)
+            tax_amount = math.ceil(amount * tax_pct / 100) if tax_pct > 0 else 0
             received   = amount - tax_amount
+            if received <= 0:
+                return await interaction.response.send_message(
+                    f"<:close:1485598320935174317> Після податку переказ не залишає валідної суми для отримувача.",
+                    ephemeral=True,
+                )
             today      = _time.strftime("%Y-%m-%d")
 
             query_filter = {
@@ -167,9 +173,9 @@ class ValueModal(discord.ui.Modal):
                 remaining  = max(0, day_lim - today_sent) if day_lim > 0 else 0
                 if day_lim > 0 and remaining < amount:
                     return await interaction.response.send_message(
-                        f"<:cutiex:1480246146076119132> Добовий ліміт переказів: `{day_lim:,}` {currency}. Залишилось: `{remaining:,}`", ephemeral=True
+                        f"<:close:1485598320935174317> Добовий ліміт переказів: `{day_lim:,}` {currency}. Залишилось: `{remaining:,}`", ephemeral=True
                     )
-                return await interaction.response.send_message(f"<:cutiex:1480246146076119132> Недостатньо коштів. У вас: **{wallet}** {currency}", ephemeral=True)
+                return await interaction.response.send_message(f"<:close:1485598320935174317> Недостатньо коштів. У вас: **{wallet}** {currency}", ephemeral=True)
 
             from modules.db import invalidate_user_data
             await invalidate_user_data(interaction.guild.id, interaction.user.id)
@@ -185,7 +191,7 @@ class ValueModal(discord.ui.Modal):
             await invalidate_user_data(interaction.guild.id, target_user_id)
             tax_msg = f" (податок: **{tax_amount}** {currency})" if tax_amount else ""
             await interaction.response.send_message(
-                f"<:cutiecheckmark:1479120440734650389> Переказано **{received}** {currency} користувачу {target_member.mention}.{tax_msg}", ephemeral=True
+                f"<:check:1485597845883981905> Переказано **{received}** {currency} користувачу {target_member.mention}.{tax_msg}", ephemeral=True
             )
 
 class DepositTermView(discord.ui.View):
@@ -201,7 +207,7 @@ class DepositTermView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> Це не твій вибір!", ephemeral=True)
+            await interaction.response.send_message("<:close:1485598320935174317> Це не твій вибір!", ephemeral=True)
             return False
         return True
 
@@ -240,7 +246,7 @@ class HistoryPaginatorView(discord.ui.View):
     def _build_embed(self) -> discord.Embed:
         filtered = self._get_filtered_hist()
         max_page = max(0, (len(filtered) - 1) // self.per_page)
-        embed = surface_embed("gameplay", "📜 Історія транзакцій")
+        embed = surface_embed("gameplay", f"{E_HISTORY} Історія транзакцій")
         if not filtered:
             embed.description = "Історія порожня."
         else:
@@ -252,7 +258,7 @@ class HistoryPaginatorView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> Це не ваша історія!", ephemeral=True)
+            await interaction.response.send_message("<:close:1485598320935174317> Це не ваша історія!", ephemeral=True)
             return False
         return True
 
@@ -263,13 +269,13 @@ class HistoryPaginatorView(discord.ui.View):
         embed = build_economy_embed(interaction.user, user_data, self.main_view.eco)
         await interaction.response.edit_message(embed=embed, view=self.main_view)
 
-    @discord.ui.button(emoji="◀️", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(E_LEFT), style=discord.ButtonStyle.secondary, row=1)
     async def btn_prev(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.page -= 1
         self._update_buttons()
         await interaction.response.edit_message(embed=self._build_embed(), view=self)
 
-    @discord.ui.button(emoji="▶️", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(E_NEXT), style=discord.ButtonStyle.secondary, row=1)
     async def btn_next(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.page += 1
         self._update_buttons()
@@ -298,7 +304,7 @@ class HistoryPaginatorView(discord.ui.View):
 
 # ── Rob Modal (Пограбувати по ID прямо з /economy) ────────────────────────────
 
-class RobModal(discord.ui.Modal, title="<:crimepass:1479951455543889970> Пограбування"):
+class RobModal(discord.ui.Modal, title="<:crimepass:1485614625025425529> Пограбування"):
     target_input = discord.ui.TextInput(
         label="Discord ID жертви",
         placeholder="123456789012345678",
@@ -316,7 +322,7 @@ class RobModal(discord.ui.Modal, title="<:crimepass:1479951455543889970> Пог�
     async def on_submit(self, interaction: discord.Interaction):
         import time as _t
         eco   = self.eco
-        curr  = eco.get("currency_emoji", "<:coin:1478487028105482485>")
+        curr  = eco.get("currency_emoji", "<:coin:1485610808003133552>")
 
         raw = self.target_input.value.strip()
         if not raw.isdigit():
@@ -342,7 +348,7 @@ class RobModal(discord.ui.Modal, title="<:crimepass:1479951455543889970> Пог�
             remaining = rob_cd - (now - last_rob)
             m, s = divmod(remaining, 60)
             return await interaction.response.send_message(
-                f"<:clock:1476209087804084328> Наступне пограбування через **{m}хв {s}с**.", ephemeral=True
+                f"<:clock:1485618008784113796> Наступне пограбування через **{m}хв {s}с**.", ephemeral=True
             )
 
         victim_data   = await get_user(db, self.guild_id, target_id)
@@ -376,7 +382,7 @@ class RobModal(discord.ui.Modal, title="<:crimepass:1479951455543889970> Пог�
             )
             
             if not victim_res:
-                return await interaction.response.send_message(f"<:cutiex:1480246146076119132> Жертва встигла заховати гроші...", ephemeral=True)
+                return await interaction.response.send_message(f"<:close:1485598320935174317> Жертва встигла заховати гроші...", ephemeral=True)
 
             from modules.db import invalidate_user_data
             await invalidate_user_data(interaction.guild.id, target_id)
@@ -435,7 +441,7 @@ class MainEconomyView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> Це не твій гаманець!", ephemeral=True)
+            await interaction.response.send_message("<:close:1485598320935174317> Це не твій гаманець!", ephemeral=True)
             return False
         return True
 
@@ -466,7 +472,7 @@ class MainEconomyView(discord.ui.View):
             return await interaction.response.send_message(f"{E_CROSS} Пограбування вимкнено на цьому сервері.", ephemeral=True)
         await interaction.response.send_modal(RobModal(self.owner_id, self.eco, interaction.guild.id))
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:inbox:1479128004847341620>"), label="Інвентар", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:inbox:1485599203815325836>"), label="Інвентар", style=discord.ButtonStyle.secondary)
     async def inventory_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         from commands.economy.shop import build_inventory_embed_and_view
         eco       = self.eco
@@ -491,7 +497,7 @@ class HistoryBackView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> Це не ваша історія!", ephemeral=True)
+            await interaction.response.send_message("<:close:1485598320935174317> Це не ваша історія!", ephemeral=True)
             return False
         return True
 
@@ -508,7 +514,7 @@ def build_economy_embed(user: discord.Member, data: dict, eco: dict) -> discord.
     level = data.get("level", 1)
     
     bank_limit = eco.get("bank_base_limit", 10000) + (eco.get("bank_level_multiplier", 1000) * level)
-    emoji = eco.get("currency_emoji", "<:coin:1478487028105482485>")
+    emoji = eco.get("currency_emoji", "<:coin:1485610808003133552>")
 
 
     total = wallet + bank
@@ -536,7 +542,7 @@ class EconomyCommand(commands.Cog):
         settings = await get_guild_settings(db, interaction.guild.id)
         eco = settings.get("economy", {})
         if not eco.get("enabled", True):
-            return await interaction.response.send_message("<:cutiex:1480246146076119132> Економіка на цьому сервері вимкнена.", ephemeral=True)
+            return await interaction.response.send_message("<:close:1485598320935174317> Економіка на цьому сервері вимкнена.", ephemeral=True)
 
         user_data = await get_user(db, interaction.guild.id, interaction.user.id)
         embed = build_economy_embed(interaction.user, user_data, eco)

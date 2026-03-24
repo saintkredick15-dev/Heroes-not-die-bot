@@ -9,6 +9,7 @@ import asyncio
 import discord
 from discord import app_commands
 from discord.ext import commands
+from config.constants import Emojis
 
 class ArchiveSystem(commands.Cog):
     def __init__(self, bot):
@@ -29,11 +30,11 @@ class ArchiveSystem(commands.Cog):
         limit: int = 100
     ):
         if limit > 2000:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> Ліміт не може перевищувати 2000 повідомлень за раз (захист від спам-лімітів).", ephemeral=True)
+            await interaction.response.send_message("<:close:1485598320935174317> Ліміт не може перевищувати 2000 повідомлень за раз (захист від спам-лімітів).", ephemeral=True)
             return
             
         if from_channel.id == to_channel.id:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> Канали джерела і призначення не можуть збігатися.", ephemeral=True)
+            await interaction.response.send_message("<:close:1485598320935174317> Канали джерела і призначення не можуть збігатися.", ephemeral=True)
             return
 
         # Валідація вебхуку (вебхуки створюються ТІЛЬКИ на TextChannel або NewsChannel)
@@ -48,7 +49,7 @@ class ArchiveSystem(commands.Cog):
             target_thread = to_channel
             
         if not isinstance(target_channel_for_webhook, discord.TextChannel):
-            await interaction.response.send_message("<:cutiex:1480246146076119132> Вебхуки підтримуються тільки у текстових каналах або гілках текстових каналів.", ephemeral=True)
+            await interaction.response.send_message("<:close:1485598320935174317> Вебхуки підтримуються тільки у текстових каналах або гілках текстових каналів.", ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -65,11 +66,11 @@ class ArchiveSystem(commands.Cog):
             try:
                 webhook = await target_channel_for_webhook.create_webhook(name="Vangard Archiver", reason="Created for chat export")
             except discord.Forbidden:
-                await interaction.followup.send("<:cutiex:1480246146076119132> У бота немає прав керувати вебхуками в цільовому каналі.", ephemeral=True)
+                await interaction.followup.send("<:close:1485598320935174317> У бота немає прав керувати вебхуками в цільовому каналі.", ephemeral=True)
                 return
                 
         # 2. Отримуємо історію повідомлень з from_channel
-        await interaction.followup.send(f"🔄 Починаю завантаження останніх {limit} повідомлень з {from_channel.mention}...", ephemeral=True)
+        await interaction.followup.send(f"{Emojis.RELOAD.value} Починаю завантаження останніх {limit} повідомлень з {from_channel.mention}...", ephemeral=True)
         
         messagesToExport = []
         try:
@@ -80,16 +81,16 @@ class ArchiveSystem(commands.Cog):
             history = [msg async for msg in from_channel.history(limit=limit)]
             messagesToExport = history[::-1] # Реверсуємо, щоб старіші були першими
         except discord.Forbidden:
-            await interaction.followup.send("<:cutiex:1480246146076119132> У бота немає прав читати історію в початковому каналі.", ephemeral=True)
+            await interaction.followup.send("<:close:1485598320935174317> У бота немає прав читати історію в початковому каналі.", ephemeral=True)
             return
 
         if not messagesToExport:
-            await interaction.followup.send("<:cutiex:1480246146076119132> В цьому каналі немає жодного повідомлення.", ephemeral=True)
+            await interaction.followup.send("<:close:1485598320935174317> В цьому каналі немає жодного повідомлення.", ephemeral=True)
             return
 
         # Робимо прогрес-бар
         total = len(messagesToExport)
-        progress_msg = await interaction.followup.send(f"<:Hourglass:1479950504321745026> Скопійовано: 0/{total}... (це може зайняти хвилину)", ephemeral=True, wait=True)
+        progress_msg = await interaction.followup.send(f"<:hourglass:1485598603937579181> Скопійовано: 0/{total}... (це може зайняти хвилину)", ephemeral=True, wait=True)
         
         success = 0
         failed = 0
@@ -136,12 +137,12 @@ class ArchiveSystem(commands.Cog):
             
             if (i + 1) % 10 == 0:
                 try:
-                    await progress_msg.edit(content=f"<:Hourglass:1479950504321745026> Скопійовано: {i+1}/{total}...")
+                    await progress_msg.edit(content=f"<:hourglass:1485598603937579181> Скопійовано: {i+1}/{total}...")
                 except:
                     pass
 
         # 4. Фінал
-        await progress_msg.edit(content=f"<:cutiecheckmark:1479120440734650389> Експорт завершено!\nУспішно: **{success}**\nПомилок: **{failed}**\nПеревірте канал {to_channel.mention}.")
+        await progress_msg.edit(content=f"<:check:1485597845883981905> Експорт завершено!\nУспішно: **{success}**\nПомилок: **{failed}**\nПеревірте канал {to_channel.mention}.")
 
 async def setup(bot):
     await bot.add_cog(ArchiveSystem(bot))

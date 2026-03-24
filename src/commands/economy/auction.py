@@ -8,7 +8,7 @@ from utils.ui_contract import add_section, set_surface_footer, surface_embed
 
 db = get_database()
 
-E_AUCTION = "<:Auction:1479863712855621805>"
+E_AUCTION = "<:hammer:1485606127696609412>"
 
 
 class AuctionCommand(commands.Cog):

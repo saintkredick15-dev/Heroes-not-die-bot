@@ -23,15 +23,15 @@ from utils.ui_contract import gameplay_result_embed, set_surface_footer, surface
 
 db = get_database()
 
-E_COIN   = "<:coin:1478487028105482485>"
-E_CHECK  = "<:cutiecheckmark:1479120440734650389>"
-E_CROSS  = "<:krestik:1476693091355463842>"
+E_COIN   = "<:coin:1485610808003133552>"
+E_CHECK  = "<:check:1485597845883981905>"
+E_CROSS  = "<:close:1485598320935174317>"
 
 COLOR_BASE = 0x1a1a2e
 
-ROCK     = "<:rock:1479144895947210752>"
-PAPER    = "<:paper:1479145167721205810>"
-SCISSORS = "<:Scissors:1479145292522590360>"
+ROCK     = "??"
+PAPER    = "??"
+SCISSORS = "??"
 
 RPS_NAMES  = {ROCK: "Камінь", PAPER: "Папір", SCISSORS: "Ножиці"}
 BEATS      = {ROCK: SCISSORS, SCISSORS: PAPER, PAPER: ROCK}
@@ -118,13 +118,13 @@ class MoveView(discord.ui.View):
         except Exception:
             pass
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:rock:1479144895947210752>"), style=discord.ButtonStyle.secondary)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str("??"), style=discord.ButtonStyle.secondary)
     async def rock(self, i, b): await self._pick(i, ROCK)
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:Scissors:1479145292522590360>"), style=discord.ButtonStyle.secondary)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str("??"), style=discord.ButtonStyle.secondary)
     async def scissors(self, i, b): await self._pick(i, SCISSORS)
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:paper:1479145167721205810>"), style=discord.ButtonStyle.secondary)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str("??"), style=discord.ButtonStyle.secondary)
     async def paper(self, i, b): await self._pick(i, PAPER)
 
 # ── Кнопка "Зробити хід" ─────────────────────────────────────────────────────
@@ -288,7 +288,7 @@ class DuelGame:
 
         final = gameplay_result_embed(
             "Переможець!",
-            f"<:trophy:1475953207782932602> {winner.mention}\n\n**{self.ch_wins} : {self.tg_wins}**\nПриз: **{prize:,}** {curr}",
+            f"<:trophytop1:1485625873880191067> {winner.mention}\n\n**{self.ch_wins} : {self.tg_wins}**\nПриз: **{prize:,}** {curr}",
             tone="success",
         )
         await msg.edit(embed=final, view=None)

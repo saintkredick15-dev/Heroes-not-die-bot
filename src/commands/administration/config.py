@@ -22,15 +22,15 @@ from utils.ui_contract import add_section, compact_kv, set_surface_footer, surfa
 db = get_database()
 _col = db.guild_settings
 
-E_SETTING = "<:settings:1476196821444591768>"
-E_CHECK = "<:check:1454140864627740834>"
-E_CROSS = "<:krestik:1476693091355463842>"
-E_BANK = "<:bank:1478483868867891261>"
-E_HAMMER = "<:hammer:1477376411642761479>"
-E_NOTIF = "<:notification:1476256523519787161>"
-E_LIST = "<:list:1454151067989184562>"
-E_WARN = "<:warn:1477376152191373504>"
-E_HI = "<:hi:1476689510560567456>"
+E_SETTING = "<:settings:1485606007668342865>"
+E_CHECK = "<:check:1485597845883981905>"
+E_CROSS = "<:close:1485598320935174317>"
+E_BANK = "<:bank_safe:1485637217132216571>"
+E_HAMMER = "<:hammer:1485606127696609412>"
+E_NOTIF = "<:notification_on:1485609281062572142>"
+E_LIST = "<:menuandlist:1485605053246083143>"
+E_WARN = "<:warning:1485598476850040843>"
+E_HI = "<:notification_on:1485609281062572142>"
 EMBED_COLOR = 0x1A1A2E
 CONFIG_SCHEMA_VERSION = 1
 _URL_RE = re.compile(r'https?://[^\s<>"{}|\\^`\[\]]+', re.IGNORECASE)

@@ -34,10 +34,10 @@ class CaptchaModal(discord.ui.Modal, title="🤖 Перевірка на люд�
 
     async def on_submit(self, interaction: discord.Interaction):
         if self.captcha_input.value.strip() == self.expected_text:
-            await interaction.response.edit_message(content="<:cutiecheckmark:1479120440734650389> Капча пройдена успішно!", embed=None, view=None, attachments=[])
+            await interaction.response.edit_message(content="<:check:1485597845883981905> Капча пройдена успішно!", embed=None, view=None, attachments=[])
             await self.daily_callback(interaction)
         else:
-            await interaction.response.edit_message(content="<:cutiex:1480246146076119132> Неправильний текст. Спробуй ще раз пізніше.", embed=None, view=None, attachments=[])
+            await interaction.response.edit_message(content="<:close:1485598320935174317> Неправильний текст. Спробуй ще раз пізніше.", embed=None, view=None, attachments=[])
 
 class CaptchaView(discord.ui.View):
     def __init__(self, owner_id: int, expected_text: str, daily_callback):
@@ -48,7 +48,7 @@ class CaptchaView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> Це не твоя капча!", ephemeral=True)
+            await interaction.response.send_message("<:close:1485598320935174317> Це не твоя капча!", ephemeral=True)
             return False
         return True
 
@@ -96,9 +96,9 @@ class DailyCommand(commands.Cog):
         await quest_hook(interaction.guild.id, interaction.user.id, "economy.daily")
         await apply_inflation(db, interaction.guild.id, final_earned, eco)
 
-        emoji = eco.get("currency_emoji", "<:coin:1478487028105482485>")
-        flame = "<:flame:1478490474145906800>"
-        calendar = "<:calendar:1476195260236435608>"
+        emoji = eco.get("currency_emoji", "<:coin:1485610808003133552>")
+        flame = "<:flame:1485618663489929356>"
+        calendar = "<:info:1485638054201921536>"
         
         earned_text = f"{final_earned} {emoji}"
         if tax > 0:
@@ -121,7 +121,7 @@ class DailyCommand(commands.Cog):
             settings = await get_guild_settings(db, interaction.guild.id)
             eco = settings.get("economy", {})
             if not eco.get("enabled", True):
-                await interaction.response.send_message("<:cutiex:1480246146076119132> Економіка на цьому сервері вимкнена.", ephemeral=True)
+                await interaction.response.send_message("<:close:1485598320935174317> Економіка на цьому сервері вимкнена.", ephemeral=True)
                 return
             # Ріжемо фермерів: твінкам тут не місце
             from utils.eco_helpers import check_account_age
@@ -139,7 +139,7 @@ class DailyCommand(commands.Cog):
                 remaining = int(cooldown - (now - last_daily))
                 h, m = divmod(remaining // 60, 60)
                 time_str = f"{h}г {m}хв"
-                await interaction.response.send_message(f"<:Hourglass:1479950504321745026> Ти вже отримав свою щоденну нагороду! Повертайся через **{time_str}**.", ephemeral=True)
+                await interaction.response.send_message(f"<:hourglass:1485598603937579181> Ти вже отримав свою щоденну нагороду! Повертайся через **{time_str}**.", ephemeral=True)
                 return
 
             if eco.get("captcha_enabled", False) and ImageCaptcha:
@@ -171,9 +171,9 @@ class DailyCommand(commands.Cog):
 
         except Exception as e:
             if not interaction.response.is_done():
-                await interaction.response.send_message(f"<:warn:1477376152191373504> Помилка: `{e}`", ephemeral=True)
+                await interaction.response.send_message(f"<:warning:1485598476850040843> Помилка: `{e}`", ephemeral=True)
             else:
-                await interaction.followup.send(f"<:warn:1477376152191373504> Помилка: `{e}`", ephemeral=True)
+                await interaction.followup.send(f"<:warning:1485598476850040843> Помилка: `{e}`", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(DailyCommand(bot))

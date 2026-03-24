@@ -9,6 +9,7 @@ from __future__ import annotations
 import discord
 from discord.ext import commands, tasks
 from datetime import datetime, timezone, timedelta
+from config.constants import Emojis
 from modules.db import get_database
 
 db = get_database()
@@ -16,15 +17,15 @@ _col_settings = db.guild_settings
 _col_analytics = db.guild_analytics
 
 # ── Emoji ────────────────────────────────────────────────────────────────────
-E_CHAT    = "<:chat:1475953787687403716>"
-E_MICRO   = "<:micro:1475954046350135346>"
-E_MEMBERS = "<:autorole:1476198471307624530>"
-E_COINS   = "<:coins:1477376020318388274>"
-E_WARN    = "<:warn:1477376152191373504>"
-E_MUTE    = "<:mutemicro:1476200127063396443>"
-E_BAN     = "<:ban:1476199074494681170>"
-E_STATS   = "<:statistics:1477721796857041067>"
-E_HAMMER  = "<:hammer:1477376411642761479>"
+E_CHAT    = Emojis.CHAT.value
+E_MICRO   = Emojis.MICRO.value
+E_MEMBERS = Emojis.AUTOROLE.value
+E_COINS   = Emojis.COINS_ALT.value
+E_WARN    = Emojis.WARN.value
+E_MUTE    = Emojis.MUTE.value
+E_BAN     = Emojis.BAN.value
+E_STATS   = Emojis.STATS.value
+E_HAMMER  = Emojis.HAMMER.value
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

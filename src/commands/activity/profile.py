@@ -17,15 +17,15 @@ matplotlib.rcParams["axes.unicode_minus"] = False
 _log = logging.getLogger("profile")
 db = get_database()
 
-E_CHAT = "<:chat:1475953787687403716>"
-E_MICRO = "<:micro:1475954046350135346>"
-E_STAR = "<:star:1475954213455532067>"
-E_CALENDAR = "<:calendar:1476195260236435608>"
-E_COIN = "<:coin:1478487028105482485>"
-E_FLAME = "<:flame:1478490474145906800>"
-E_SHIELD = "<:shield:1478800925664612372>"
-E_BOOST = "<:boost:1478073594247643377>"
-E_BANK = "<:bank:1478483868867891261>"
+E_CHAT = "<:chat:1485608210202361976>"
+E_MICRO = "<:micro:1485608331484729344>"
+E_STAR = "<:star:1485626121847574631>"
+E_CALENDAR = "<:info:1485638054201921536>"
+E_COIN = "<:coin:1485610808003133552>"
+E_FLAME = "<:flame:1485618663489929356>"
+E_SHIELD = "<:shield:1485606277081071666>"
+E_BOOST = "<:boost:1485610043033518131>"
+E_BANK = "<:bank_safe:1485637217132216571>"
 
 
 def make_xp_bar(xp: int, needed: int, length: int = 8) -> str:
@@ -130,18 +130,18 @@ class ProfileCommands(commands.Cog):
             )
             add_section(
                 embed,
-                "<:Coins:1478486725113286899> Економіка",
+                "<:coins:1485612564619727011> Економіка",
                 [
                     f"{E_COIN} Гаманець: **{wallet:,}**",
                     f"{E_BANK} Банк: **{bank:,}**",
                     f"{E_FLAME} Стрік: **{streak}** днів",
-                    f"<:cutiecheckmark:1479120440734650389> Квестів: **{quests}**",
+                    f"<:check:1485597845883981905> Квестів: **{quests}**",
                 ],
                 inline=True,
             )
             add_section(
                 embed,
-                "<:zap:1479582544361033820> Активно",
+                "<:boost:1485610043033518131> Активно",
                 active_items or ["Немає активних бонусів."],
                 inline=False,
             )
@@ -151,10 +151,10 @@ class ProfileCommands(commands.Cog):
             await interaction.followup.send(embed=embed, file=file)
 
         except discord.HTTPException as exc:
-            await interaction.followup.send(f"<:warn:1477376152191373504> Помилка Discord: `{exc}`")
+            await interaction.followup.send(f"<:warning:1485598476850040843> Помилка Discord: `{exc}`")
         except Exception as exc:
             _log.error("Unexpected profile error for %s: %s", target, exc, exc_info=True)
-            await interaction.followup.send("<:warn:1477376152191373504> Внутрішня помилка. Спробуйте пізніше.")
+            await interaction.followup.send("<:warning:1485598476850040843> Внутрішня помилка. Спробуйте пізніше.")
 
 
 async def setup(bot):

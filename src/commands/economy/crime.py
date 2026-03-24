@@ -20,11 +20,17 @@ from commands.economy.minigames import (
 )
 from commands.economy.events import CRIMES
 
-E_COIN = "<:coin:1478487028105482485>"
+E_COIN = "<:coin:1485610808003133552>"
 db = get_database()
 
-def get_minigame_view(game_type: str, owner_id: int, stake: int, on_complete):
-    
+def get_minigame_view(
+    game_type: str,
+    owner_id: int,
+    stake: int,
+    on_complete,
+    context: str = "default",
+):
+
     games = {
         "math": MathQuizView,
         "higher_lower": HigherLowerView,
@@ -39,6 +45,8 @@ def get_minigame_view(game_type: str, owner_id: int, stake: int, on_complete):
         "highlow": HigherLowerView,  
     }
     game_class = games.get(game_type, GuessNumberView)  
+    if game_class is MathQuizView:
+        return game_class(owner_id, stake, on_complete, profile=context)
     return game_class(owner_id, stake, on_complete)
 
 class BribeView(discord.ui.View):
@@ -57,11 +65,11 @@ class BribeView(discord.ui.View):
         self.message = None
         self.handled = False
         
-        btn_bribe = discord.ui.Button(label=f"Домовитись ({bribe_sum:,})", style=discord.ButtonStyle.success, emoji="<:banknote:1478511186860572753>")
+        btn_bribe = discord.ui.Button(label=f"Домовитись ({bribe_sum:,})", style=discord.ButtonStyle.success, emoji="<:wallet:1485625593574850720>")
         btn_bribe.callback = self.on_bribe
         self.add_item(btn_bribe)
         
-        btn_penalty = discord.ui.Button(label="Покарання", style=discord.ButtonStyle.danger, emoji="<:warn:1477376152191373504>")
+        btn_penalty = discord.ui.Button(label="Покарання", style=discord.ButtonStyle.danger, emoji="<:warning:1485598476850040843>")
         btn_penalty.callback = self.on_penalty
         self.add_item(btn_penalty)
 
@@ -240,7 +248,7 @@ class CrimeCommand(commands.Cog):
             if crime_last and (now - crime_last) < cooldown:
                 remaining = int(cooldown - (now - crime_last))
                 await interaction.response.send_message(
-                    f"<:Hourglass:1479950504321745026> Наступна операція доступна через **{fmt_duration(remaining)}**.",
+                    f"<:hourglass:1485598603937579181> Наступна операція доступна через **{fmt_duration(remaining)}**.",
                     ephemeral=True
                 )
                 return
@@ -277,7 +285,7 @@ class CrimeCommand(commands.Cog):
                     from modules.db import invalidate_user_data
                     await invalidate_user_data(interaction.guild.id, interaction.user.id)
                     
-                    res_embed.title = "<:cutiecheckmark:1479120440734650389> Операція пройшла успішно!"
+                    res_embed.title = "<:check:1485597845883981905> Операція пройшла успішно!"
                     res_embed.description = f"{res_embed.description}\n\nОтримано: **{earned:,}** {curr}" + ("\n🌟 **Coin Boost x2** активний!" if boost_active else "")
                     res_embed.color = COLOR_WIN
 
@@ -339,7 +347,7 @@ class CrimeCommand(commands.Cog):
                             bribe_view.message = msg
 
             game_type = mission.get("minigame", "guess")
-            view = get_minigame_view(game_type, interaction.user.id, potential_reward, on_minigame_complete)
+            view = get_minigame_view(game_type, interaction.user.id, potential_reward, on_minigame_complete, context="crime")
             
             if hasattr(view, "desc") and view.desc:
                 embed.description += f"\n\n{view.desc}"
@@ -351,9 +359,9 @@ class CrimeCommand(commands.Cog):
 
         except Exception as e:
             if not interaction.response.is_done():
-                await interaction.response.send_message(f"<:warn:1477376152191373504> Помилка: `{e}`", ephemeral=True)
+                await interaction.response.send_message(f"<:warning:1485598476850040843> Помилка: `{e}`", ephemeral=True)
             else:
-                await interaction.followup.send(f"<:warn:1477376152191373504> Помилка: `{e}`", ephemeral=True)
+                await interaction.followup.send(f"<:warning:1485598476850040843> Помилка: `{e}`", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(CrimeCommand(bot))

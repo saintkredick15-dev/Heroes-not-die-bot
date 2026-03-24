@@ -7,37 +7,37 @@ from utils.ui_contract import add_section, compact_kv, set_surface_footer, surfa
 db = get_database()
 
 # ── Кастомні емодзі ───────────────────────────────────────────────────────────
-E_CHECK   = "<:cutiecheckmark:1479120440734650389>"
-E_CROSS   = "<:krestik:1476693091355463842>"
-E_WARN    = "<:warn:1477376152191373504>"
-E_CLOCK   = "<:clock:1476209087804084328>"
-E_SETTING = "<:settings:1476196821444591768>"
-E_COIN    = "<:coin:1478487028105482485>"
-E_CHAT    = "<:chat:1475953787687403716>"
-E_MICRO   = "<:micro:1475954046350135346>"
-E_STAR    = "<:reactionstar:1475954213455532067>"
-E_WORK    = "<:work:1478489752020975626>"
-E_WORKS   = "<:works:1478510456971857992>"
-E_DAILY   = "<:daily:1478510858027143289>"
-E_BANK    = "<:bank:1478483868867891261>"
-E_ROB     = "<:robbery:1478496325887725814>"
-E_INCOME  = "<:income:1478491102788190395>"
-E_RANDOM  = "<:random:1478513015002501200>"
-E_SHIELD  = "<:shield:1478800925664612372>"
-E_FLAME   = "<:flame:1478490474145906800>"
-E_BOOST   = "<:boost:1478073594247643377>"
-E_HISTORY = "<:historylist:1478824658332684510>"
-E_LEFT    = "<:totheleft:1478825190749110323>"
-E_STATS   = "<:statistics:1477721796857041067>"
-E_CRIME   = "<:crime:1479221667468152882>"
-E_SHOP    = "<:newshop:1479222868377337896>"
-E_GAME    = "<:statistics:1477721796857041067>"
+E_CHECK   = "<:check:1485597845883981905>"
+E_CROSS   = "<:close:1485598320935174317>"
+E_WARN    = "<:warning:1485598476850040843>"
+E_CLOCK   = "<:clock:1485618008784113796>"
+E_SETTING = "<:settings:1485606007668342865>"
+E_COIN    = "<:coin:1485610808003133552>"
+E_CHAT    = "<:chat:1485608210202361976>"
+E_MICRO   = "<:micro:1485608331484729344>"
+E_STAR    = "<:star:1485626121847574631>"
+E_WORK    = "<:work:1485618886899400814>"
+E_WORKS   = "<:work:1485618886899400814>"
+E_DAILY   = "<:clock:1485618008784113796>"
+E_BANK    = "<:bank_safe:1485637217132216571>"
+E_ROB     = "<:mask:1485625427014713394>"
+E_INCOME  = "<:coins:1485612564619727011>"
+E_RANDOM  = "<:celebration_Confetti:1485626240734855441>"
+E_SHIELD  = "<:shield:1485606277081071666>"
+E_FLAME   = "<:flame:1485618663489929356>"
+E_BOOST   = "<:boost:1485610043033518131>"
+E_HISTORY = "<:history:1485601911599009893>"
+E_LEFT    = "<:prevtotheleft:1485600254760980501>"
+E_STATS   = "<:stats:1485607826964353144>"
+E_CRIME   = "<:mask:1485625427014713394>"
+E_SHOP    = "<:shop:1485636864844107846>"
+E_GAME    = "<:stats:1485607826964353144>"
 
 EMBED_COLOR = 0x1a1a2e
 
 DEFAULT_ECO = {
     "enabled": True,
-    "currency_emoji": "<:coin:1478487028105482485>",
+    "currency_emoji": "<:coin:1485610808003133552>",
     "currency_name": "Coin",
 
     "msg_earn": [5, 10],
@@ -360,7 +360,7 @@ def build_category_embed(eco: dict, category: str) -> discord.Embed:
         "crime":    f"{E_CRIME} Крайм",
         "gambling": f"{E_STATS} Гемблінг",
         "shop":     f"{E_SHOP} Магазин",
-        "auction":  "<:Auction:1479863712855621805> Аукціон",
+        "auction":  "<:hammer:1485606127696609412> Аукціон",
         "games":    f"{E_GAME} Налаштування ігор",
     }
     embed = discord.Embed(
@@ -394,7 +394,7 @@ def build_category_embed(eco: dict, category: str) -> discord.Embed:
     elif category == "work":
         work_modes = {"simple": "Лише Легка", "complex": "Лише Складна", "both": "Обидва"}
         embed.description = (
-            f"<:Coins:1478486725113286899> **Сума:** `{eco['work_min']}–{eco['work_max']}` {curr}\n"
+            f"<:coins:1485612564619727011> **Сума:** `{eco['work_min']}–{eco['work_max']}` {curr}\n"
             f"{E_CLOCK} **КД:** `{fmt_duration(eco['work_cooldown'])}`\n"
             f"**Режим:** `{work_modes.get(eco['work_type'], 'Обидва')}`\n"
             f"{E_RANDOM} **Шанс події:** `{eco['event_chance']}%`  |  Ставка: `{eco['event_stake_percent']}%`\n"
@@ -403,7 +403,7 @@ def build_category_embed(eco: dict, category: str) -> discord.Embed:
         )
     elif category == "daily":
         embed.description = (
-            f"<:coins:1477376020318388274> **Сума:** `{eco['daily_amount']}` {curr}\n"
+            f"<:coins:1485612564619727011> **Сума:** `{eco['daily_amount']}` {curr}\n"
             f"{E_FLAME} **Стрік-бонус:** `+{eco['daily_streak_bonus']}` {curr}/день\n"
             f"{E_CLOCK} **КД:** `{fmt_duration(eco['daily_cooldown'])}`\n"
             f"**Captcha:** {E_CHECK + ' Увімкнена' if eco['captcha_enabled'] else E_CROSS + ' Вимкнена'}"
@@ -433,7 +433,7 @@ def build_category_embed(eco: dict, category: str) -> discord.Embed:
             f"**Статус:** {crime_str}\n"
             f"{E_CLOCK} **КД:** `{fmt_duration(eco['crime_cooldown'])}`\n"
             f"{E_WARN} **Бан-штраф:** `{fmt_duration(eco['crime_ban_duration'])}`\n"
-            f"<:banknote:1478511186860572753> **Хабар (% від куша):** `{eco.get('crime_bribe_percent', 75)}%`\n"
+            f"<:wallet:1485625593574850720> **Хабар (% від куша):** `{eco.get('crime_bribe_percent', 75)}%`\n"
             f"{E_CLOCK} **Час на рішення:** `{eco.get('crime_bribe_timeout', 15)}с`\n\n"
             f"*При провалі крайму юзер може спробувати надати хабар.*"
         )
@@ -469,8 +469,8 @@ def build_category_embed(eco: dict, category: str) -> discord.Embed:
         embed.description = (
             "\n".join(lines) + "\n\n"
             f"**Лутбокси**\n"
-            f"<:openlootbox:1479952212980535498> Звичайний `{eco.get('shop_lootbox_common_price', 2500)}` {curr} | Джекпот: `{eco.get('lb_com_jackpot_pct', 10)}%`\n"
-            f"<:gifttop:1479952511635820586> Рідкісний `{eco.get('shop_lootbox_rare_price', 10000)}` {curr} | Джекпот: `{eco.get('lb_rare_jackpot_pct', 5)}%` | Pass: `{eco.get('lb_rare_pass_pct', 10)}%`"
+            f"<:lootbox:1485614292664320070> Звичайний `{eco.get('shop_lootbox_common_price', 2500)}` {curr} | Джекпот: `{eco.get('lb_com_jackpot_pct', 10)}%`\n"
+            f"<:gift:1485614389984755772> Рідкісний `{eco.get('shop_lootbox_rare_price', 10000)}` {curr} | Джекпот: `{eco.get('lb_rare_jackpot_pct', 5)}%` | Pass: `{eco.get('lb_rare_pass_pct', 10)}%`"
         )
     elif category == "transfers":
         tax = eco.get("transfer_tax_percent", 0)
@@ -828,7 +828,7 @@ class RobAdvancedModal(discord.ui.Modal, title="🥷 Пограбування Д
             view=SetupCategoryView(self.main_view, "rob")
         )
 
-class CrimeModal(discord.ui.Modal, title="<:crimepass:1479951455543889970> Крайм"):
+class CrimeModal(discord.ui.Modal, title="<:crimepass:1485614625025425529> Крайм"):
     cooldown      = discord.ui.TextInput(label="КД (напр. 8h)", max_length=10)
     ban_duration  = discord.ui.TextInput(label="Бан при провалі (напр. 30m)", max_length=10)
     bribe_percent = discord.ui.TextInput(label="% хабаря від куша", max_length=5)
@@ -947,8 +947,8 @@ class CategorySelect(discord.ui.Select):
             discord.SelectOption(label="Крайм",          value="crime",    description="КД та штраф-бан",                     emoji=discord.PartialEmoji.from_str(E_CRIME)),
             discord.SelectOption(label="Ігри та Казино", value="gambling",  description="Казино, Дуелі та Міні-ігри роботи",     emoji=discord.PartialEmoji.from_str(E_STATS)),
             discord.SelectOption(label="Магазин",        value="shop",      description="Ціни системних предметів",             emoji=discord.PartialEmoji.from_str(E_SHOP)),
-            discord.SelectOption(label="Аукціон",        value="auction",   description="Канал, лоти та черга",                 emoji=discord.PartialEmoji.from_str("<:Auction:1479863712855621805>")),
-            discord.SelectOption(label="Квести",         value="quests",   description="Налаштування денних/тижневих завдань", emoji=discord.PartialEmoji.from_str("<:reasonqiestion:1476209697919860777>")),
+            discord.SelectOption(label="Аукціон",        value="auction",   description="Канал, лоти та черга",                 emoji=discord.PartialEmoji.from_str("<:hammer:1485606127696609412>")),
+            discord.SelectOption(label="Квести",         value="quests",   description="Налаштування денних/тижневих завдань", emoji=discord.PartialEmoji.from_str("<:help:1485604736588583053>")),
         ]
         super().__init__(placeholder="Оберіть блок економіки для редагування...", options=options)
 
@@ -1431,7 +1431,7 @@ class QuestsModal(discord.ui.Modal, title="📋 Квести"):
             view=SetupCategoryView(self.main_view, "quests")
         )
 
-class SeasonModal(discord.ui.Modal, title="<:trophy:1475953207782932602> Сезон"):
+class SeasonModal(discord.ui.Modal, title="<:trophytop1:1485625873880191067> Сезон"):
     duration    = discord.ui.TextInput(label="Тривалість сезону (днів)", max_length=4)
     start_bonus = discord.ui.TextInput(label="Стартовий бонус монет (0=без бонусу)", max_length=10)
 
@@ -1493,9 +1493,9 @@ class SeasonRolePositionSelect(discord.ui.Select):
         winner_roles = eco.get("season_winner_roles", {})
         opts = []
         position_labels = {
-            "1": "<:trophy:1475953207782932602> 1 місце",
-            "2": "<:medal:1475953523039408360> 2 місце",
-            "3": "<:star:1475954213455532067> 3 місце",
+            "1": "<:trophytop1:1485625873880191067> 1 місце",
+            "2": "<:medal:1485625991274430574> 2 місце",
+            "3": "<:star:1485626121847574631> 3 місце",
             "4": "4 місце",
             "5": "5 місце",
         }
@@ -1510,7 +1510,7 @@ class SeasonRolePositionSelect(discord.ui.Select):
         view = SeasonRolePickerView(self.main_view, self.eco, position)
         await interaction.response.edit_message(
             embed=discord.Embed(
-                title=f"<:trophy:1475953207782932602> Роль для {position} місця",
+                title=f"<:trophytop1:1485625873880191067> Роль для {position} місця",
                 description="Виберіть роль нижче. Натисніть 'Очистити' щоб прибрати роль.",
                 color=0x1a1a2e
             ),
@@ -1535,7 +1535,7 @@ class SeasonRolePickerView(discord.ui.View):
             view=SetupCategoryView(self.main_view, "season")
         )
 
-    @discord.ui.button(label="<:cutiex:1480246146076119132> Очистити роль", style=discord.ButtonStyle.danger, row=1)
+    @discord.ui.button(label="<:close:1485598320935174317> Очистити роль", style=discord.ButtonStyle.danger, row=1)
     async def clear_btn(self, interaction: discord.Interaction, _):
         winner_roles = self.eco.get("season_winner_roles", {})
         winner_roles.pop(self.position, None)
@@ -1708,7 +1708,7 @@ class AuctionLotActionView(discord.ui.View):
         start_btn.callback = self._start_cb
         self.add_item(start_btn)
         
-        del_btn = discord.ui.Button(label="Видалити з черги", style=discord.ButtonStyle.danger, emoji="<:trash:1477722148071145634>")
+        del_btn = discord.ui.Button(label="Видалити з черги", style=discord.ButtonStyle.danger, emoji="<:trash:1485598963590758420>")
         del_btn.callback = self._delete_cb
         self.add_item(del_btn)
         

@@ -3,6 +3,7 @@ from __future__ import annotations
 import discord
 from discord import app_commands
 from discord.ext import commands
+from config.constants import Emojis
 from modules.db import get_database
 from repositories.user import get_level_xp
 from utils.ui_contract import set_surface_footer, surface_embed
@@ -10,16 +11,16 @@ from utils.ui_contract import set_surface_footer, surface_embed
 db = get_database()
 
 # ── Кастомні емодзі ───────────────────────────────────────────────────────────
-EMOJI_TROPHY = "<:trophy:1475953207782932602>"
-EMOJI_MEDAL  = "<:medal:1475953523039408360>"
-EMOJI_CHAT   = "<:chat:1475953787687403716>"
-EMOJI_MICRO  = "<:micro:1475954046350135346>"
-EMOJI_STAR   = "<:star:1475954213455532067>"
-EMOJI_NEXT   = "<:vpravo:1475954959555235882>"
-EMOJI_PREV   = "<:vlivo:1475954870027681952>"
-EMOJI_COIN   = "<:coin:1478487028105482485>"
-EMOJI_BANK   = "<:bank:1478483868867891261>"
-EMOJI_STATS  = "<:statistics:1477721796857041067>"
+EMOJI_TROPHY = Emojis.TROPHY.value
+EMOJI_MEDAL  = Emojis.MEDAL.value
+EMOJI_CHAT   = Emojis.CHAT.value
+EMOJI_MICRO  = Emojis.MICRO.value
+EMOJI_STAR   = Emojis.STAR.value
+EMOJI_NEXT   = Emojis.NEXT.value
+EMOJI_PREV   = Emojis.PREV.value
+EMOJI_COIN   = Emojis.COIN.value
+EMOJI_BANK   = Emojis.BANK.value
+EMOJI_STATS  = Emojis.STATS.value
 
 RANK_BADGES = {1: EMOJI_TROPHY, 2: EMOJI_MEDAL, 3: EMOJI_STAR}
 PAGE_SIZE   = 10
@@ -287,8 +288,8 @@ async def fetch_eco_month(guild: discord.Guild):
 
 # ── XP Pagination View ────────────────────────────────────────────────────────
 
-EMOJI_WEEK  = "<:day7:1479248144112812124>"
-EMOJI_MONTH = "<:day31:1479248528042754088>"
+EMOJI_WEEK  = Emojis.DAY7.value
+EMOJI_MONTH = Emojis.DAY31.value
 
 class XPLeaderboardView(discord.ui.View):
     def __init__(self, entries, guild, author_id, page=0, mode="all"):
@@ -326,7 +327,7 @@ class XPLeaderboardView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> Це не твоя команда.", ephemeral=True)
+            await interaction.response.send_message(f"{Emojis.CROSS.value} Це не твоя команда.", ephemeral=True)
             return False
         return True
 
@@ -334,7 +335,7 @@ class XPLeaderboardView(discord.ui.View):
         icon = self.guild.icon.url if self.guild.icon else None
         return build_xp_embed(self.entries, self.page, self.total_pages, icon, self.author_rank, self.author_data, self.mode)
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:day7:1479248144112812124>"), style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(Emojis.DAY7.value), style=discord.ButtonStyle.secondary, row=0)
     async def week_btn(self, interaction: discord.Interaction, _):
         await interaction.response.defer()
         self.entries = await fetch_xp_week(self.guild)
@@ -345,7 +346,7 @@ class XPLeaderboardView(discord.ui.View):
         self._update_buttons()
         await interaction.edit_original_response(embed=self.build(), view=self)
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:day31:1479248528042754088>"), style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(Emojis.DAY31.value), style=discord.ButtonStyle.secondary, row=0)
     async def month_btn(self, interaction: discord.Interaction, _):
         await interaction.response.defer()
         self.entries = await fetch_xp_month(self.guild)
@@ -356,7 +357,7 @@ class XPLeaderboardView(discord.ui.View):
         self._update_buttons()
         await interaction.edit_original_response(embed=self.build(), view=self)
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:trophy:1475953207782932602>"), style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(Emojis.TROPHY.value), style=discord.ButtonStyle.primary, row=0)
     async def alltime_btn(self, interaction: discord.Interaction, _):
         await interaction.response.defer()
         self.entries = await fetch_xp_leaderboard(self.guild)
@@ -367,13 +368,13 @@ class XPLeaderboardView(discord.ui.View):
         self._update_buttons()
         await interaction.edit_original_response(embed=self.build(), view=self)
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:vlivo:1475954870027681952>"), style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(Emojis.PREV.value), style=discord.ButtonStyle.secondary, row=1)
     async def prev_btn(self, interaction: discord.Interaction, _):
         self.page -= 1
         self._update_buttons()
         await interaction.response.edit_message(embed=self.build(), view=self)
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:vpravo:1475954959555235882>"), style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(Emojis.NEXT.value), style=discord.ButtonStyle.secondary, row=1)
     async def next_btn(self, interaction: discord.Interaction, _):
         self.page += 1
         self._update_buttons()
@@ -381,8 +382,8 @@ class XPLeaderboardView(discord.ui.View):
 
 # ── Economy Pagination View ───────────────────────────────────────────────────
 
-EMOJI_WEEK  = "<:day7:1479248144112812124>"
-EMOJI_MONTH = "<:day31:1479248528042754088>"
+EMOJI_WEEK  = Emojis.DAY7.value
+EMOJI_MONTH = Emojis.DAY31.value
 
 class EcoLeaderboardView(discord.ui.View):
     def __init__(self, entries, guild, author_id, eco_settings, page=0, mode="all"):
@@ -423,7 +424,7 @@ class EcoLeaderboardView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> Це не твоя команда.", ephemeral=True)
+            await interaction.response.send_message(f"{Emojis.CROSS.value} Це не твоя команда.", ephemeral=True)
             return False
         return True
 
@@ -434,7 +435,7 @@ class EcoLeaderboardView(discord.ui.View):
 
         return build_eco_embed(self.entries, self.page, self.total_pages, icon, self.author_rank, self.author_data, self.eco_settings, mode=self.mode)
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:day7:1479248144112812124>"), style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(Emojis.DAY7.value), style=discord.ButtonStyle.secondary, row=0)
     async def week_btn(self, interaction: discord.Interaction, _):
         await interaction.response.defer()
         self.entries = await fetch_eco_week(self.guild)
@@ -445,7 +446,7 @@ class EcoLeaderboardView(discord.ui.View):
         self._update_buttons()
         await interaction.edit_original_response(embed=self.build(), view=self)
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:day31:1479248528042754088>"), style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(Emojis.DAY31.value), style=discord.ButtonStyle.secondary, row=0)
     async def month_btn(self, interaction: discord.Interaction, _):
         await interaction.response.defer()
         self.entries = await fetch_eco_month(self.guild)
@@ -456,7 +457,7 @@ class EcoLeaderboardView(discord.ui.View):
         self._update_buttons()
         await interaction.edit_original_response(embed=self.build(), view=self)
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:trophy:1475953207782932602>"), style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:trophytop1:1485625873880191067>"), style=discord.ButtonStyle.primary, row=0)
     async def alltime_btn(self, interaction: discord.Interaction, _):
         await interaction.response.defer()
         self.entries = await fetch_eco_leaderboard(self.guild)
@@ -467,7 +468,7 @@ class EcoLeaderboardView(discord.ui.View):
         self._update_buttons()
         await interaction.edit_original_response(embed=self.build(), view=self)
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:historylist:1478824658332684510>"), style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:history:1485601911599009893>"), style=discord.ButtonStyle.secondary, row=0)
     async def history_btn(self, interaction: discord.Interaction, _):
         await interaction.response.defer()
         gd = await db.guild_settings.find_one({"_id": self.guild.id}) or {}
@@ -481,13 +482,13 @@ class EcoLeaderboardView(discord.ui.View):
         self._update_buttons()
         await interaction.edit_original_response(embed=self.build(), view=self)
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:vlivo:1475954870027681952>"), style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(Emojis.PREV.value), style=discord.ButtonStyle.secondary, row=1)
     async def prev_btn(self, interaction: discord.Interaction, _):
         self.page -= 1
         self._update_buttons()
         await interaction.response.edit_message(embed=self.build(), view=self)
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:vpravo:1475954959555235882>"), style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(Emojis.NEXT.value), style=discord.ButtonStyle.secondary, row=1)
     async def next_btn(self, interaction: discord.Interaction, _):
         self.page += 1
         self._update_buttons()
@@ -506,7 +507,7 @@ class LeaderboardCommands(commands.Cog):
         eco_settings = settings.get("economy", {})
 
         if not entries:
-            await interaction.followup.send("<:inbox:1479128004847341620> No economy data yet.", ephemeral=True)
+            await interaction.followup.send("<:inbox:1485599203815325836> No economy data yet.", ephemeral=True)
             return
 
         view = EcoLeaderboardView(entries, interaction.guild, interaction.user.id, eco_settings)
@@ -519,7 +520,7 @@ class LeaderboardCommands(commands.Cog):
         entries = await fetch_xp_leaderboard(interaction.guild)
 
         if not entries:
-            await interaction.followup.send("<:inbox:1479128004847341620> No XP data yet.", ephemeral=True)
+            await interaction.followup.send("<:inbox:1485599203815325836> No XP data yet.", ephemeral=True)
             return
 
         view = XPLeaderboardView(entries, interaction.guild, interaction.user.id)

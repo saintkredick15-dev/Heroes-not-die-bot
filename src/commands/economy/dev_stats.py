@@ -35,9 +35,9 @@ class AddAccessModal(discord.ui.Modal, title="Додати доступ до /de
             uid = int(self.user_id_input.value.strip())
             
             await db.bot_settings.update_one({"_id": "dev_access"}, {"$addToSet": {"allowed_users": uid}}, upsert=True)
-            await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Доступ надано користувачу з ID `{uid}`.", ephemeral=True)
+            await interaction.response.send_message(f"<:check:1485597845883981905> Доступ надано користувачу з ID `{uid}`.", ephemeral=True)
         except ValueError:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> Невірний формат ID.", ephemeral=True)
+            await interaction.response.send_message("<:close:1485598320935174317> Невірний формат ID.", ephemeral=True)
 
 class RemoveAccessModal(discord.ui.Modal, title="Забрати доступ до /dev_stats"):
     user_id_input = discord.ui.TextInput(
@@ -56,9 +56,9 @@ class RemoveAccessModal(discord.ui.Modal, title="Забрати доступ д�
             uid = int(self.user_id_input.value.strip())
             
             await db.bot_settings.update_one({"_id": "dev_access"}, {"$pull": {"allowed_users": uid}}, upsert=True)
-            await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Доступ забрано у користувача з ID `{uid}`.", ephemeral=True)
+            await interaction.response.send_message(f"<:check:1485597845883981905> Доступ забрано у користувача з ID `{uid}`.", ephemeral=True)
         except ValueError:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> Невірний формат ID.", ephemeral=True)
+            await interaction.response.send_message("<:close:1485598320935174317> Невірний формат ID.", ephemeral=True)
 
 class DevStatsView(discord.ui.View):
     def __init__(self, cog: 'DevStatsCommand', user: discord.User, guild_id: int):
@@ -69,11 +69,11 @@ class DevStatsView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user.id:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> Ви не можете використовувати ці кнопки.", ephemeral=True)
+            await interaction.response.send_message("<:close:1485598320935174317> Ви не можете використовувати ці кнопки.", ephemeral=True)
             return False
         return True
 
-    @discord.ui.button(label="Всеосяжна статистика", style=discord.ButtonStyle.secondary, custom_id="dev_stats_global", emoji="<:planet:1479905429055340564>")
+    @discord.ui.button(label="Всеосяжна статистика", style=discord.ButtonStyle.secondary, custom_id="dev_stats_global", emoji="<:search:1485637936165949543>")
     async def btn_global(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         embed, file = await self.cog.get_stats_embed(global_stats=True)
@@ -85,7 +85,7 @@ class DevStatsView(discord.ui.View):
         except Exception as e:
             pass
 
-    @discord.ui.button(label="Діючий сервер", style=discord.ButtonStyle.secondary, custom_id="dev_stats_local", emoji="<:statistics:1477721796857041067>")
+    @discord.ui.button(label="Діючий сервер", style=discord.ButtonStyle.secondary, custom_id="dev_stats_local", emoji="<:stats:1485607826964353144>")
     async def btn_local(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         embed, file = await self.cog.get_stats_embed(global_stats=False, guild_id=self.guild_id, guild_name=interaction.guild.name)
@@ -97,12 +97,12 @@ class DevStatsView(discord.ui.View):
         except Exception as e:
             pass
 
-    @discord.ui.button(label="Додати доступ", style=discord.ButtonStyle.secondary, custom_id="dev_stats_access", emoji="<:lockopen:1479905741874921672>")
+    @discord.ui.button(label="Додати доступ", style=discord.ButtonStyle.secondary, custom_id="dev_stats_access", emoji="<:shield_check:1485606912073400330>")
     async def btn_access(self, interaction: discord.Interaction, button: discord.ui.Button):
         
         await interaction.response.send_modal(AddAccessModal(self.cog.bot))
 
-    @discord.ui.button(label="Забрати доступ", style=discord.ButtonStyle.secondary, custom_id="dev_stats_remove_access", emoji="<:lock:1479905802318774505>")
+    @discord.ui.button(label="Забрати доступ", style=discord.ButtonStyle.secondary, custom_id="dev_stats_remove_access", emoji="<:shield:1485606277081071666>")
     async def btn_remove_access(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(RemoveAccessModal(self.cog.bot))
 
@@ -197,12 +197,12 @@ class DevStatsCommand(commands.Cog):
             color=0x2b2d31,
             description="Глобальна статистика економічних процесів." if not global_stats else "Статистика по всіх серверах бота."
         )
-        embed.add_field(name="<:banknote:1478511186860572753> Всього валюти (В обороті)", value=f"**{current.get('total_money', 0):,}**", inline=True)
-        embed.add_field(name="<:statistics:1477721796857041067> Згенеровано за весь час", value=f"**{current.get('total_earned', 0):,}**", inline=True)
-        embed.add_field(name="<:cutiecheckmark:1479120440734650389> Активних гаманців", value=f"**{current.get('active_wallets', 0)}**", inline=True)
+        embed.add_field(name="<:wallet:1485625593574850720> Всього валюти (В обороті)", value=f"**{current.get('total_money', 0):,}**", inline=True)
+        embed.add_field(name="<:stats:1485607826964353144> Згенеровано за весь час", value=f"**{current.get('total_earned', 0):,}**", inline=True)
+        embed.add_field(name="<:check:1485597845883981905> Активних гаманців", value=f"**{current.get('active_wallets', 0)}**", inline=True)
         
         if not global_stats:
-            embed.add_field(name="<:flame:1478490474145906800> Відсоток інфляції", value=f"**+{inc_percent:.4f}%**", inline=True)
+            embed.add_field(name="<:flame:1485618663489929356> Відсоток інфляції", value=f"**+{inc_percent:.4f}%**", inline=True)
 
         file = None
         if not global_stats and HAS_MATPLOTLIB and len(history) > 1:

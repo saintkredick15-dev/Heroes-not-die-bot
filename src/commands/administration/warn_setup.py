@@ -11,10 +11,10 @@ db = get_database()
 _col = db.guild_settings
 
 # ── Емодзі ────────────────────────────────────────────────────────────────────
-E_WARN    = "<:warn:1477376152191373504>"
-E_CROSS   = "<:krestik:1476693091355463842>"
-E_CHECK   = "<:check:1454140864627740834>"
-E_SETTING = "<:settings:1476196821444591768>"
+E_WARN    = "<:warning:1485598476850040843>"
+E_CROSS   = "<:close:1485598320935174317>"
+E_CHECK   = "<:check:1485597845883981905>"
+E_SETTING = "<:settings:1485606007668342865>"
 
 EMBED_COLOR = 0x1a1a2e
 

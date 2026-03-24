@@ -1,6 +1,7 @@
 import discord
 import time
 import asyncio
+from config.constants import Emojis
 from modules.db import get_database
 from commands.administration.economy_setup import get_eco
 from repositories.user import get_user
@@ -8,11 +9,13 @@ from utils.eco_helpers import make_log
 
 db = get_database()
 
-E_COIN = "<:coin:1478487028105482485>"
-E_AUCTION = "<:Auction:1479863712855621805>"
-E_CLOCK = "<:clock:1476209087804084328>"
-E_CHECK = "<:cutiecheckmark:1479120440734650389>"
-E_CROSS = "<:krestik:1476693091355463842>"
+E_COIN = Emojis.COIN.value
+E_AUCTION = Emojis.AUCTION.value
+E_CLOCK = Emojis.CLOCK.value
+E_CHECK = Emojis.CHECK.value
+E_CROSS = Emojis.CANCEL.value
+E_EDIT = Emojis.EDIT.value
+E_WARN = Emojis.WARN.value
 
 class CustomBidModal(discord.ui.Modal, title="Зробити свою ставку"):
     amount = discord.ui.TextInput(label="Сума ставки", max_length=15)
@@ -111,7 +114,7 @@ class AuctionView(discord.ui.View):
     async def btn_plus_5000(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.process_bid(interaction, self.current_bid + 5000)
 
-    @discord.ui.button(label="Власна ставка", style=discord.ButtonStyle.success, emoji="✍️", custom_id="auc_custom")
+    @discord.ui.button(label="Власна ставка", style=discord.ButtonStyle.success, emoji=discord.PartialEmoji.from_str(E_EDIT), custom_id="auc_custom")
     async def btn_custom(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(CustomBidModal(self))
 
@@ -155,7 +158,7 @@ class AuctionManager:
         
         time_left = max(0, int(view.end_time - time.time()))
         embed.add_field(name="\u200b", value="\u200b", inline=False)
-        embed.add_field(name="⏱ Залишилось", value=f"<t:{int(view.end_time)}:R> (<t:{int(view.end_time)}:T>)", inline=True)
+        embed.add_field(name=f"{E_CLOCK} Залишилось", value=f"<t:{int(view.end_time)}:R> (<t:{int(view.end_time)}:T>)", inline=True)
         
         return embed
 
@@ -197,7 +200,7 @@ class AuctionManager:
             if view.highest_bidder:
                 amount = view.current_bid
                 embed.title = f"{E_CHECK} Аукціон завершено: {view.lot['name']}"
-                embed.description = f"<:firecracker:1479953348185555077> Переможець: <@{view.highest_bidder}>\n<:Coins:1478486725113286899> Фінальна ставка: `{amount:,}` {eco['currency_emoji']}\n\n*Перевірте свій інвентар або ролі!*"
+                embed.description = f"<:celebration_Confetti:1485626240734855441> Переможець: <@{view.highest_bidder}>\n<:coins:1485612564619727011> Фінальна ставка: `{amount:,}` {eco['currency_emoji']}\n\n*Перевірте свій інвентар або ролі!*"
                 
                 import re
                 role_match = re.search(r"<@&(\d+)>", view.lot["name"])
@@ -210,9 +213,9 @@ class AuctionManager:
                         if member and role:
                             try:
                                 await member.add_roles(role, reason="Виграш в аукціоні")
-                                embed.description += "\n\n🔰 **Видано роль!**"
+                                embed.description += f"\n\n{E_CHECK} **Видано роль!**"
                             except Exception:
-                                embed.description += "\n\n<:warn:1477376152191373504> Помилка видачі ролі (перевірте права бота)."
+                                embed.description += f"\n\n{E_WARN} Помилка видачі ролі (перевірте права бота)."
                 else:
                     await db.inventory.update_one(
                         {"guild_id": guild_id, "user_id": view.highest_bidder},

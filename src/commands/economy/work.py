@@ -24,6 +24,10 @@ E_CROSS = _E.CROSS.value
 E_WORK = _E.WORK.value
 E_COIN = _E.COIN.value
 E_CLOCK = _E.CLOCK.value
+E_BROOM = _E.BROOM.value
+E_DETECTIVE = _E.DETECTIVE.value
+E_STOP = _E.STOP.value
+E_OWNER = _E.OWNER.value
 
 
 class WorkTypeView(discord.ui.View):
@@ -34,7 +38,7 @@ class WorkTypeView(discord.ui.View):
         self.user_data = user_data
         self.cog = cog
 
-    @discord.ui.button(label="Легка робота", emoji="🧹", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Легка робота", emoji=discord.PartialEmoji.from_str(E_BROOM), style=discord.ButtonStyle.success)
     async def btn_simple(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message(f"{E_CROSS} Це не твоє меню!", ephemeral=True)
@@ -42,7 +46,7 @@ class WorkTypeView(discord.ui.View):
         await self.cog.execute_simple(interaction, self.eco, self.user_data)
         self.stop()
 
-    @discord.ui.button(label="Складна робота", emoji="🕵️", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="Складна робота", emoji=discord.PartialEmoji.from_str(E_DETECTIVE), style=discord.ButtonStyle.danger)
     async def btn_complex(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message(f"{E_CROSS} Це не твоє меню!", ephemeral=True)
@@ -119,7 +123,7 @@ class WorkCommand(commands.Cog):
 
         event_embed = surface_embed(
             "gameplay",
-            f"🛑 {scene['title']}",
+            f"{E_STOP} {scene['title']}",
             f"{job['desc'].format(amount=earned_text, curr='')}\n\n**Несподіванка!** {scene['desc']}",
             tone="warning",
         )
@@ -180,7 +184,7 @@ class WorkCommand(commands.Cog):
             else:
                 await i.response.edit_message(embed=res_embed, view=game_view)
 
-        view = get_minigame_view(game_type, interaction.user.id, 0, on_minigame_complete)
+        view = get_minigame_view(game_type, interaction.user.id, 0, on_minigame_complete, context="simple_work")
 
         if hasattr(view, "desc") and view.desc:
             event_embed.description += f"\n\n{view.desc}"
@@ -234,7 +238,7 @@ class WorkCommand(commands.Cog):
         total_scenes = len(scenes)
         embed = surface_embed(
             "gameplay",
-            f"👷‍♂️ {mission['title']} • Етап {idx + 1}/{total_scenes}",
+            f"{E_WORK} {mission['title']} • Етап {idx + 1}/{total_scenes}",
             scene["desc"],
             tone="warning",
         )
@@ -275,7 +279,7 @@ class WorkCommand(commands.Cog):
             next_interaction = i if i is not None else interaction
             await self._run_scene(next_interaction, eco, user_data, state, first_response=False)
 
-        view = get_minigame_view(game_type, interaction.user.id, 0, scene_callback)
+        view = get_minigame_view(game_type, interaction.user.id, 0, scene_callback, context="complex_work")
 
         if hasattr(view, "desc") and view.desc:
             embed.description += f"\n\n{view.desc}"
@@ -329,7 +333,7 @@ class WorkCommand(commands.Cog):
                 "$set": {"work_last": now, "work_started_at": 0},
                 "$push": {
                     "eco_history": {
-                        "$each": [{"log": f"🟢 **{final_earned}** | Складна робота: {mission['title']} | <t:{now}:t>"}],
+                        "$each": [{"log": f"{_E.PLUS.value} **{final_earned}** | Складна робота: {mission['title']} | <t:{now}:t>"}],
                         "$slice": -50,
                     }
                 },
@@ -366,7 +370,7 @@ class WorkCommand(commands.Cog):
             eco = get_eco(settings)
 
             if not eco.get("enabled", True):
-                await interaction.response.send_message("<:cutiex:1480246146076119132> Економіка вимкнена на цьому сервері.", ephemeral=True)
+                await interaction.response.send_message("<:close:1485598320935174317> Економіка вимкнена на цьому сервері.", ephemeral=True)
                 return
 
             if not await check_account_age(interaction, eco):
@@ -384,7 +388,7 @@ class WorkCommand(commands.Cog):
                 h, m = divmod(m, 60)
                 time_str = f"{h}г {m}хв" if h else f"{m}хв {s}с"
                 await interaction.response.send_message(
-                    f"⛔ Ти під слідством після провалу крайму. Звільняєшся через **{time_str}**.",
+                    f"{E_STOP} Ти під слідством після провалу крайму. Звільняєшся через **{time_str}**.",
                     ephemeral=True,
                 )
                 return
@@ -416,7 +420,7 @@ class WorkCommand(commands.Cog):
                 work_max = eco.get("work_max", 500)
                 embed = surface_embed(
                     "gameplay",
-                    "👷 Біржа праці",
+                    f"{E_WORK} Біржа праці",
                     "Обери тип роботи на поточну зміну.",
                     tone="default",
                 )
@@ -424,8 +428,8 @@ class WorkCommand(commands.Cog):
                     embed,
                     "Варіанти",
                     [
-                        f"🧹 Легка — `{work_min}–{work_max}` {curr}, 100% успіх + шанс на подію",
-                        f"🕵️ Складна — `{work_max * 2}–{work_max * 4}` {curr}, ризик провалу + вибір стратегії",
+                        f"{E_BROOM} Легка — `{work_min}–{work_max}` {curr}, 100% успіх + шанс на подію",
+                        f"{E_DETECTIVE} Складна — `{work_max * 2}–{work_max * 4}` {curr}, ризик провалу + вибір стратегії",
                     ],
                 )
                 set_surface_footer(embed, "gameplay", "Швидкий вибір • легка стабільніша, складна прибутковіша.")
@@ -440,9 +444,9 @@ class WorkCommand(commands.Cog):
 
         except Exception as e:
             if not interaction.response.is_done():
-                await interaction.response.send_message(f"<:warn:1477376152191373504> Помилка: `{e}`", ephemeral=True)
+                await interaction.response.send_message(f"<:warning:1485598476850040843> Помилка: `{e}`", ephemeral=True)
             else:
-                await interaction.followup.send(f"<:warn:1477376152191373504> Помилка: `{e}`", ephemeral=True)
+                await interaction.followup.send(f"<:warning:1485598476850040843> Помилка: `{e}`", ephemeral=True)
 
 
 async def setup(bot):

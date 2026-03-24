@@ -3,8 +3,25 @@ from discord import app_commands
 from discord.ext import commands
 from modules.db import get_database
 import asyncio
+from config.constants import Emojis
 
 db = get_database()
+E_CHECK = Emojis.CHECK.value
+E_CROSS = Emojis.CROSS.value
+E_UNLOCK = Emojis.UNLOCK.value
+E_LOCK = Emojis.LOCK.value
+E_EYE = Emojis.EYE.value
+E_EYE_OFF = Emojis.EYE_OFF.value
+E_INFO = Emojis.INFO.value
+E_ROOM = Emojis.ROOM.value
+E_MEMBERS = Emojis.MEMBERS.value
+E_STATS = Emojis.STATS.value
+E_OWNER = Emojis.OWNER.value
+E_EDIT = Emojis.EDIT.value
+E_PLUS = Emojis.PLUS.value
+E_MICRO = Emojis.MICRO.value
+E_KICK = Emojis.KICK.value
+E_RELOAD = Emojis.RELOAD.value
 
 class RoomNameModal(discord.ui.Modal, title="Змінити назву кімнати"):
     name_input = discord.ui.TextInput(
@@ -35,11 +52,11 @@ class RoomNameModal(discord.ui.Modal, title="Змінити назву кімн�
                     {"owner_id": self.user_id, "active": True},
                     {"$set": {"name": new_name}}
                 )
-                await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Назву кімнати змінено на: **{new_name}**", ephemeral=True)
+                await interaction.response.send_message(f"{E_CHECK} Назву кімнати змінено на: **{new_name}**", ephemeral=True)
             else:
-                await interaction.response.send_message("<:cutiex:1480246146076119132> Не вдалося знайти твою кімнату!", ephemeral=True)
+                await interaction.response.send_message(f"{E_CROSS} Не вдалося знайти твою кімнату!", ephemeral=True)
         else:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> У тебе немає активної приватної кімнати!", ephemeral=True)
+            await interaction.response.send_message(f"{E_CROSS} У тебе немає активної приватної кімнати!", ephemeral=True)
 
 class RoomLimitModal(discord.ui.Modal, title="Встановити ліміт користувачів"):
     limit_input = discord.ui.TextInput(
@@ -57,10 +74,10 @@ class RoomLimitModal(discord.ui.Modal, title="Встановити ліміт к
         try:
             limit = int(self.limit_input.value)
             if limit < 0 or limit > 99:
-                await interaction.response.send_message("<:cutiex:1480246146076119132> Ліміт має бути від 0 до 99!", ephemeral=True)
+                await interaction.response.send_message("<:close:1485598320935174317> Ліміт має бути від 0 до 99!", ephemeral=True)
                 return
         except ValueError:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> Введіть правильне число!", ephemeral=True)
+            await interaction.response.send_message("<:close:1485598320935174317> Введіть правильне число!", ephemeral=True)
             return
 
         user_room = await db.private_rooms.find_one({
@@ -77,11 +94,11 @@ class RoomLimitModal(discord.ui.Modal, title="Встановити ліміт к
                     {"$set": {"user_limit": limit}}
                 )
                 limit_text = f"{limit} користувачів" if limit > 0 else "без ліміту"
-                await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Ліміт кімнати встановлено: **{limit_text}**", ephemeral=True)
+                await interaction.response.send_message(f"{E_CHECK} Ліміт кімнати встановлено: **{limit_text}**", ephemeral=True)
             else:
-                await interaction.response.send_message("<:cutiex:1480246146076119132> Не вдалося знайти твою кімнату!", ephemeral=True)
+                await interaction.response.send_message(f"{E_CROSS} Не вдалося знайти твою кімнату!", ephemeral=True)
         else:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> У тебе немає активної приватної кімнати!", ephemeral=True)
+            await interaction.response.send_message(f"{E_CROSS} У тебе немає активної приватної кімнати!", ephemeral=True)
 
 class UserMentionModal(discord.ui.Modal):
     user_input = discord.ui.TextInput(
@@ -117,7 +134,7 @@ class UserMentionModal(discord.ui.Modal):
                     target_user = discord.utils.get(interaction.guild.members, name=user_input)
 
         if not target_user:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> Користувача не знайдено!", ephemeral=True)
+            await interaction.response.send_message(f"{E_CROSS} Користувача не знайдено!", ephemeral=True)
             return
 
         user_room = await db.private_rooms.find_one({
@@ -126,12 +143,12 @@ class UserMentionModal(discord.ui.Modal):
         })
         
         if not user_room:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> У тебе немає активної приватної кімнати!", ephemeral=True)
+            await interaction.response.send_message(f"{E_CROSS} У тебе немає активної приватної кімнати!", ephemeral=True)
             return
 
         channel = interaction.guild.get_channel(user_room["channel_id"])
         if not channel:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> Не вдалося знайти твою кімнату!", ephemeral=True)
+            await interaction.response.send_message(f"{E_CROSS} Не вдалося знайти твою кімнату!", ephemeral=True)
             return
 
         if self.action_type == "access":
@@ -141,12 +158,12 @@ class UserMentionModal(discord.ui.Modal):
                 
                 del overwrites[target_user]
                 await channel.edit(overwrites=overwrites)
-                await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Скинуто права доступу для {target_user.display_name}", ephemeral=True)
+                await interaction.response.send_message(f"{E_CHECK} Скинуто права доступу для {target_user.display_name}", ephemeral=True)
             else:
                 
                 overwrites[target_user] = discord.PermissionOverwrite(connect=True, view_channel=True)
                 await channel.edit(overwrites=overwrites)
-                await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Надано доступ користувачеві {target_user.display_name}", ephemeral=True)
+                await interaction.response.send_message(f"{E_CHECK} Надано доступ користувачеві {target_user.display_name}", ephemeral=True)
                 
         elif self.action_type == "mic":
             
@@ -157,21 +174,21 @@ class UserMentionModal(discord.ui.Modal):
                 current_perms.speak = True
                 overwrites[target_user] = current_perms
                 await channel.edit(overwrites=overwrites)
-                await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Повернуто право говорити для {target_user.display_name}", ephemeral=True)
+                await interaction.response.send_message(f"{E_CHECK} Повернуто право говорити для {target_user.display_name}", ephemeral=True)
             else:
                 
                 current_perms.speak = False
                 overwrites[target_user] = current_perms
                 await channel.edit(overwrites=overwrites)
-                await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Заборонено говорити користувачеві {target_user.display_name}", ephemeral=True)
+                await interaction.response.send_message(f"{E_CHECK} Заборонено говорити користувачеві {target_user.display_name}", ephemeral=True)
                 
         elif self.action_type == "kick":
             
             if target_user.voice and target_user.voice.channel == channel:
                 await target_user.move_to(None)
-                await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Користувача {target_user.display_name} вигнано з кімнати", ephemeral=True)
+                await interaction.response.send_message(f"{E_CHECK} Користувача {target_user.display_name} вигнано з кімнати", ephemeral=True)
             else:
-                await interaction.response.send_message(f"<:cutiex:1480246146076119132> Користувач {target_user.display_name} не в твоїй кімнаті", ephemeral=True)
+                await interaction.response.send_message(f"{E_CROSS} Користувач {target_user.display_name} не в твоїй кімнаті", ephemeral=True)
                 
         elif self.action_type == "reset":
             
@@ -179,9 +196,9 @@ class UserMentionModal(discord.ui.Modal):
             if target_user in overwrites:
                 del overwrites[target_user]
                 await channel.edit(overwrites=overwrites)
-                await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Скинуто всі права для {target_user.display_name}", ephemeral=True)
+                await interaction.response.send_message(f"{E_CHECK} Скинуто всі права для {target_user.display_name}", ephemeral=True)
             else:
-                await interaction.response.send_message(f"<:cutiex:1480246146076119132> У користувача {target_user.display_name} немає особливих прав", ephemeral=True)
+                await interaction.response.send_message(f"{E_CROSS} У користувача {target_user.display_name} немає особливих прав", ephemeral=True)
                 
         elif self.action_type == "owner":
             
@@ -201,7 +218,7 @@ class UserMentionModal(discord.ui.Modal):
             )
             await channel.edit(overwrites=overwrites)
             
-            await interaction.response.send_message(f"<:cutiecheckmark:1479120440734650389> Власність кімнати передано користувачеві {target_user.display_name}", ephemeral=True)
+            await interaction.response.send_message(f"{E_CHECK} Власність кімнати передано користувачеві {target_user.display_name}", ephemeral=True)
 
 class RoomManagementView(discord.ui.View):
     def __init__(self):
@@ -215,23 +232,23 @@ class RoomManagementView(discord.ui.View):
         })
         
         if not user_room:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> У тебе немає приватного каналу! Зайди в канал-створювач щоб створити свій.", ephemeral=True)
+            await interaction.response.send_message(f"{E_CROSS} У тебе немає приватного каналу! Зайди в канал-створювач щоб створити свій.", ephemeral=True)
             return False
         return True
 
-    @discord.ui.button(emoji="<:pen:1405110194651795466>", style=discord.ButtonStyle.secondary, row=0, custom_id="room_edit_name")
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(E_EDIT), style=discord.ButtonStyle.secondary, row=0, custom_id="room_edit_name")
     async def edit_name(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Змінити назву кімнати"""
         modal = RoomNameModal(interaction.user.id)
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(emoji="<:members_limit:1405110200708497419>", style=discord.ButtonStyle.secondary, row=0, custom_id="room_set_limit")
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(E_PLUS), style=discord.ButtonStyle.secondary, row=0, custom_id="room_set_limit")
     async def set_limit(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Встановити ліміт користувачів"""
         modal = RoomLimitModal(interaction.user.id)
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(emoji="<:lock_unlock:1405110188259934298>", style=discord.ButtonStyle.secondary, row=0, custom_id="room_toggle_lock")
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(E_LOCK), style=discord.ButtonStyle.secondary, row=0, custom_id="room_toggle_lock")
     async def toggle_lock(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Закрити/відкрити доступ"""
         user_room = await db.private_rooms.find_one({
@@ -255,7 +272,7 @@ class RoomManagementView(discord.ui.View):
                         {"owner_id": interaction.user.id, "active": True},
                         {"$set": {"locked": False}}
                     )
-                    await interaction.response.send_message("🔓 Кімнату відкрито для всіх!", ephemeral=True)
+                    await interaction.response.send_message(f"{E_UNLOCK} Кімнату відкрито для всіх!", ephemeral=True)
                 else:
                     
                     current_perms.connect = False
@@ -265,9 +282,9 @@ class RoomManagementView(discord.ui.View):
                         {"owner_id": interaction.user.id, "active": True},
                         {"$set": {"locked": True}}
                     )
-                    await interaction.response.send_message("🔒 Кімнату закрито для нових користувачів!", ephemeral=True)
+                    await interaction.response.send_message(f"{E_LOCK} Кімнату закрито для нових користувачів!", ephemeral=True)
 
-    @discord.ui.button(emoji="<:eye_closed:1405110183385894932>", style=discord.ButtonStyle.secondary, row=0, custom_id="room_toggle_visibility")
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(E_EYE), style=discord.ButtonStyle.secondary, row=0, custom_id="room_toggle_visibility")
     async def toggle_visibility(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Сховати/показати кімнату"""
         user_room = await db.private_rooms.find_one({
@@ -291,7 +308,7 @@ class RoomManagementView(discord.ui.View):
                         {"owner_id": interaction.user.id, "active": True},
                         {"$set": {"hidden": False}}
                     )
-                    await interaction.response.send_message("👁️ Кімнату зроблено видимою для всіх!", ephemeral=True)
+                    await interaction.response.send_message(f"{E_EYE} Кімнату зроблено видимою для всіх!", ephemeral=True)
                 else:
                     
                     current_perms.view_channel = False
@@ -301,39 +318,39 @@ class RoomManagementView(discord.ui.View):
                         {"owner_id": interaction.user.id, "active": True},
                         {"$set": {"hidden": True}}
                     )
-                    await interaction.response.send_message("🙈 Кімнату сховано від інших користувачів!", ephemeral=True)
+                    await interaction.response.send_message(f"{E_EYE_OFF} Кімнату сховано від інших користувачів!", ephemeral=True)
 
-    @discord.ui.button(emoji="<:plus:1405110182014357595>", style=discord.ButtonStyle.secondary, row=0, custom_id="room_manage_access")
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(E_MEMBERS), style=discord.ButtonStyle.secondary, row=0, custom_id="room_manage_access")
     async def manage_access(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Управління доступом користувачів"""
         modal = UserMentionModal(interaction.user.id, "access", "Управління доступом")
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(emoji="<:microphone:1405110190239514654>", style=discord.ButtonStyle.secondary, row=1, custom_id="room_manage_mic")
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(E_MICRO), style=discord.ButtonStyle.secondary, row=1, custom_id="room_manage_mic")
     async def manage_mic(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Управління правами мікрофону"""
         modal = UserMentionModal(interaction.user.id, "mic", "Управління мікрофоном")
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(emoji="<:kick_user:1405110186313519226>", style=discord.ButtonStyle.secondary, row=1, custom_id="room_kick_user")
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(E_KICK), style=discord.ButtonStyle.secondary, row=1, custom_id="room_kick_user")
     async def kick_user(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Вигнати користувача"""
         modal = UserMentionModal(interaction.user.id, "kick", "Вигнати користувача")
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(emoji="<:reset:1405110197248069733>", style=discord.ButtonStyle.secondary, row=1, custom_id="room_reset_permissions")
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(E_RELOAD), style=discord.ButtonStyle.secondary, row=1, custom_id="room_reset_permissions")
     async def reset_permissions(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Скинути права користувача"""
         modal = UserMentionModal(interaction.user.id, "reset", "Скинути права")
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(emoji="<:star_owner:1405110192462495744>", style=discord.ButtonStyle.secondary, row=1, custom_id="room_transfer_ownership")
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(E_OWNER), style=discord.ButtonStyle.secondary, row=1, custom_id="room_transfer_ownership")
     async def transfer_ownership(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Передати власність"""
         modal = UserMentionModal(interaction.user.id, "owner", "Передати власність")
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(emoji="<:room_info:1405110199127248896>", style=discord.ButtonStyle.primary, row=1, custom_id="room_info")
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(E_INFO), style=discord.ButtonStyle.primary, row=1, custom_id="room_info")
     async def room_info(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Інформація про кімнату"""
         user_room = await db.private_rooms.find_one({
@@ -352,22 +369,22 @@ class RoomManagementView(discord.ui.View):
                 hidden = user_room.get("hidden", False)
                 
                 embed = discord.Embed(
-                    title="📋 Інформація про твою кімнату",
+                    title=f"{E_INFO} Інформація про твою кімнату",
                     color=0x7c7cf0,
                     description=(
-                        f"🏠 **Назва:** {channel.name}\n"
-                        f"👥 **Учасників:** {member_count}\n"
-                        f"📊 **Ліміт:** {limit_text}\n"
-                        f"🔒 **Статус:** {'Закрито' if locked else 'Відкрито'}\n"
-                        f"👁️ **Видимість:** {'Сховано' if hidden else 'Видимо всім'}\n"
-                        f"👑 **Власник:** <@{interaction.user.id}>"
+                        f"{E_ROOM} **Назва:** {channel.name}\n"
+                        f"{E_MEMBERS} **Учасників:** {member_count}\n"
+                        f"{E_STATS} **Ліміт:** {limit_text}\n"
+                        f"{E_LOCK} **Статус:** {'Закрито' if locked else 'Відкрито'}\n"
+                        f"{E_EYE} **Видимість:** {'Сховано' if hidden else 'Видимо всім'}\n"
+                        f"{E_OWNER} **Власник:** <@{interaction.user.id}>"
                     )
                 )
                 await interaction.response.send_message(embed=embed, ephemeral=True)
             else:
-                await interaction.response.send_message("<:cutiex:1480246146076119132> Не вдалося знайти твою кімнату!", ephemeral=True)
+                await interaction.response.send_message(f"{E_CROSS} Не вдалося знайти твою кімнату!", ephemeral=True)
         else:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> У тебе немає активної приватної кімнати!", ephemeral=True)
+            await interaction.response.send_message(f"{E_CROSS} У тебе немає активної приватної кімнати!", ephemeral=True)
 
 class RoomManagementCommands(commands.Cog):
     def __init__(self, bot):
@@ -459,14 +476,14 @@ class RoomManagementCommands(commands.Cog):
         """Налаштування системи приватних кімнат для адмінів"""
         
         if not interaction.user.guild_permissions.manage_channels:
-            await interaction.response.send_message("<:cutiex:1480246146076119132> У тебе немає прав для використання цієї команди!", ephemeral=True)
+            await interaction.response.send_message("<:close:1485598320935174317> У тебе немає прав для використання цієї команди!", ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
 
         async for message in management_channel.history(limit=50):
             if message.author == interaction.client.user and message.embeds:
-                if message.embeds[0].title == "🏠 Управління приватною кімнатою":
+                if message.embeds[0].title == f"{E_ROOM} Управління приватною кімнатою":
                     try:
                         await message.delete()
                     except discord.HTTPException:
@@ -487,21 +504,21 @@ class RoomManagementCommands(commands.Cog):
         )
 
         embed = discord.Embed(
-            title="🏠 Управління приватною кімнатою",
+            title=f"{E_ROOM} Управління приватною кімнатою",
             color=0x7c7cf0,
             description=(
                 "Натисни наступні кнопочки, щоб налаштувати свою кімнату\n"
                 "Використовувати їх можна тільки коли у тебе є приватний канал\n\n"
-                "<:pen:1405110194651795466> — змінити назву кімнати\n"
-                "<:members_limit:1405110200708497419> — встановити ліміт користувачів\n"
-                "<:lock_unlock:1405110188259934298> — закрити/відкрити доступ в кімнату\n"
-                "<:eye_closed:1405110183385894932> — сховати/розкрити кімнату для всіх\n"
-                "<:plus:1405110182014357595> — заборонити/дати доступ до кімнати користувачеві\n"
-                "<:microphone:1405110190239514654> — заборонити/дати право говорити користувачеві\n"
-                "<:kick_user:1405110186313519226> — вигнати користувача з кімнати\n"
-                "<:reset:1405110197248069733> — скинути права користувача\n"
-                "<:star_owner:1405110192462495744> — зробити користувача новим власником\n"
-                "<:room_info:1405110199127248896> — інформація про кімнату"
+                f"{E_EDIT} — змінити назву кімнати\n"
+                f"{E_PLUS} — встановити ліміт користувачів\n"
+                f"{E_LOCK} — закрити/відкрити доступ в кімнату\n"
+                f"{E_EYE} — сховати/розкрити кімнату для всіх\n"
+                f"{E_MEMBERS} — заборонити/дати доступ до кімнати користувачеві\n"
+                f"{E_MICRO} — заборонити/дати право говорити користувачеві\n"
+                f"{E_KICK} — вигнати користувача з кімнати\n"
+                f"{E_RELOAD} — скинути права користувача\n"
+                f"{E_OWNER} — зробити користувача новим власником\n"
+                f"{E_INFO} — інформація про кімнату"
             )
         )
 
@@ -510,7 +527,7 @@ class RoomManagementCommands(commands.Cog):
         await management_channel.send(embed=embed, view=view)
 
         success_embed = discord.Embed(
-            title="<:cutiecheckmark:1479120440734650389> Система приватних кімнат налаштована!",
+            title="<:check:1485597845883981905> Система приватних кімнат налаштована!",
             color=0x00ff00,
             description=(
                 f"**Канал-створювач:** {creator_channel.mention}\n"
@@ -535,6 +552,6 @@ async def setup(bot):
     
     view = RoomManagementView()
     bot.add_view(view)
-    print("<:cutiecheckmark:1479120440734650389> Room Management persistent view зареєстровано")
+    print("<:check:1485597845883981905> Room Management persistent view зареєстровано")
     
     await bot.add_cog(RoomManagementCommands(bot))

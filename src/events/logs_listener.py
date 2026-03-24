@@ -6,17 +6,18 @@ logs_listener.py
 import discord
 from discord.ext import commands
 from datetime import datetime, timezone
+from config.constants import Emojis
 from modules.db import get_database
 
 db = get_database()
 
 # ── Емодзі ────────────────────────────────────────────────────────────────────
-E_SHIELD  = "<:shieldcheck:1477720160570839130>"
-E_MEMBERS = "<:members:1477720603472691420>"
-E_VOICE   = "<:supportrole:1476198036567756841>"
-E_TRASH   = "<:trash:1477722148071145634>"
-E_EDIT    = "<:edit:1476653567094820874>"
-E_CROSS   = "<:krestik:1476693091355463842>"
+E_SHIELD  = Emojis.SHIELD_CHECK.value
+E_MEMBERS = Emojis.MEMBERS.value
+E_VOICE   = Emojis.TICKET.value
+E_TRASH   = Emojis.TRASH.value
+E_EDIT    = Emojis.EDIT.value
+E_CROSS   = Emojis.CANCEL.value
 
 EMBED_COLOR = 0x5865F2
 

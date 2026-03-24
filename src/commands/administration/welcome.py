@@ -16,18 +16,18 @@ from utils.ui_contract import add_section, compact_kv, set_surface_footer, statu
 db = get_database()
 _col = db.guild_settings
 
-E_HI = "<:hi:1476689510560567456>"
-E_BYE = "<:bye:1476689667351904376>"
-E_LIST = "<:list:1454151067989184562>"
-E_PHOTO = "<:photo:1476690859029172456>"
-E_FONTS = "<:fonts:1476682058309828681>"
-E_PALETTE = "<:palette:1476576171427758080>"
-E_TEXT = "<:text:1476691204543348746>"
-E_CHECK = "<:check:1454140864627740834>"
-E_COLOR_OUTLINE = "<:fontspallets:1476940986277167246>"
-E_COLOR = "<:collor:1476941167986872473>"
-E_BG = "<:background:1476941632560435322>"
-E_CROSS = "<:krestik:1476693091355463842>"
+E_HI = "<:notification_on:1485609281062572142>"
+E_BYE = "<:exit:1486070564723364040>"
+E_LIST = "<:menuandlist:1485605053246083143>"
+E_PHOTO = "<:svgviewerpngoutput20260324T19312:1486069946634207292>"
+E_FONTS = "<:textstyle:1486070201249300565>"
+E_PALETTE = "<:palette:1485608515409285140>"
+E_TEXT = "<:textstyle:1486070201249300565>"
+E_CHECK = "<:check:1485597845883981905>"
+E_COLOR_OUTLINE = "<:palette:1485608515409285140>"
+E_COLOR = "<:palette:1485608515409285140>"
+E_BG = "<:svgviewerpngoutput20260324T19312:1486069946634207292>"
+E_CROSS = "<:close:1485598320935174317>"
 
 
 async def get_greetings_settings(guild_id: int) -> dict:
@@ -273,7 +273,7 @@ class DashboardView(discord.ui.View):
         self.settings[key] = new_value
         await interaction.response.edit_message(embed=_build_embed(self.settings, self.mode), view=self)
 
-    @discord.ui.button(label="Роль за boost", style=discord.ButtonStyle.secondary, emoji="<:boost:1478073594247643377>", row=4)
+    @discord.ui.button(label="Роль за boost", style=discord.ButtonStyle.secondary, emoji="<:boost:1485610043033518131>", row=4)
     async def btn_boost_role(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.mode != "boost":
             return await interaction.response.send_message(f"{E_CROSS} Ця дія доступна лише в режимі boost.", ephemeral=True)
@@ -284,7 +284,7 @@ def _build_embed(settings: dict, mode: str) -> discord.Embed:
     titles = {
         "welcome": f"{E_HI} Привітання",
         "goodbye": f"{E_BYE} Прощання",
-        "boost": "<:boost:1478073594247643377> Boost-повідомлення",
+        "boost": "<:boost:1485610043033518131> Boost-повідомлення",
     }
     descriptions = {
         "welcome": "Огляд каналу, тексту та візуальної картки для нових учасників.",

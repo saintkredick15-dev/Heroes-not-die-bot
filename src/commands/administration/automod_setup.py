@@ -13,12 +13,12 @@ db = get_database()
 _col = db.guild_settings
 
 # ── Емодзі ────────────────────────────────────────────────────────────────────
-E_SETTING  = "<:settings:1476196821444591768>"
-E_HAMMER   = "<:hammer:1477376411642761479>"
-E_CROSS    = "<:krestik:1476693091355463842>"
-E_CHECK    = "<:check:1454140864627740834>"
-E_NO       = "<:no:1477377225308504164>"
-E_MEMBERS  = "<:members:1477720603472691420>"
+E_SETTING  = "<:settings:1485606007668342865>"
+E_HAMMER   = "<:hammer:1485606127696609412>"
+E_CROSS    = "<:close:1485598320935174317>"
+E_CHECK    = "<:check:1485597845883981905>"
+E_NO       = "<:warning:1485598476850040843>"
+E_MEMBERS  = "<:members:1485607710035542118>"
 
 EMBED_COLOR = 0x1a1a2e
 
@@ -32,13 +32,13 @@ DEFAULT_TRUSTED_DOMAINS = [
 ]
 
 MODULES = {
-    "am_antispam":   {"label": "Антиспам",         "emoji": "<:repeat:1454136632197255220>",    "desc": "Блокує флуд повідомленнями за короткий час."},
-    "am_antiinvite": {"label": "Антизапрошення",   "emoji": "<:nolink:1477753086369075281>",    "desc": "Блокує посилання discord.gg."},
-    "am_antilink":   {"label": "Анти-посилання",   "emoji": "<:URL:1477753429651755150>",       "desc": "Блокує всі URL-посилання."},
-    "am_caps":       {"label": "Анти-капс",        "emoji": "<:alphabet:1478023308619288626>",  "desc": "Блокує повідомлення з великою кількістю CAPS."},
-    "am_mentions":   {"label": "Анти-згадки",      "emoji": "<:mention:1478023765194576026>",   "desc": "Блокує масові згадки в одному повідомленні."},
-    "am_emojispam":  {"label": "Emoji-спам",       "emoji": "<:emoji:1478089741080465650>",     "desc": "Блокує повідомлення з надмірною кількістю емодзі."},
-    "am_imagespam":  {"label": "Image-спам",      "emoji": "<:photo:1476690859029172456>",     "desc": "Ловить масове закидання картинок/файлів."},
+    "am_antispam":   {"label": "Антиспам",         "emoji": "<:menuandlist:1485605053246083143>",    "desc": "Блокує флуд повідомленнями за короткий час."},
+    "am_antiinvite": {"label": "Антизапрошення",   "emoji": "<:close:1485598320935174317>",    "desc": "Блокує посилання discord.gg."},
+    "am_antilink":   {"label": "Анти-посилання",   "emoji": "<:search:1485637936165949543>",       "desc": "Блокує всі URL-посилання."},
+    "am_caps":       {"label": "Анти-капс",        "emoji": "<:warning:1485598476850040843>",  "desc": "Блокує повідомлення з великою кількістю CAPS."},
+    "am_mentions":   {"label": "Анти-згадки",      "emoji": "<:members:1485607710035542118>",   "desc": "Блокує масові згадки в одному повідомленні."},
+    "am_emojispam":  {"label": "Emoji-спам",       "emoji": "<:star:1485626121847574631>",     "desc": "Блокує повідомлення з надмірною кількістю емодзі."},
+    "am_imagespam":  {"label": "Image-спам",      "emoji": "???",     "desc": "Ловить масове закидання картинок/файлів."},
 }
 
 MODULE_SETTINGS = {
@@ -837,7 +837,7 @@ class AllowedServersModal(discord.ui.Modal, title="Дозволені серве
 
         msg = ""
         if unique:
-            msg += "<:cutiecheckmark:1479120440734650389> " + ", ".join(f"**{s['name']}**" for s in unique)
+            msg += "<:check:1485597845883981905> " + ", ".join(f"**{s['name']}**" for s in unique)
         if errors:
             msg += f"\n{E_CROSS} Не вдалось розпізнати: " + ", ".join(f"`{e}`" for e in errors)
 

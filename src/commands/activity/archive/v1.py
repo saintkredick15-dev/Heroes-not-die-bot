@@ -30,7 +30,7 @@ class LeaderboardView(discord.ui.View):
         page_users = self.users[start:end]
         
         embed = discord.Embed(
-            title="<:trophy:1475953207782932602> ЛІДЕРБОРД СЕРВЕРА",
+            title="<:trophytop1:1485625873880191067> ЛІДЕРБОРД СЕРВЕРА",
             color=0x2f3136,
             description="Найактивніші учасники спільноти"
         )
@@ -39,7 +39,7 @@ class LeaderboardView(discord.ui.View):
         user_position = None
         user_data = None
         
-        medals = ["<:trophy:1475953207782932602>", "<:medal:1475953523039408360>", "<:medal:1475953523039408360>"]
+        medals = ["<:trophytop1:1485625873880191067>", "<:medal:1485625991274430574>", "<:medal:1485625991274430574>"]
         
         for i, data in enumerate(page_users):
             position = start + i + 1
@@ -139,7 +139,7 @@ class LeaderboardCommands(commands.Cog):
         
         if not users:
             embed = discord.Embed(
-                title="<:trophy:1475953207782932602> ЛІДЕРБОРД СЕРВЕРА",
+                title="<:trophytop1:1485625873880191067> ЛІДЕРБОРД СЕРВЕРА",
                 description="Поки що немає активних користувачів на сервері.",
                 color=0xff6b6b
             )

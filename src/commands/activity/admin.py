@@ -12,10 +12,12 @@ db = get_database()
 _CONFIG_PATH = Path(__file__).parents[3] / "config.json"
 
 # ── Кастомні емодзі ──────────────────────────────────────────────────────────
-E_BAN    = "<:ban:1476199074494681170>"
-E_KICK   = "<:kick:1476199862344351785>"
-E_MUTE   = "<:mutemicro:1476200127063396443>"
-E_STAR   = "<:star:1475954213455532067>"
+E_BAN    = "<:ban:1485607222414282822>"
+E_KICK   = "<:kick:1485607557291704341>"
+E_MUTE   = "<:mute:1485607049504227369>"
+E_STAR   = "<:star:1485626121847574631>"
+E_SETTINGS = "<:settings:1485606007668342865>"
+E_RELOAD = "<:reload:1485717010271961189>"
 
 EMBED_COLOR = 0x1a1a2e
 
@@ -46,7 +48,7 @@ class CustomPurgeModal(discord.ui.Modal, title="Свій термін видал
         if not seconds or seconds <= 0:
             await interaction.response.send_message(
                 embed=discord.Embed(
-                    description="<:cutiex:1480246146076119132> Невірний формат. Приклади: `10m`, `2h`, `3d`",
+                    description="<:close:1485598320935174317> Невірний формат. Приклади: `10m`, `2h`, `3d`",
                     color=0x2b2d31,
                 ),
                 ephemeral=True,
@@ -59,18 +61,18 @@ class CustomPurgeModal(discord.ui.Modal, title="Свій термін видал
             deleted = await interaction.channel.purge(after=cutoff)
             await interaction.followup.send(
                 embed=discord.Embed(
-                    description=f"<:trash:1477722148071145634> Видалено **{len(deleted)}** повідомлень (за {self.period.value}).",
+                    description=f"<:trash:1485598963590758420> Видалено **{len(deleted)}** повідомлень (за {self.period.value}).",
                     color=EMBED_COLOR,
                 ),
                 ephemeral=True,
             )
         except discord.Forbidden:
             await interaction.followup.send(
-                embed=discord.Embed(description="<:cutiex:1480246146076119132> Немає прав на видалення.", color=0x2b2d31), ephemeral=True
+                embed=discord.Embed(description="<:close:1485598320935174317> Немає прав на видалення.", color=0x2b2d31), ephemeral=True
             )
         except discord.HTTPException as e:
             await interaction.followup.send(
-                embed=discord.Embed(description=f"<:cutiex:1480246146076119132> Помилка: {e}", color=0x2b2d31), ephemeral=True
+                embed=discord.Embed(description=f"<:close:1485598320935174317> Помилка: {e}", color=0x2b2d31), ephemeral=True
             )
 
 def _load_config() -> dict:
@@ -92,7 +94,7 @@ def _ok(description: str) -> discord.Embed:
     return discord.Embed(description=description, color=EMBED_COLOR)
 
 def _err(description: str) -> discord.Embed:
-    return discord.Embed(description=f"<:cutiex:1480246146076119132> {description}", color=0x2b2d31)
+    return discord.Embed(description=f"<:close:1485598320935174317> {description}", color=0x2b2d31)
 
 class AdminCommands(commands.Cog):
     def __init__(self, bot):
@@ -135,7 +137,7 @@ class AdminCommands(commands.Cog):
                 return
             await update_user_raw(db, interaction.guild.id, користувач.id, {"xp": max(data["xp"] - кількість, 0)})
             await interaction.response.send_message(
-                embed=_ok(f"<:trash:1477722148071145634> **{кількість} XP** забрано у {користувач.mention}."), ephemeral=True
+                embed=_ok(f"<:trash:1485598963590758420> **{кількість} XP** забрано у {користувач.mention}."), ephemeral=True
             )
 
         elif дія.value == "setlevel":
@@ -144,13 +146,13 @@ class AdminCommands(commands.Cog):
                 return
             await update_user_raw(db, interaction.guild.id, користувач.id, {"level": кількість})
             await interaction.response.send_message(
-                embed=_ok(f"🔧 Рівень {користувач.mention} → **{кількість}**."), ephemeral=True
+                embed=_ok(f"{E_SETTINGS} Рівень {користувач.mention} → **{кількість}**."), ephemeral=True
             )
 
         elif дія.value == "reset":
             await update_user_raw(db, interaction.guild.id, користувач.id, {"xp": 0})
             await interaction.response.send_message(
-                embed=_ok(f"🔄 XP {користувач.mention} скинуто до **0**."), ephemeral=True
+                embed=_ok(f"{E_RELOAD} XP {користувач.mention} скинуто до **0**."), ephemeral=True
             )
 
 async def setup(bot):

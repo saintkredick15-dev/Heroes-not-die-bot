@@ -23,14 +23,14 @@ class MemeCommands(commands.Cog):
             try:
                 async with session.get("https://meme-api.com/gimme/memes/50") as response:
                     if response.status != 200:
-                        await interaction.followup.send("<:cutiex:1480246146076119132> Не вдалося отримати мем. Спробуйте пізніше.")
+                        await interaction.followup.send("<:close:1485598320935174317> Не вдалося отримати мем. Спробуйте пізніше.")
                         return
                     
                     data = await response.json()
                     memes = data.get("memes", [])
                     
                     if not memes:
-                         await interaction.followup.send("<:cutiex:1480246146076119132> Прийшов пустий список мемів :(", ephemeral=True)
+                         await interaction.followup.send("<:close:1485598320935174317> Прийшов пустий список мемів :(", ephemeral=True)
                          return
 
                     selected_meme = None
@@ -66,9 +66,9 @@ class MemeCommands(commands.Cog):
                     )
             
             except aiohttp.ClientError:
-                await interaction.followup.send("<:cutiex:1480246146076119132> Помилка мережі. Спробуйте пізніше.", ephemeral=True)
+                await interaction.followup.send("<:close:1485598320935174317> Помилка мережі. Спробуйте пізніше.", ephemeral=True)
             except discord.HTTPException as e:
-                await interaction.followup.send(f"<:cutiex:1480246146076119132> Помилка Discord: {e}", ephemeral=True)
+                await interaction.followup.send(f"<:close:1485598320935174317> Помилка Discord: {e}", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(MemeCommands(bot))

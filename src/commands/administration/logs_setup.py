@@ -10,13 +10,13 @@ db = get_database()
 _col = db.guild_settings
 
 # ── Емодзі ────────────────────────────────────────────────────────────────────
-E_SETTING     = "<:settings:1476196821444591768>"
-E_CROSS       = "<:krestik:1476693091355463842>"
-E_SHIELD      = "<:shieldcheck:1477720160570839130>"
-E_CHAT        = "<:chat:1475953787687403716>"
-E_MEMBERS     = "<:members:1477720603472691420>"
-E_VOICE       = "<:supportrole:1476198036567756841>"
-E_STATS       = "<:statistics:1477721796857041067>"
+E_SETTING     = "<:settings:1485606007668342865>"
+E_CROSS       = "<:close:1485598320935174317>"
+E_SHIELD      = "<:shield_check:1485606912073400330>"
+E_CHAT        = "<:chat:1485608210202361976>"
+E_MEMBERS     = "<:members:1485607710035542118>"
+E_VOICE       = "<:ticket:1485608010192519300>"
+E_STATS       = "<:stats:1485607826964353144>"
 
 # ── Категорії та їхні ключі БД ───────────────────────────────────────────────
 LOG_TYPES = {
@@ -219,12 +219,12 @@ class WhitelistChannelSelect(discord.ui.ChannelSelect):
 class CategorySelect(discord.ui.Select):
     def __init__(self, current_category: str):
         options = [
-            discord.SelectOption(label="Модерація", value="mod", emoji=discord.PartialEmoji.from_str("<:shieldcheck:1477720160570839130>"), default=current_category == "mod"),
-            discord.SelectOption(label="Повідомлення", value="msg", emoji=discord.PartialEmoji.from_str("<:chat:1475953787687403716>"), default=current_category == "msg"),
-            discord.SelectOption(label="Учасники", value="member", emoji=discord.PartialEmoji.from_str("<:members:1477720603472691420>"), default=current_category == "member"),
-            discord.SelectOption(label="Голосові Канали", value="voice", emoji=discord.PartialEmoji.from_str("<:supportrole:1476198036567756841>"), default=current_category == "voice"),
-            discord.SelectOption(label="Статистика", value="stats", emoji=discord.PartialEmoji.from_str("<:statistics:1477721796857041067>"), default=current_category == "stats"),
-            discord.SelectOption(label="Білий список", value="whitelist", emoji=discord.PartialEmoji.from_str("<:settings:1476196821444591768>"), default=current_category == "whitelist"),
+            discord.SelectOption(label="Модерація", value="mod", emoji=discord.PartialEmoji.from_str("<:shield_check:1485606912073400330>"), default=current_category == "mod"),
+            discord.SelectOption(label="Повідомлення", value="msg", emoji=discord.PartialEmoji.from_str("<:chat:1485608210202361976>"), default=current_category == "msg"),
+            discord.SelectOption(label="Учасники", value="member", emoji=discord.PartialEmoji.from_str("<:members:1485607710035542118>"), default=current_category == "member"),
+            discord.SelectOption(label="Голосові Канали", value="voice", emoji=discord.PartialEmoji.from_str("<:ticket:1485608010192519300>"), default=current_category == "voice"),
+            discord.SelectOption(label="Статистика", value="stats", emoji=discord.PartialEmoji.from_str("<:stats:1485607826964353144>"), default=current_category == "stats"),
+            discord.SelectOption(label="Білий список", value="whitelist", emoji=discord.PartialEmoji.from_str("<:settings:1485606007668342865>"), default=current_category == "whitelist"),
         ]
         super().__init__(placeholder="Оберіть категорію ...", options=options, row=0)
 
@@ -238,7 +238,7 @@ class CategorySelect(discord.ui.Select):
 
 class IntervalButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="Змінити інтервал", style=discord.ButtonStyle.secondary, emoji=discord.PartialEmoji.from_str("<:clock:1476209087804084328>"), row=2)
+        super().__init__(label="Змінити інтервал", style=discord.ButtonStyle.secondary, emoji=discord.PartialEmoji.from_str("<:clock:1485618008784113796>"), row=2)
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_modal(IntervalModal(self.view))
