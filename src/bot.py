@@ -248,6 +248,9 @@ bot.reload_restrictions = reload_restrictions_cache
 @bot.event
 async def on_ready():
     await _load_restrictions()
+    from services.auction_manager import setup_auction_manager
+
+    await setup_auction_manager(bot).initialize()
     log.info(f"Bot {bot.user} is ready! Loaded {len(bot.cogs)} cogs")
 
 

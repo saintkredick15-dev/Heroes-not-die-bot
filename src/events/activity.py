@@ -173,7 +173,12 @@ class ActivityEvents(commands.Cog):
                 update_data["total_earned"] = user_data.get("total_earned", 0) + earned
 
         user_data.update(update_data)
-        inc_data = {"xp_week": message_xp, "xp_month": message_xp}
+        inc_data = {
+            "xp_week": message_xp,
+            "xp_month": message_xp,
+            "messages_week": 1,
+            "messages_month": 1,
+        }
         if "wallet" in update_data:
             inc_data["week_earned"] = earned
             inc_data["month_earned"] = earned
@@ -219,7 +224,12 @@ class ActivityEvents(commands.Cog):
                 update_data["total_earned"] = user_data.get("total_earned", 0) + earned
 
         user_data.update(update_data)
-        inc_data = {"xp_week": reaction_xp, "xp_month": reaction_xp}
+        inc_data = {
+            "xp_week": reaction_xp,
+            "xp_month": reaction_xp,
+            "reactions_week": 1,
+            "reactions_month": 1,
+        }
         if "wallet" in update_data:
             inc_data["week_earned"] = earned
             inc_data["month_earned"] = earned
@@ -266,7 +276,14 @@ class ActivityEvents(commands.Cog):
                 history = dict(user_data.get("history", {}))
                 history[today] = history.get(today, 0) + voice_xp
 
-                inc_query = {"xp": voice_xp, "voice_minutes": 1, "xp_week": voice_xp, "xp_month": voice_xp}
+                inc_query = {
+                    "xp": voice_xp,
+                    "voice_minutes": 1,
+                    "voice_minutes_week": 1,
+                    "voice_minutes_month": 1,
+                    "xp_week": voice_xp,
+                    "xp_month": voice_xp,
+                }
                 if eco_enabled:
                     inc_query["wallet"] = voice_earn
                     inc_query["total_earned"] = voice_earn

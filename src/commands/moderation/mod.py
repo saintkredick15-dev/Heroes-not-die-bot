@@ -1,6 +1,6 @@
 """
 mod.py
-Єдиний файл для moderation команд: warn, unwarn, warns, warnings, purge, mute, unmute, kick, ban.
+Єдиний файл для moderation команд: warn, unwarn, warns, warnings, purge, mute, unmute, kick, ban, unban.
 """
 
 from __future__ import annotations
@@ -16,9 +16,10 @@ from discord.ext import commands
 from modules.db import get_database
 from services.moderation import (
     ModerationActionError,
-    apply_case,
-    validate_moderation_target,
     _warn_case_state,
+    apply_case,
+    apply_unban_case,
+    validate_moderation_target,
 )
 
 EMBED_COLOR = 0x1A1A2E
@@ -85,6 +86,15 @@ def _build_origin_text(interaction: discord.Interaction, command_name: str) -> s
     return f"Команда /{command_name}"
 
 
+def _extract_user_id(raw: str) -> int | None:
+    cleaned = raw.strip()
+    if cleaned.startswith("<@") and cleaned.endswith(">"):
+        cleaned = cleaned[2:-1].lstrip("!")
+    if not cleaned.isdigit():
+        return None
+    return int(cleaned)
+
+
 def _build_warns_embed(
     *,
     member: discord.Member | discord.User,
@@ -93,7 +103,11 @@ def _build_warns_embed(
     self_view: bool,
 ) -> discord.Embed:
     title = "Твої попередження" if self_view else "Історія попереджень"
-    description = "Активні, зняті та попередні варни у цьому сервері." if self_view else f"Користувач: {member.mention}"
+    description = (
+        "Активні, зняті та попередні варни у цьому сервері."
+        if self_view
+        else f"Користувач: {member.mention}"
+    )
     embed = discord.Embed(
         title=f"{E_WARN} {title}",
         description=description,
@@ -498,6 +512,49 @@ class ModerationCog(commands.Cog):
             return await interaction.followup.send(embed=_err(exc.user_message), ephemeral=True)
 
         await interaction.followup.send(embed=_ok(f"{E_BAN} {member.mention} забанений. ID `#{case_id}`."))
+
+    @app_commands.command(name="unban", description="Розбанити користувача за ID або mention")
+    @app_commands.describe(target="ID або mention користувача", reason="Причина")
+    @app_commands.default_permissions(administrator=True)
+    async def unban_cmd(self, interaction: discord.Interaction, target: str, reason: str = "Не вказано"):
+        if not check_permissions(interaction):
+            return await interaction.response.send_message(embed=_err("Недостатньо прав."), ephemeral=True)
+
+        user_id = _extract_user_id(target)
+        if user_id is None:
+            return await interaction.response.send_message(
+                embed=_err("Вкажи коректний user ID або mention користувача."),
+                ephemeral=True,
+            )
+
+        bot_member = interaction.guild.me
+        if bot_member is None or not bot_member.guild_permissions.ban_members:
+            return await interaction.response.send_message(embed=_err("Боту бракує права `Ban Members`."), ephemeral=True)
+
+        await interaction.response.defer()
+        try:
+            ban_entry = await interaction.guild.fetch_ban(discord.Object(id=user_id))
+        except discord.NotFound:
+            return await interaction.followup.send(embed=_err("Цей користувач зараз не забанений на сервері."), ephemeral=True)
+        except discord.Forbidden:
+            return await interaction.followup.send(embed=_err("Discord відхилив доступ до бан-листа. Перевір права бота."), ephemeral=True)
+        except discord.HTTPException:
+            return await interaction.followup.send(embed=_err("Discord не зміг перевірити бан-лист. Спробуй ще раз пізніше."), ephemeral=True)
+
+        try:
+            case_id = await apply_unban_case(
+                bot=self.bot,
+                guild=interaction.guild,
+                user=ban_entry.user,
+                moderator=interaction.user,
+                reason=reason,
+                source="manual",
+                origin_text=_build_origin_text(interaction, "unban"),
+            )
+        except ModerationActionError as exc:
+            return await interaction.followup.send(embed=_err(exc.user_message), ephemeral=True)
+
+        await interaction.followup.send(embed=_ok(f"{E_CHECK} {ban_entry.user.mention} розбанений. ID `#{case_id}`."))
 
 
 async def setup(bot: commands.Bot):

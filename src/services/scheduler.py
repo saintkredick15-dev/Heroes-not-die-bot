@@ -24,7 +24,7 @@ class SchedulerCog(commands.Cog):
     async def economy_scheduler(self):
         """Головний цикл перевірки (кожні 10 хвилин)"""
         now = int(time.time())
-        dt = datetime.datetime.fromtimestamp(now)
+        dt = datetime.datetime.fromtimestamp(now, tz=datetime.timezone.utc)
         today_str = dt.strftime("%Y-%m-%d")
         
         # Перебираємо всі сервери
@@ -40,12 +40,34 @@ class SchedulerCog(commands.Cog):
 
             # 1. Скидання week_earned і xp_week (Щопонеділка)
             if dt.weekday() == 0 and scheduler_state.get("last_weekly_reset") != today_str:
-                await db.users.update_many({"guild_id": guild_id}, {"$set": {"week_earned": 0, "xp_week": 0}})
+                await db.users.update_many(
+                    {"guild_id": guild_id},
+                    {
+                        "$set": {
+                            "week_earned": 0,
+                            "xp_week": 0,
+                            "messages_week": 0,
+                            "voice_minutes_week": 0,
+                            "reactions_week": 0,
+                        }
+                    },
+                )
                 updates["scheduler_state.last_weekly_reset"] = today_str
 
             # 2. Скидання month_earned і xp_month (1-го числа)
             if dt.day == 1 and scheduler_state.get("last_monthly_reset") != today_str:
-                await db.users.update_many({"guild_id": guild_id}, {"$set": {"month_earned": 0, "xp_month": 0}})
+                await db.users.update_many(
+                    {"guild_id": guild_id},
+                    {
+                        "$set": {
+                            "month_earned": 0,
+                            "xp_month": 0,
+                            "messages_month": 0,
+                            "voice_minutes_month": 0,
+                            "reactions_month": 0,
+                        }
+                    },
+                )
                 updates["scheduler_state.last_monthly_reset"] = today_str
 
             # 3. Банківський відсоток
@@ -81,10 +103,7 @@ class SchedulerCog(commands.Cog):
             season_start = eco.get("season_start", 0)
             if season_duration > 0 and season_start > 0:
                 if now > season_start + (season_duration * 86400):
-                    if updates:
-                        await db.guild_settings.update_one({"_id": guild_id}, {"$set": updates})
                     await self.trigger_season_end(guild_id, eco, gd)
-                    continue
 
             if updates:
                 await db.guild_settings.update_one({"_id": guild_id}, {"$set": updates})
@@ -170,6 +189,14 @@ async def perform_season_reset(guild: discord.Guild, eco: dict = None, gd: dict 
                 "total_earned": start_bonus,
                 "week_earned": 0,
                 "month_earned": 0,
+                "xp_week": 0,
+                "xp_month": 0,
+                "messages_week": 0,
+                "messages_month": 0,
+                "voice_minutes_week": 0,
+                "voice_minutes_month": 0,
+                "reactions_week": 0,
+                "reactions_month": 0,
                 "eco_history": []
             }
         }
@@ -206,7 +233,7 @@ async def perform_season_reset(guild: discord.Guild, eco: dict = None, gd: dict 
             lines.append(f"{badge} {name} — `{earned:,}` {curr}")
         if lines:
             embed.add_field(name="Топ гравців сезону", value="\n".join(lines), inline=False)
-        embed.set_footer(text=f"Сезон завершено {datetime.datetime.fromtimestamp(now).strftime('%d.%m.%Y')}")
+        embed.set_footer(text=f"Сезон завершено {datetime.datetime.fromtimestamp(now, tz=datetime.timezone.utc).strftime('%d.%m.%Y')}")
         try:
             await channel.send(embed=embed)
         except Exception:

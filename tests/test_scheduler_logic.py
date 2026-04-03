@@ -78,6 +78,14 @@ class PerformSeasonResetTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reset_payload["wallet"], 100)
         self.assertEqual(reset_payload["bank"], 0)
         self.assertEqual(reset_payload["eco_history"], [])
+        self.assertEqual(reset_payload["xp_week"], 0)
+        self.assertEqual(reset_payload["xp_month"], 0)
+        self.assertEqual(reset_payload["messages_week"], 0)
+        self.assertEqual(reset_payload["messages_month"], 0)
+        self.assertEqual(reset_payload["voice_minutes_week"], 0)
+        self.assertEqual(reset_payload["voice_minutes_month"], 0)
+        self.assertEqual(reset_payload["reactions_week"], 0)
+        self.assertEqual(reset_payload["reactions_month"], 0)
 
         fake_guild_settings.update_one.assert_awaited_once()
         stored = fake_guild_settings.update_one.await_args.args[1]["$set"]

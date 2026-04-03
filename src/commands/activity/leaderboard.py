@@ -25,6 +25,14 @@ EMOJI_STATS  = Emojis.STATS.value
 RANK_BADGES = {1: EMOJI_TROPHY, 2: EMOJI_MEDAL, 3: EMOJI_STAR}
 PAGE_SIZE   = 10
 
+
+def _period_stat(doc: dict, field: str, mode: str) -> int:
+    if mode == "week":
+        return doc.get(f"{field}_week", 0)
+    if mode == "month":
+        return doc.get(f"{field}_month", 0)
+    return doc.get(field, 0)
+
 def make_xp_bar(xp: int, needed: int, length: int = 8) -> str:
     if needed <= 0:
         return "█" * length
@@ -91,16 +99,16 @@ def build_xp_embed(
         needed = get_level_xp(level)
         badge = RANK_BADGES.get(rank, f"`{rank:>2}.`")
         name = member.display_name[:20]
-        msgs = doc.get("messages", 0)
-        voice_h = round(doc.get("voice_minutes", 0) / 60, 1)
-        reactions = doc.get("reactions", 0)
+        msgs = _period_stat(doc, "messages", mode)
+        voice_h = round(_period_stat(doc, "voice_minutes", mode) / 60, 1)
+        reactions = _period_stat(doc, "reactions", mode)
 
         if mode == "week":
             xp_period = doc.get("xp_week", 0)
             bar = make_xp_bar(xp_period, max(xp_period, needed, 1))
             lines.append(
                 f"{badge} **{name}** - Lv.{level}\n"
-                f"  `{bar}` +{xp_period} XP this week\n"
+                f"  `{bar}` +{xp_period} XP за 7 днів\n"
                 f"  {EMOJI_CHAT} {msgs}  {EMOJI_MICRO} {voice_h}h  {EMOJI_STAR} {reactions}"
             )
         elif mode == "month":
@@ -108,7 +116,7 @@ def build_xp_embed(
             bar = make_xp_bar(xp_period, max(xp_period, needed, 1))
             lines.append(
                 f"{badge} **{name}** - Lv.{level}\n"
-                f"  `{bar}` +{xp_period} XP this month\n"
+                f"  `{bar}` +{xp_period} XP за 30 днів\n"
                 f"  {EMOJI_CHAT} {msgs}  {EMOJI_MICRO} {voice_h}h  {EMOJI_STAR} {reactions}"
             )
         else:
@@ -125,18 +133,14 @@ def build_xp_embed(
         a_level = author_data.get("level", 1)
         if mode == "week":
             a_xp = author_data.get("xp_week", 0)
-            footer_text = f"You are #{author_rank} - Lv.{a_level} - +{a_xp} XP this week"
+            footer_text = f"Ти #{author_rank} — рівень {a_level} — +{a_xp} XP за 7 днів"
         elif mode == "month":
             a_xp = author_data.get("xp_month", 0)
-            footer_text = f"You are #{author_rank} - Lv.{a_level} - +{a_xp} XP this month"
+            footer_text = f"Ти #{author_rank} — рівень {a_level} — +{a_xp} XP за 30 днів"
         else:
             a_xp = author_data.get("xp", 0)
             a_needed = get_level_xp(a_level)
             footer_text = f"Ти #{author_rank} — рівень {a_level} — {a_xp}/{a_needed} XP"
-        if mode == "week":
-            footer_text = f"Ти #{author_rank} — рівень {a_level} — +{a_xp} XP за 7 днів"
-        elif mode == "month":
-            footer_text = f"Ти #{author_rank} — рівень {a_level} — +{a_xp} XP за 30 днів"
         set_surface_footer(embed, "gameplay", footer_text)
     else:
         set_surface_footer(embed, "gameplay", f"Сторінка {page + 1}/{total_pages}")

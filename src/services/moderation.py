@@ -1,6 +1,6 @@
 """
 moderation.py
-Сервісний шар для moderation cases: warn, mute, kick, ban, ескалацій і логування.
+Сервісний шар для moderation cases: warn, mute, kick, ban, unban, ескалацій і логування.
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ CASE_ACTION_META = {
     "mute": ("Отримано тайм-аут", E_MUTE, 0x1A1A2E),
     "kick": ("Вигнано з сервера", E_KICK, 0x1A1A2E),
     "ban": ("Заблоковано на сервері", E_BAN, 0x1A1A2E),
+    "unban": ("Розбанено на сервері", E_SHIELD, 0x1A1A2E),
 }
 
 ACTION_LABELS = {
@@ -37,12 +38,14 @@ ACTION_LABELS = {
     "mute": "тайм-аут",
     "kick": "кік",
     "ban": "бан",
+    "unban": "розбан",
 }
 
 ACTION_PERMISSIONS = {
     "mute": "moderate_members",
     "kick": "kick_members",
     "ban": "ban_members",
+    "unban": "ban_members",
 }
 
 
@@ -310,6 +313,7 @@ def _build_log_embed(
 
 async def _perform_discord_action(
     *,
+    guild: discord.Guild,
     user: discord.Member | discord.User,
     action: str,
     case_id: str,
@@ -318,17 +322,22 @@ async def _perform_discord_action(
 ) -> None:
     if action == "warn":
         return
-    if not isinstance(user, discord.Member):
-        raise ModerationActionError("Для цієї дії ціль має бути учасником сервера.")
-
     try:
         if action == "mute":
+            if not isinstance(user, discord.Member):
+                raise ModerationActionError("Для цієї дії ціль має бути учасником сервера.")
             until = discord.utils.utcnow() + timedelta(seconds=duration_seconds or 86400)
             await user.timeout(until, reason=f"Case #{case_id}: {reason}")
         elif action == "kick":
+            if not isinstance(user, discord.Member):
+                raise ModerationActionError("Для цієї дії ціль має бути учасником сервера.")
             await user.kick(reason=f"Case #{case_id}: {reason}")
         elif action == "ban":
+            if not isinstance(user, discord.Member):
+                raise ModerationActionError("Для цієї дії ціль має бути учасником сервера.")
             await user.ban(reason=f"Case #{case_id}: {reason}", delete_message_days=0)
+        elif action == "unban":
+            await guild.unban(user, reason=f"Case #{case_id}: {reason}")
     except discord.Forbidden as exc:
         raise ModerationActionError("Discord відхилив дію. Перевір рольову ієрархію та права бота.") from exc
     except discord.HTTPException as exc:
@@ -454,17 +463,19 @@ async def apply_case(
     source: str = "manual",
     origin_text: str | None = None,
 ) -> str:
-    error = validate_moderation_target(
-        guild=guild,
-        actor=moderator if isinstance(moderator, discord.Member) else None,
-        target=user,
-        action=action,
-    )
-    if error:
-        raise ModerationActionError(error)
+    if action != "unban":
+        error = validate_moderation_target(
+            guild=guild,
+            actor=moderator if isinstance(moderator, discord.Member) else None,
+            target=user,
+            action=action,
+        )
+        if error:
+            raise ModerationActionError(error)
 
     case_id = str(uuid.uuid4())[:8]
     await _perform_discord_action(
+        guild=guild,
         user=user,
         action=action,
         case_id=case_id,
@@ -498,3 +509,32 @@ async def apply_case(
         origin_text=origin_text,
     )
     return case_id
+
+
+async def apply_unban_case(
+    bot: commands.Bot,
+    guild: discord.Guild,
+    user: discord.User,
+    moderator: discord.Member | discord.User,
+    reason: str,
+    source: str = "manual",
+    origin_text: str | None = None,
+) -> str:
+    bot_member = _get_bot_member(guild)
+    if bot_member is None:
+        raise ModerationActionError("Бот ще не готовий до модераційних дій у цьому сервері.")
+    if not getattr(bot_member.guild_permissions, "ban_members", False):
+        raise ModerationActionError("Боту бракує прав `Ban Members`.")
+    if moderator.id == user.id:
+        raise ModerationActionError("Не можна розбанити себе цією командою.")
+
+    return await apply_case(
+        bot=bot,
+        guild=guild,
+        user=user,
+        moderator=moderator,
+        action="unban",
+        reason=reason,
+        source=source,
+        origin_text=origin_text,
+    )

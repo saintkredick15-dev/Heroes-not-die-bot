@@ -14,6 +14,7 @@ from discord.ext import commands, tasks
 
 from config.constants import Emojis
 from modules.db import get_database
+from services.stats_contract import aggregate_guild_analytics, analytics_day_key
 
 db = get_database()
 _col_settings = db.guild_settings
@@ -29,14 +30,9 @@ E_BAN = Emojis.BAN.value
 E_STATS = Emojis.STATS.value
 E_HAMMER = Emojis.HAMMER.value
 
-
-def _today() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
-
 async def _inc_analytics(guild_id: int, fields: dict[str, int]) -> None:
     await _col_analytics.update_one(
-        {"guild_id": guild_id, "date": _today()},
+        {"guild_id": guild_id, "date": analytics_day_key()},
         {"$inc": fields},
         upsert=True,
     )
@@ -59,40 +55,18 @@ def _summary_line(*, messages: int, voice_hours: float, net_members: int, warns:
 
 
 async def _build_stats_embed(guild: discord.Guild, days: int) -> discord.Embed:
-    cutoff_date = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
+    result = await aggregate_guild_analytics(guild.id, days, collection=_col_analytics)
 
-    pipeline = [
-        {"$match": {"guild_id": guild.id, "date": {"$gte": cutoff_date}}},
-        {
-            "$group": {
-                "_id": None,
-                "messages": {"$sum": "$messages"},
-                "voice_minutes": {"$sum": "$voice_minutes"},
-                "joins": {"$sum": "$joins"},
-                "leaves": {"$sum": "$leaves"},
-                "warns": {"$sum": "$warns"},
-                "mutes": {"$sum": "$mutes"},
-                "bans": {"$sum": "$bans"},
-                "unbans": {"$sum": "$unbans"},
-                "economy": {"$sum": "$economy_given"},
-            }
-        },
-    ]
-
-    result: dict[str, int] = {}
-    async for doc in _col_analytics.aggregate(pipeline):
-        result = doc
-
-    messages = result.get("messages", 0)
-    voice_hours = round(result.get("voice_minutes", 0) / 60, 1)
-    joins = result.get("joins", 0)
-    leaves = result.get("leaves", 0)
-    net_members = joins - leaves
-    warns = result.get("warns", 0)
-    mutes = result.get("mutes", 0)
-    bans = result.get("bans", 0)
-    unbans = result.get("unbans", 0)
-    economy = result.get("economy", 0)
+    messages = result["messages"]
+    voice_hours = round(result["voice_minutes"] / 60, 1)
+    joins = result["joins"]
+    leaves = result["leaves"]
+    net_members = result["net_members"]
+    warns = result["warns"]
+    mutes = result["mutes"]
+    bans = result["bans"]
+    unbans = result["unbans"]
+    economy = result["economy_given"]
 
     embed = discord.Embed(
         title=f"{E_STATS} Статистика сервера за {days} днів",
