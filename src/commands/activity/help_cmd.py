@@ -1,7 +1,3 @@
-"""
-/help — головне меню допомоги бота.
-"""
-
 from __future__ import annotations
 
 import discord
@@ -27,30 +23,32 @@ MODULES = {
     "moderation": {
         "emoji": E_HAMMER,
         "label": "Модерація",
-        "desc": "Варни, тайм-аути, бани та історія покарань.",
+        "desc": "Попередження, тайм-аути, бани та історія дій модерації.",
         "commands": [
-            ("`/warnings`", "Подивитися свої активні й минулі варни."),
+            ("`/warnings`", "Подивитися свої попередження."),
             ("`/warn @user причина`", "Видати попередження."),
-            ("`/warns @user`", "Переглянути історію варнів користувача."),
+            ("`/warns @user`", "Переглянути історію попереджень користувача."),
+            ("`/unwarn @user case_id`", "Зняти попередження без видалення кейсу."),
             ("`/mute @user час причина`", "Тимчасовий тайм-аут."),
             ("`/unmute @user`", "Зняти тайм-аут."),
             ("`/kick @user причина`", "Вигнати із сервера."),
             ("`/ban @user причина`", "Забанити назавжди."),
-            ("`/purge`", "Очистити чат за обраним фільтром."),
+            ("`/purge`", "Очистити чат за вибраним фільтром."),
         ],
     },
     "administration": {
         "emoji": E_SETTING,
         "label": "Адміністрування",
-        "desc": "Головні панелі конфігу сервера та модулів.",
+        "desc": "Панелі налаштування сервера, XP, модерації та модулів.",
         "commands": [
-            ("`/config`", "Єдиний центр керування модулями сервера."),
+            ("`/config`", "Огляд модулів сервера, пресети та імпорт/експорт."),
             ("`/automod`", "Панель автомодерації та custom rules."),
-            ("`/economy_setup`", "Налаштування економіки, сезону, квестів і фонду."),
-            ("`/warn-setup`", "Ескалації та спадання варнів."),
-            ("`/logs`", "Лог-канали й події для аудиту."),
+            ("`/economy_setup`", "Налаштування економіки, сезону, квестів та фонду."),
+            ("`/xp_setup`", "XP ставки, level-up канал та ролі-нагороди."),
+            ("`/warn-setup`", "Ескалації та спадання попереджень."),
+            ("`/logs`", "Лог-канали та аудит-події."),
             ("`/welcome`", "Привітання, прощання та boost-картки."),
-            ("`/settings`", "Level-up канал і обмеження команд."),
+            ("`/settings`", "Обмеження користувацьких команд по каналах."),
             ("`/autorole`", "Ролі для нових учасників."),
             ("`/colors`", "Панель кольорів нікнеймів."),
         ],
@@ -60,7 +58,7 @@ MODULES = {
         "label": "Активність",
         "desc": "Профілі, рейтинги, utility та voice-room системи.",
         "commands": [
-            ("`/profile @user`", "Картка профілю з XP і економікою."),
+            ("`/profile @user`", "Картка профілю з XP та економікою."),
             ("`/leaderboard`", "Топ активних учасників за XP."),
             ("`/economy_leaderboard`", "Топ гравців за економікою."),
             ("`/meme`", "Випадковий мем із Reddit."),
@@ -71,11 +69,11 @@ MODULES = {
     "tickets": {
         "emoji": E_TICKET,
         "label": "Тікети",
-        "desc": "Підтримка, claim, close summary і transcript у лог-канал.",
+        "desc": "Панель підтримки, claim, close summary та transcript.",
         "commands": [
-            ("`/ticket`", "Налаштування ticket-панелі, категорії, ролей і log channel."),
-            ("`Claim / Close`", "Staff workflow усередині тікет-каналу."),
-            ("`Transcript .txt`", "Автоматично летить у лог-канал під час закриття."),
+            ("`/ticket_setup`", "Налаштування панелі, категорії, ролей та лог-каналу."),
+            ("`Claim / Close`", "Основні дії staff усередині тікет-каналу."),
+            ("`Transcript .txt`", "Летить у лог-канал під час закриття тікета."),
             ("`/export`", "Клонування повідомлень між каналами."),
         ],
     },
@@ -84,15 +82,15 @@ MODULES = {
         "label": "Економіка",
         "desc": "Гаманець, робота, злочини, квести, магазин і мініігри.",
         "commands": [
-            ("`/economy`", "Гаманець, банк, переказ і пограбування."),
+            ("`/wallet`", "Гаманець, банк, переказ, інвентар та історія."),
             ("`/daily`", "Щоденна нагорода та серія днів."),
             ("`/work`", "Легка або складна робота."),
-            ("`/crime`", "Ризикована злочинна вилазка."),
+            ("`/crime`", "Операція або пограбування іншого гравця."),
             ("`/shop`", "Магазин ролей, бустів і предметів."),
             ("`/quests`", "Щоденні та тижневі квести."),
             ("`/slots` `/blackjack` `/coinflip`", "Казино та гемблінг."),
             ("`/roulette` `/highlow` `/duel @user`", "Додаткові ігри та дуелі."),
-            ("`/faq`", "Детальний гайд по механіках економіки."),
+            ("`/faq`", "Гайд по механіках економіки."),
         ],
     },
 }
@@ -102,77 +100,101 @@ FEEDBACK = {
         "emoji": E_HELP,
         "label": "Повідомити про баг",
         "desc": "Якщо щось зламалось або працює не так.",
-        "text": (
-            "Якщо побачили баг або дивну поведінку, скиньте кроки відтворення й очікуваний результат.\n\n"
-            f"• [Сервер підтримки]({SUPPORT_URL})"
-        ),
+        "text": "Опишіть кроки відтворення та очікуваний результат у сервері підтримки.\n\n"
+        f"• [Сервер підтримки]({SUPPORT_URL})",
     },
     "question": {
         "emoji": E_CHAT,
         "label": "Поставити питання",
-        "desc": "Якщо не ясно, де що налаштовується або як працює.",
-        "text": (
-            "Питання по командах, налаштуваннях або логіці бота краще ставити в підтримці.\n\n"
-            f"• [Сервер підтримки]({SUPPORT_URL})"
-        ),
+        "desc": "Якщо неясно, де що налаштовується або як працює.",
+        "text": "Питання по командах і налаштуваннях краще ставити в підтримці.\n\n"
+        f"• [Сервер підтримки]({SUPPORT_URL})",
     },
 }
 
 
-def _main_embed(user: discord.User, bot: discord.User) -> discord.Embed:
+def _main_embed(user: discord.User, bot_user: discord.User) -> discord.Embed:
     embed = surface_embed(
         "navigation",
         title="Меню допомоги",
         description=(
-            f"{user.mention}, це короткий центр навігації по **Vangard**.\n\n"
-            "Спочатку оберіть модуль нижче. Якщо ви адміністратор і не знаєте, з чого почати, йдіть у `/config`."
+            f"{user.mention}, тут зібрані основні модулі й команди.\n\n"
+            "Оберіть потрібний розділ у селекті нижче. Якщо ви налаштовуєте сервер з нуля, почніть із `/config`."
         ),
     )
-    embed.set_thumbnail(url=bot.display_avatar.url)
+    embed.set_thumbnail(url=bot_user.display_avatar.url)
     add_section(
         embed,
         "Швидкий старт",
         [
-            f"{E_SETTING} Адміну: почніть із `/config`, потім відкривайте профільні setup-панелі.",
-            f"{E_WARN} Користувачу: `/warnings` показує ваші попередження.",
-            f"{E_COIN} Для економіки головна точка входу — `/economy`.",
-            f"{E_TICKET} Для підтримки та логів тікетів використовуйте `/ticket`.",
+            f"{E_SETTING} Серверні модулі й пресети: `/config`.",
+            f"{E_COIN} Гаманець, банк і перекази: `/wallet`.",
+            f"{E_STATS} XP, level-up і ролі-нагороди: `/xp_setup`.",
+            f"{E_TICKET} Панель тікетів і лог-канал: `/ticket_setup`.",
+            f"{E_WARN} Попередження та історія модерації: `/warnings`, `/warns`, `/warn-setup`.",
         ],
     )
-    set_surface_footer(embed, "navigation", "Спочатку модуль, потім конкретна команда.")
+    set_surface_footer(embed, "navigation", "Оберіть модуль у селекті, щоб побачити ключові команди.")
     return embed
 
 
-def _module_embed(key: str, bot: discord.User) -> discord.Embed:
-    mod = MODULES[key]
-    embed = surface_embed(
-        "navigation",
-        title=f"{mod['emoji']} {mod['label']}",
-        description=mod["desc"],
-    )
-    embed.set_thumbnail(url=bot.display_avatar.url)
-    add_section(embed, "Команди модуля", [f"{cmd} — {desc}" for cmd, desc in mod["commands"]])
-    set_surface_footer(embed, "navigation", "Поверніться до списку модулів через селект вище.")
+def _module_embed(key: str, bot_user: discord.User) -> discord.Embed:
+    module = MODULES[key]
+    embed = surface_embed("navigation", f"{module['emoji']} {module['label']}", module["desc"])
+    embed.set_thumbnail(url=bot_user.display_avatar.url)
+    add_section(embed, "Команди модуля", [f"{command} — {desc}" for command, desc in module["commands"]], inline=False)
+    set_surface_footer(embed, "navigation", "Селект вище перемикає між модулями без повторного виклику /help.")
     return embed
 
 
-def _feedback_embed(key: str, bot: discord.User, user: discord.User) -> discord.Embed:
-    fb = FEEDBACK[key]
-    embed = surface_embed(
-        "navigation",
-        title=f"{fb['emoji']} {fb['label']}",
-        description=f"{user.mention}, {fb['text']}",
-    )
-    embed.set_thumbnail(url=bot.display_avatar.url)
-    set_surface_footer(embed, "navigation", "Для багів додайте кроки відтворення і що саме очікували побачити.")
+def _feedback_embed(key: str, bot_user: discord.User, user: discord.User) -> discord.Embed:
+    feedback = FEEDBACK[key]
+    embed = surface_embed("navigation", f"{feedback['emoji']} {feedback['label']}", f"{user.mention}, {feedback['text']}")
+    embed.set_thumbnail(url=bot_user.display_avatar.url)
+    set_surface_footer(embed, "navigation", "Для багів додайте кроки відтворення, результат і сервер, де це сталося.")
     return embed
+
+
+class ModuleSelect(discord.ui.Select):
+    def __init__(self, bot_user: discord.User):
+        self.bot_user = bot_user
+        options = [
+            discord.SelectOption(
+                label=module["label"],
+                description=module["desc"][:100],
+                value=key,
+                emoji=discord.PartialEmoji.from_str(module["emoji"]),
+            )
+            for key, module in MODULES.items()
+        ]
+        super().__init__(placeholder="Обрати модуль", options=options, row=0)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(embed=_module_embed(self.values[0], self.bot_user))
+
+
+class FeedbackSelect(discord.ui.Select):
+    def __init__(self, user: discord.User, bot_user: discord.User):
+        self.user = user
+        self.bot_user = bot_user
+        options = [
+            discord.SelectOption(
+                label=feedback["label"],
+                description=feedback["desc"],
+                value=key,
+                emoji=discord.PartialEmoji.from_str(feedback["emoji"]),
+            )
+            for key, feedback in FEEDBACK.items()
+        ]
+        super().__init__(placeholder="Зворотний зв'язок", options=options, row=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(embed=_feedback_embed(self.values[0], self.bot_user, self.user))
 
 
 class HelpView(discord.ui.View):
     def __init__(self, user: discord.User, bot_user: discord.User):
         super().__init__(timeout=180)
-        self.user = user
-        self.bot_user = bot_user
         self.add_item(ModuleSelect(bot_user))
         self.add_item(FeedbackSelect(user, bot_user))
         self.add_item(
@@ -185,52 +207,17 @@ class HelpView(discord.ui.View):
         )
 
 
-class ModuleSelect(discord.ui.Select):
-    def __init__(self, bot_user: discord.User):
-        self.bot_user = bot_user
-        options = [
-            discord.SelectOption(
-                label=mod["label"],
-                description=mod["desc"][:100],
-                value=key,
-                emoji=discord.PartialEmoji.from_str(mod["emoji"]),
-            )
-            for key, mod in MODULES.items()
-        ]
-        super().__init__(placeholder="Обрати модуль", options=options, row=0)
-
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.edit_message(embed=_module_embed(self.values[0], self.bot_user))
-
-
-class FeedbackSelect(discord.ui.Select):
-    def __init__(self, user: discord.User, bot_user: discord.User):
-        self.fb_user = user
-        self.bot_user = bot_user
-        options = [
-            discord.SelectOption(
-                label=fb["label"],
-                description=fb["desc"],
-                value=key,
-                emoji=discord.PartialEmoji.from_str(fb["emoji"]),
-            )
-            for key, fb in FEEDBACK.items()
-        ]
-        super().__init__(placeholder="Зворотний зв'язок", options=options, row=1)
-
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.edit_message(embed=_feedback_embed(self.values[0], self.bot_user, self.fb_user))
-
-
 class HelpCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="help", description="Меню допомоги бота Vangard")
+    @app_commands.command(name="help", description="Коротка навігація по командах і модулях бота")
     async def help_cmd(self, interaction: discord.Interaction):
-        embed = _main_embed(interaction.user, self.bot.user)
-        view = HelpView(interaction.user, self.bot.user)
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        await interaction.response.send_message(
+            embed=_main_embed(interaction.user, self.bot.user),
+            view=HelpView(interaction.user, self.bot.user),
+            ephemeral=True,
+        )
 
 
 async def setup(bot: commands.Bot):

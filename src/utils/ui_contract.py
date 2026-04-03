@@ -19,9 +19,9 @@ OUTCOME_COLORS = {
 }
 
 SURFACE_FOOTERS = {
-    "admin": "Огляд зверху, зміни нижче.",
-    "navigation": "Обирайте модуль або дію нижче.",
-    "gameplay": "Стислий статус зверху, деталі нижче.",
+    "admin": "",
+    "navigation": "",
+    "gameplay": "",
 }
 
 

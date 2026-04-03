@@ -53,12 +53,13 @@ class Emojis(Enum):
     CELEBRATION = "<:celebration_Confetti:1485626240734855441>"
 
     # Economy
-    COIN = "<:coin:1485610808003133552>"
+    COIN = "<:coin_emoji:1485610808003133552>"
     COINS = "<:coins:1485612564619727011>"
     COINS_ALT = "<:coins:1485612564619727011>"
     BANK = "<:bank_safe:1485637217132216571>"
     WALLET = "<:wallet:1485625593574850720>"
     CARD = "<:card:1485625713087221830>"
+    CARD_TRANSFER = "<:cardtransfer:1487155133480439869>"
     LOOTBOX = "<:lootbox:1485614292664320070>"
     GIFT = "<:gift:1485614389984755772>"
     SHIELD = "<:shield:1485606277081071666>"
@@ -76,6 +77,7 @@ class Emojis(Enum):
 
     # Navigation
     LEFT = "<:prevtotheleft:1485600254760980501>"
+    BACK = "<:prevtotheleft:1485600254760980501>"
     PREV = "<:prevtotheleft:1485600254760980501>"
     NEXT = "<:nexttotheright:1485600703052517376>"
     HISTORY = "<:history:1485601911599009893>"
@@ -87,6 +89,7 @@ class Emojis(Enum):
     # Admin / utility / moderation
     STATS = "<:stats:1485607826964353144>"
     DEV_STATS = "<:stats:1485607826964353144>"
+    TOOLS = "<:tools:1486094812053508257>"
     SETTINGS = "<:settings:1485606007668342865>"
     HAMMER = "<:hammer:1485606127696609412>"
     TICKET = "<:ticket:1485608010192519300>"
@@ -142,3 +145,5 @@ class Emojis(Enum):
     ROLE = "<:role_masks:1485727278116900946>"
     EVENT = "<:event_star:1485728236091740180>"
     CLIPBOARD = "<:clipboard:1485728386453340331>"
+    TRANSFER = "<:transfer:1487154828168659025>"
+    PIN = "<:pin:1487155574939455609>"

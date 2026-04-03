@@ -14,7 +14,7 @@ import discord
 from discord.ext import commands
 
 from services.automod import find_matching_rule, get_automod_config, normalize_string
-from services.moderation import apply_case
+from services.moderation import ModerationActionError, apply_case
 
 _COOLDOWN_SECONDS = 10
 _FLOOD_CACHE_MAX_AGE = 300
@@ -279,17 +279,20 @@ class AutomodEngine(commands.Cog):
                 continue
 
             duration_seconds = _parse_mute_seconds(mute_dur) if act == "mute" else None
-            await apply_case(
-                bot=self.bot,
-                guild=message.guild,
-                user=message.author,
-                moderator=self.bot.user,
-                action=act,
-                reason=f"[Automod] {reason}",
-                duration_seconds=duration_seconds,
-                source="auto",
-                origin_text=f"Повідомлення в #{message.channel.name}",
-            )
+            try:
+                await apply_case(
+                    bot=self.bot,
+                    guild=message.guild,
+                    user=message.author,
+                    moderator=self.bot.user,
+                    action=act,
+                    reason=f"[Automod] {reason}",
+                    duration_seconds=duration_seconds,
+                    source="auto",
+                    origin_text=f"Повідомлення в #{message.channel.name}",
+                )
+            except ModerationActionError:
+                continue
 
         if rule is not None:
             await self._send_rule_response(message, rule)
@@ -433,16 +436,19 @@ class AutomodEngine(commands.Cog):
 
         action = scoped_rule.get("action", "warn")
         reason = f"Заборонений тег в профілі: {scoped_rule['trigger']}"
-        await apply_case(
-            bot=self.bot,
-            guild=after.guild,
-            user=after,
-            moderator=self.bot.user,
-            action=action,
-            reason=f"[Automod] {reason}",
-            source="auto",
-            origin_text="Профіль користувача",
-        )
+        try:
+            await apply_case(
+                bot=self.bot,
+                guild=after.guild,
+                user=after,
+                moderator=self.bot.user,
+                action=action,
+                reason=f"[Automod] {reason}",
+                source="auto",
+                origin_text="Профіль користувача",
+            )
+        except ModerationActionError:
+            return
 
 
 async def setup(bot: commands.Bot):

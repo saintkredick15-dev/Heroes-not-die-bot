@@ -4,6 +4,7 @@ from discord.ext import commands
 from modules.db import get_database
 import asyncio
 from config.constants import Emojis
+from utils.ui_contract import add_section, compact_kv, set_surface_footer, surface_embed
 
 db = get_database()
 E_CHECK = Emojis.CHECK.value
@@ -22,6 +23,85 @@ E_PLUS = Emojis.PLUS.value
 E_MICRO = Emojis.MICRO.value
 E_KICK = Emojis.KICK.value
 E_RELOAD = Emojis.RELOAD.value
+
+
+def _build_room_management_embed() -> discord.Embed:
+    embed = surface_embed(
+        "admin",
+        f"{E_ROOM} Управління приватною кімнатою",
+        "Натискай кнопки нижче, щоб керувати своєю кімнатою. Панель працює тільки для власника активної приватної кімнати.",
+    )
+    add_section(
+        embed,
+        "Дії",
+        [
+            f"{E_EDIT} змінити назву кімнати",
+            f"{E_PLUS} встановити ліміт користувачів",
+            f"{E_LOCK} закрити або відкрити доступ",
+            f"{E_EYE} сховати або показати кімнату",
+            f"{E_MEMBERS} дати або забрати доступ користувачу",
+            f"{E_MICRO} дати або забрати право говорити",
+            f"{E_KICK} вигнати користувача з кімнати",
+            f"{E_RELOAD} скинути права користувача",
+            f"{E_OWNER} передати власність",
+            f"{E_INFO} переглянути стан кімнати",
+        ],
+    )
+    return set_surface_footer(embed, "admin", "Кнопка «Інфо» показує поточний стан кімнати.")
+
+
+def _build_room_info_embed(channel: discord.VoiceChannel, user_id: int, user_room: dict) -> discord.Embed:
+    member_count = len(channel.members)
+    limit = user_room.get("user_limit", 0)
+    limit_text = f"{limit} користувачів" if limit > 0 else "без ліміту"
+    locked = user_room.get("locked", False)
+    hidden = user_room.get("hidden", False)
+
+    embed = surface_embed("admin", f"{E_INFO} Інформація про кімнату")
+    add_section(
+        embed,
+        "Стан",
+        [
+            compact_kv("Назва", channel.name),
+            compact_kv("Учасників", str(member_count)),
+            compact_kv("Ліміт", limit_text),
+            compact_kv("Доступ", "Закрито" if locked else "Відкрито"),
+            compact_kv("Видимість", "Сховано" if hidden else "Видимо всім"),
+            compact_kv("Власник", f"<@{user_id}>"),
+        ],
+    )
+    return set_surface_footer(embed, "admin", "Натисни «Оновити», якщо щойно змінив стан кімнати.")
+
+
+class RoomInfoRefreshView(discord.ui.View):
+    def __init__(self, owner_id: int):
+        super().__init__(timeout=300)
+        self.owner_id = owner_id
+
+    @discord.ui.button(
+        label="Оновити",
+        emoji=discord.PartialEmoji.from_str(E_RELOAD),
+        style=discord.ButtonStyle.secondary,
+    )
+    async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(f"{E_CROSS} Ця картка належить іншому користувачу.", ephemeral=True)
+            return
+
+        user_room = await db.private_rooms.find_one({"owner_id": self.owner_id, "active": True})
+        if not user_room:
+            await interaction.response.send_message(f"{E_CROSS} У тебе вже немає активної приватної кімнати.", ephemeral=True)
+            return
+
+        channel = interaction.guild.get_channel(user_room["channel_id"])
+        if not channel:
+            await interaction.response.send_message(f"{E_CROSS} Не вдалося знайти твою кімнату.", ephemeral=True)
+            return
+
+        await interaction.response.edit_message(
+            embed=_build_room_info_embed(channel, self.owner_id, user_room),
+            view=RoomInfoRefreshView(self.owner_id),
+        )
 
 class RoomNameModal(discord.ui.Modal, title="Змінити назву кімнати"):
     name_input = discord.ui.TextInput(
@@ -350,7 +430,7 @@ class RoomManagementView(discord.ui.View):
         modal = UserMentionModal(interaction.user.id, "owner", "Передати власність")
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str(E_INFO), style=discord.ButtonStyle.primary, row=1, custom_id="room_info")
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(E_INFO), style=discord.ButtonStyle.secondary, row=1, custom_id="room_info")
     async def room_info(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Інформація про кімнату"""
         user_room = await db.private_rooms.find_one({
@@ -361,26 +441,8 @@ class RoomManagementView(discord.ui.View):
         if user_room:
             channel = interaction.guild.get_channel(user_room["channel_id"])
             if channel:
-                
-                member_count = len(channel.members) if hasattr(channel, 'members') else 0
-                limit = user_room.get("user_limit", 0)
-                limit_text = f"{limit} користувачів" if limit > 0 else "без ліміту"
-                locked = user_room.get("locked", False)
-                hidden = user_room.get("hidden", False)
-                
-                embed = discord.Embed(
-                    title=f"{E_INFO} Інформація про твою кімнату",
-                    color=0x7c7cf0,
-                    description=(
-                        f"{E_ROOM} **Назва:** {channel.name}\n"
-                        f"{E_MEMBERS} **Учасників:** {member_count}\n"
-                        f"{E_STATS} **Ліміт:** {limit_text}\n"
-                        f"{E_LOCK} **Статус:** {'Закрито' if locked else 'Відкрито'}\n"
-                        f"{E_EYE} **Видимість:** {'Сховано' if hidden else 'Видимо всім'}\n"
-                        f"{E_OWNER} **Власник:** <@{interaction.user.id}>"
-                    )
-                )
-                await interaction.response.send_message(embed=embed, ephemeral=True)
+                embed = _build_room_info_embed(channel, interaction.user.id, user_room)
+                await interaction.response.send_message(embed=embed, view=RoomInfoRefreshView(interaction.user.id), ephemeral=True)
             else:
                 await interaction.response.send_message(f"{E_CROSS} Не вдалося знайти твою кімнату!", ephemeral=True)
         else:
@@ -503,39 +565,21 @@ class RoomManagementCommands(commands.Cog):
             upsert=True
         )
 
-        embed = discord.Embed(
-            title=f"{E_ROOM} Управління приватною кімнатою",
-            color=0x7c7cf0,
-            description=(
-                "Натисни наступні кнопочки, щоб налаштувати свою кімнату\n"
-                "Використовувати їх можна тільки коли у тебе є приватний канал\n\n"
-                f"{E_EDIT} — змінити назву кімнати\n"
-                f"{E_PLUS} — встановити ліміт користувачів\n"
-                f"{E_LOCK} — закрити/відкрити доступ в кімнату\n"
-                f"{E_EYE} — сховати/розкрити кімнату для всіх\n"
-                f"{E_MEMBERS} — заборонити/дати доступ до кімнати користувачеві\n"
-                f"{E_MICRO} — заборонити/дати право говорити користувачеві\n"
-                f"{E_KICK} — вигнати користувача з кімнати\n"
-                f"{E_RELOAD} — скинути права користувача\n"
-                f"{E_OWNER} — зробити користувача новим власником\n"
-                f"{E_INFO} — інформація про кімнату"
-            )
-        )
+        embed = _build_room_management_embed()
 
         view = RoomManagementView()
         
         await management_channel.send(embed=embed, view=view)
 
-        success_embed = discord.Embed(
-            title="<:check:1485597845883981905> Система приватних кімнат налаштована!",
-            color=0x00ff00,
-            description=(
+        success_embed = surface_embed(
+            "admin",
+            f"{E_CHECK} Система приватних кімнат налаштована",
+            (
                 f"**Канал-створювач:** {creator_channel.mention}\n"
                 f"**Канал управління:** {management_channel.mention}\n\n"
-                f"Тепер користувачі можуть:\n"
-                f"• Заходити в {creator_channel.mention} щоб створити приватну кімнату\n"
-                f"• Використовувати панель управління в {management_channel.mention} для налаштування своїх кімнат"
-            )
+                f"Користувачі можуть заходити в {creator_channel.mention}, щоб створити приватну кімнату, "
+                f"і користуватися панеллю в {management_channel.mention}."
+            ),
         )
 
         await interaction.followup.send(embed=success_embed, ephemeral=True)

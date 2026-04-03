@@ -28,6 +28,7 @@ E_COLOR_OUTLINE = "<:palette:1485608515409285140>"
 E_COLOR = "<:palette:1485608515409285140>"
 E_BG = "<:svgviewerpngoutput20260324T19312:1486069946634207292>"
 E_CROSS = "<:close:1485598320935174317>"
+E_COPY = "<:copy:1486419992109908039>"
 
 
 async def get_greetings_settings(guild_id: int) -> dict:
@@ -231,6 +232,15 @@ class DashboardView(discord.ui.View):
         self.mode = mode
         self.settings = settings
         self.add_item(FontSelect(settings[f"{self.mode}_font_name"]))
+        if self.mode == "welcome":
+            self.btn_copy_pair.label = "\u0421\u043a\u043e\u043f\u0456\u044e\u0432\u0430\u0442\u0438 \u0432 goodbye"
+            self.btn_copy_pair.emoji = discord.PartialEmoji.from_str(E_BYE)
+        elif self.mode == "goodbye":
+            self.btn_copy_pair.label = "\u0421\u043a\u043e\u043f\u0456\u044e\u0432\u0430\u0442\u0438 \u0437 welcome"
+            self.btn_copy_pair.emoji = discord.PartialEmoji.from_str(E_HI)
+        else:
+            self.btn_copy_pair.label = "\u041a\u043e\u043f\u0456\u044e\u0432\u0430\u043d\u043d\u044f \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0435"
+            self.btn_copy_pair.disabled = True
 
     @discord.ui.select(
         cls=discord.ui.ChannelSelect,
@@ -278,6 +288,36 @@ class DashboardView(discord.ui.View):
         if self.mode != "boost":
             return await interaction.response.send_message(f"{E_CROSS} Ця дія доступна лише в режимі boost.", ephemeral=True)
         await interaction.response.send_modal(BoostRoleModal(self))
+
+    @discord.ui.button(label="\u0421\u043a\u043e\u043f\u0456\u044e\u0432\u0430\u0442\u0438", style=discord.ButtonStyle.secondary, emoji=discord.PartialEmoji.from_str(E_COPY), row=4)
+    async def btn_copy_pair(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.mode == "boost":
+            return await interaction.response.send_message(f"{E_CROSS} \u041a\u043e\u043f\u0456\u044e\u0432\u0430\u043d\u043d\u044f \u043f\u0430\u0440\u043d\u043e\u0433\u043e \u0440\u0435\u0436\u0438\u043c\u0443 \u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0435 \u043b\u0438\u0448\u0435 \u0434\u043b\u044f welcome/goodbye.", ephemeral=True)
+
+        source_mode = "welcome"
+        target_mode = "goodbye"
+        keys = (
+            "channel_id",
+            "text",
+            "image_enabled",
+            "font_color",
+            "font_name",
+            "outline_color",
+            "bg_url",
+            "bg_color",
+        )
+        payload = {f"{target_mode}_{key}": self.settings[f"{source_mode}_{key}"] for key in keys}
+        await update_settings(self.guild_id, payload)
+        self.settings.update(payload)
+
+        if self.mode == target_mode:
+            await interaction.response.edit_message(embed=_build_embed(self.settings, self.mode), view=self)
+            return
+
+        await interaction.response.send_message(
+            f"{E_CHECK} \u041d\u0430\u043b\u0430\u0448\u0442\u0443\u0432\u0430\u043d\u043d\u044f welcome \u0441\u043a\u043e\u043f\u0456\u0439\u043e\u0432\u0430\u043d\u043e \u0432 goodbye.",
+            ephemeral=True,
+        )
 
 
 def _build_embed(settings: dict, mode: str) -> discord.Embed:

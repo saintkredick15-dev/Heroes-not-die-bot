@@ -1,198 +1,259 @@
-"""
-/settings — Загальні налаштування сервера.
-- Level Up канал
-- Обмеження конкретних команд по каналах
-"""
 from __future__ import annotations
 
 import discord
 from discord import app_commands
 from discord.ext import commands
+
+from config.constants import Emojis as _E
 from modules.db import get_database
-from utils.ui_contract import add_section, compact_kv, set_surface_footer, surface_embed
+from utils.restrictions import normalize_command_restrictions
+from utils.ui_contract import add_section, surface_embed
 
 db = get_database()
 _col = db.guild_settings
 
-E_SETTING = "<:settings:1485606007668342865>"
-E_CHECK   = "<:check:1485597845883981905>"
-E_CROSS   = "<:close:1485598320935174317>"
-E_NOTIF   = "<:notification_on:1485609281062572142>"
-RESTRICTABLE_COMMANDS = {
-    "meme":        "Випадковий мем з Reddit",
-    "avatar":      "Аватар користувача",
-    "profile":     "Профіль з XP/рівнем",
-    "leaderboard": "Топ учасників",
+E_SETTING = _E.SETTINGS.value
+E_PIN = _E.PIN.value
+E_CROSS = _E.CROSS.value
+
+EXCLUDED_RESTRICTION_COMMANDS = {
+    "config",
+    "settings",
+    "economy_setup",
+    "xp_setup",
+    "automod",
+    "logs_setup",
+    "warn_setup",
+    "welcome",
+    "archive",
+    "warns",
+    "dev_stats",
+    "ticket_setup",
 }
 
+PERSONAL_ONLY_COMMANDS = {
+    "avatar",
+    "daily",
+    "meme",
+    "profile",
+}
+
+
 async def _get(guild_id: int) -> dict:
-    return await _col.find_one({"_id": guild_id}) or {}
+    settings = await _col.find_one({"_id": guild_id}) or {}
+    restrictions = normalize_command_restrictions(settings.get("command_restrictions"))
+    if restrictions != settings.get("command_restrictions", {}):
+        settings["command_restrictions"] = restrictions
+        await _col.update_one({"_id": guild_id}, {"$set": {"command_restrictions": restrictions}}, upsert=True)
+    return settings
+
 
 async def _set(guild_id: int, data: dict):
+    if "command_restrictions" in data:
+        data = {**data, "command_restrictions": normalize_command_restrictions(data["command_restrictions"])}
     await _col.update_one({"_id": guild_id}, {"$set": data}, upsert=True)
+
+
+def _feature_enabled_for_command(command: app_commands.Command, settings: dict) -> bool:
+    module_name = getattr(getattr(command, "callback", None), "__module__", "")
+    if ".economy." not in module_name:
+        return True
+
+    eco = settings.get("economy", {}) if isinstance(settings.get("economy"), dict) else {}
+    if not eco.get("enabled", True):
+        return False
+
+    name = command.name
+    if module_name.endswith(".gambling"):
+        return eco.get("gambling_enabled", False)
+    if module_name.endswith(".auction") or name == "auction":
+        return bool(eco.get("auction_channel_id", 0))
+    if module_name.endswith(".crime") or name == "crime":
+        return eco.get("crime_enabled", True)
+    if module_name.endswith(".daily") or name == "daily":
+        return eco.get("daily_enabled", True)
+    if module_name.endswith(".work") or name == "work":
+        return eco.get("work_enabled", True)
+    if module_name.endswith(".duel") or name == "duel":
+        return eco.get("duel_enabled", True)
+    if module_name.endswith(".shop") or name == "shop":
+        return eco.get("shop_enabled", True)
+    if module_name.endswith(".fonds") or name == "fonds":
+        return eco.get("fund_enabled", True)
+    if module_name.endswith(".quests") or name.startswith("quest"):
+        return eco.get("quests_enabled", True)
+    return True
+
+
+def _is_restrictable_command(command: app_commands.Command, settings: dict) -> bool:
+    if not isinstance(command, app_commands.Command):
+        return False
+    if command.parent is not None:
+        return False
+    if command.name in EXCLUDED_RESTRICTION_COMMANDS or command.name in PERSONAL_ONLY_COMMANDS:
+        return False
+    permissions = getattr(command, "default_permissions", None)
+    if permissions and permissions.value:
+        return False
+    module_name = getattr(getattr(command, "callback", None), "__module__", "")
+    if ".administration." in module_name:
+        return False
+    return _feature_enabled_for_command(command, settings)
+
+
+def _collect_restrictable_commands(bot: commands.Bot, settings: dict) -> dict[str, str]:
+    catalog: dict[str, str] = {}
+    for command in bot.tree.get_commands():
+        if _is_restrictable_command(command, settings):
+            catalog[command.name] = command.description or "Користувацька команда"
+    return dict(sorted(catalog.items()))
+
 
 def _build_main_embed(settings: dict) -> discord.Embed:
     embed = surface_embed(
         "admin",
         title=f"{E_SETTING} Налаштування сервера",
-        description="Це вузький server-level центр: level-up канал і обмеження окремих команд по каналах.",
+        description="Керуйте обмеженнями користувацьких команд по каналах.",
     )
-
-    lu_ch = settings.get("levelup_channel_id")
-    lu_status = f"<#{lu_ch}>" if lu_ch else f"{E_CROSS} Вимкнено"
-    add_section(embed, f"{E_NOTIF} Level Up", compact_kv("Канал", lu_status), inline=False)
-
     restrictions = settings.get("command_restrictions", {})
-    if restrictions:
-        lines = []
-        for cmd_name, ch_ids in restrictions.items():
-            if ch_ids:
-                ch_list = ", ".join(f"<#{c}>" for c in ch_ids)
-                lines.append(f"`/{cmd_name}` → {ch_list}")
-        if lines:
-            add_section(embed, "📌 Обмеження команд", lines, inline=False)
-        else:
-            add_section(embed, "📌 Обмеження команд", f"{E_CROSS} Не налаштовано.", inline=False)
-    else:
-        add_section(embed, "📌 Обмеження команд", f"{E_CROSS} Не налаштовано.", inline=False)
-
-    set_surface_footer(embed, "admin", "Для economy, automod, logs, welcome і warnings використовуйте /config.")
+    lines = []
+    for command_name, channel_ids in restrictions.items():
+        if channel_ids:
+            channel_list = ", ".join(f"<#{channel_id}>" for channel_id in channel_ids)
+            lines.append(f"`/{command_name}` -> {channel_list}")
+    add_section(
+        embed,
+        f"{E_PIN} Обмеження команд",
+        lines if lines else f"{E_CROSS} Налаштувань ще немає.",
+        inline=False,
+    )
     return embed
 
-def _build_cmd_embed(cmd_name: str, settings: dict) -> discord.Embed:
-    desc = RESTRICTABLE_COMMANDS.get(cmd_name, "")
-    restrictions = settings.get("command_restrictions", {})
-    channels = restrictions.get(cmd_name, [])
 
+def _build_command_embed(command_name: str, settings: dict, command_catalog: dict[str, str]) -> discord.Embed:
+    description = command_catalog.get(command_name, "Користувацька команда")
+    channels = settings.get("command_restrictions", {}).get(command_name, [])
     embed = surface_embed(
         "admin",
-        title=f"{E_SETTING} Обмеження: /{cmd_name}",
-        description=f"{desc}\n\nОберіть канали де команда **дозволена**.\n*Пусто = доступна скрізь.*",
+        title=f"{E_SETTING} Обмеження: /{command_name}",
+        description=f"{description}\n\nОберіть канали, де команда дозволена. Порожній список означає доступ скрізь.",
     )
-    if channels:
-        add_section(embed, f"{E_CHECK} Дозволені канали", ", ".join(f"<#{c}>" for c in channels), inline=False)
-    else:
-        add_section(embed, "Статус", "Доступна в усіх каналах.", inline=False)
-    set_surface_footer(embed, "admin", "Тут задаються лише дозволені канали для конкретної команди.")
+    add_section(
+        embed,
+        "Дозволені канали",
+        ", ".join(f"<#{channel_id}>" for channel_id in channels) if channels else "Команда доступна в усіх каналах.",
+        inline=False,
+    )
     return embed
 
-# ── Views ─────────────────────────────────────────────────────────────────────
-
-class SettingsView(discord.ui.View):
-    def __init__(self, settings: dict):
-        super().__init__(timeout=180)
-        self.settings = settings
-        self.add_item(LevelUpChannelSelect(settings))
-        self.add_item(CommandSelect())
-
-    @discord.ui.button(label="Вимкнути Level Up", style=discord.ButtonStyle.danger, row=2)
-    async def disable_lu(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.settings["levelup_channel_id"] = None
-        await _set(interaction.guild.id, {"levelup_channel_id": None})
-        await interaction.response.edit_message(
-            embed=_build_main_embed(self.settings), view=self)
-
-class LevelUpChannelSelect(discord.ui.ChannelSelect):
-    def __init__(self, settings: dict):
-        current = settings.get("levelup_channel_id")
-        defaults = [discord.Object(id=current)] if current else []
-        super().__init__(
-            placeholder="Канал для Level Up сповіщень...",
-            min_values=1, max_values=1,
-            channel_types=[discord.ChannelType.text],
-            row=0,
-            default_values=defaults,
-        )
-
-    async def callback(self, interaction: discord.Interaction):
-        ch_id = self.values[0].id
-        self.view.settings["levelup_channel_id"] = ch_id
-        await _set(interaction.guild.id, {"levelup_channel_id": ch_id})
-        await interaction.response.edit_message(
-            embed=_build_main_embed(self.view.settings), view=self.view)
 
 class CommandSelect(discord.ui.Select):
-    def __init__(self):
+    def __init__(self, command_catalog: dict[str, str]):
         options = [
-            discord.SelectOption(label=f"/{name}", description=desc, value=name)
-            for name, desc in RESTRICTABLE_COMMANDS.items()
+            discord.SelectOption(label=f"/{name}", description=desc[:100], value=name)
+            for name, desc in command_catalog.items()
         ]
-        super().__init__(placeholder="Обмежити команду по каналах...", options=options, row=1)
+        if not options:
+            options = [
+                discord.SelectOption(
+                    label="Команд немає",
+                    description="Немає доступних користувацьких команд для обмеження.",
+                    value="__empty__",
+                )
+            ]
+        super().__init__(placeholder="Обмежити команду по каналах...", options=options, row=0, disabled=options[0].value == "__empty__")
 
     async def callback(self, interaction: discord.Interaction):
-        cmd_name = self.values[0]
-        view = CmdRestrictionView(cmd_name, self.view.settings)
-        embed = _build_cmd_embed(cmd_name, self.view.settings)
-        await interaction.response.edit_message(embed=embed, view=view)
-
-class CmdRestrictionView(discord.ui.View):
-    def __init__(self, cmd_name: str, settings: dict):
-        super().__init__(timeout=180)
-        self.cmd_name = cmd_name
-        self.settings = settings
-        self.add_item(CmdChannelSelect(cmd_name, settings))
-
-    @discord.ui.button(label="Скинути", style=discord.ButtonStyle.danger, row=1)
-    async def reset_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        restrictions = self.settings.get("command_restrictions", {})
-        restrictions.pop(self.cmd_name, None)
-        self.settings["command_restrictions"] = restrictions
-        await _set(interaction.guild.id, {"command_restrictions": restrictions})
-        if hasattr(interaction.client, "reload_restrictions"):
-            await interaction.client.reload_restrictions(interaction.guild.id)
-        view = SettingsView(self.settings)
+        if self.values[0] == "__empty__":
+            await interaction.response.defer()
+            return
+        view = CommandRestrictionView(self.view.bot, self.values[0], self.view.settings, self.view.command_catalog)
         await interaction.response.edit_message(
-            embed=_build_main_embed(self.settings), view=view)
+            embed=_build_command_embed(self.values[0], self.view.settings, self.view.command_catalog),
+            view=view,
+        )
 
-    @discord.ui.button(label="← Назад", style=discord.ButtonStyle.primary, row=1)
-    async def back_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        view = SettingsView(self.settings)
-        await interaction.response.edit_message(
-            embed=_build_main_embed(self.settings), view=view)
 
-class CmdChannelSelect(discord.ui.ChannelSelect):
-    def __init__(self, cmd_name: str, settings: dict):
-        self.cmd_name = cmd_name
-        restrictions = settings.get("command_restrictions", {})
-        current_ids = restrictions.get(cmd_name, [])
-        defaults = [discord.Object(id=cid) for cid in current_ids]
+class CommandChannelSelect(discord.ui.ChannelSelect):
+    def __init__(self, command_name: str, settings: dict):
+        current_ids = settings.get("command_restrictions", {}).get(command_name, [])
+        defaults = [discord.Object(id=channel_id) for channel_id in current_ids]
         super().__init__(
-            placeholder="Дозволені канали (пусто = скрізь)...",
-            min_values=0, max_values=10,
+            placeholder="Дозволені канали (порожньо = скрізь)...",
+            min_values=0,
+            max_values=10,
             channel_types=[discord.ChannelType.text],
             row=0,
             default_values=defaults,
         )
+        self.command_name = command_name
 
     async def callback(self, interaction: discord.Interaction):
-        ids = [ch.id for ch in self.values] if self.values else []
+        channel_ids = [channel.id for channel in self.values] if self.values else []
         settings = self.view.settings
         restrictions = settings.get("command_restrictions", {})
-        if ids:
-            restrictions[self.cmd_name] = ids
+        if channel_ids:
+            restrictions[self.command_name] = channel_ids
         else:
-            restrictions.pop(self.cmd_name, None)
+            restrictions.pop(self.command_name, None)
         settings["command_restrictions"] = restrictions
         await _set(interaction.guild.id, {"command_restrictions": restrictions})
         if hasattr(interaction.client, "reload_restrictions"):
             await interaction.client.reload_restrictions(interaction.guild.id)
-        embed = _build_cmd_embed(self.cmd_name, settings)
-        await interaction.response.edit_message(embed=embed, view=self.view)
+        await interaction.response.edit_message(
+            embed=_build_command_embed(self.command_name, settings, self.view.command_catalog),
+            view=self.view,
+        )
 
-# ── Cog ───────────────────────────────────────────────────────────────────────
+
+class SettingsView(discord.ui.View):
+    def __init__(self, bot: commands.Bot, settings: dict, command_catalog: dict[str, str]):
+        super().__init__(timeout=180)
+        self.bot = bot
+        self.settings = settings
+        self.command_catalog = command_catalog
+        self.add_item(CommandSelect(command_catalog))
+
+
+class CommandRestrictionView(discord.ui.View):
+    def __init__(self, bot: commands.Bot, command_name: str, settings: dict, command_catalog: dict[str, str]):
+        super().__init__(timeout=180)
+        self.bot = bot
+        self.command_name = command_name
+        self.settings = settings
+        self.command_catalog = command_catalog
+        self.add_item(CommandChannelSelect(command_name, settings))
+
+    @discord.ui.button(label="Скинути", style=discord.ButtonStyle.danger, row=1)
+    async def reset_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        restrictions = self.settings.get("command_restrictions", {})
+        restrictions.pop(self.command_name, None)
+        self.settings["command_restrictions"] = restrictions
+        await _set(interaction.guild.id, {"command_restrictions": restrictions})
+        if hasattr(interaction.client, "reload_restrictions"):
+            await interaction.client.reload_restrictions(interaction.guild.id)
+        view = SettingsView(self.bot, self.settings, self.command_catalog)
+        await interaction.response.edit_message(embed=_build_main_embed(self.settings), view=view)
+
+    @discord.ui.button(label="← Назад", style=discord.ButtonStyle.primary, row=1)
+    async def back_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        view = SettingsView(self.bot, self.settings, self.command_catalog)
+        await interaction.response.edit_message(embed=_build_main_embed(self.settings), view=view)
+
 
 class SettingsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="settings", description="Загальні налаштування сервера. Інші модулі винесені в /config")
+    @app_commands.command(name="settings", description="Налаштування сервера: обмеження команд по каналах")
     @app_commands.default_permissions(administrator=True)
     async def settings_cmd(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         settings = await _get(interaction.guild.id)
-        view = SettingsView(settings)
-        embed = _build_main_embed(settings)
-        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+        command_catalog = _collect_restrictable_commands(self.bot, settings)
+        view = SettingsView(self.bot, settings, command_catalog)
+        await interaction.followup.send(embed=_build_main_embed(settings), view=view, ephemeral=True)
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(SettingsCog(bot))

@@ -14,6 +14,7 @@ from commands.economy.quests import quest_hook
 from config.constants import Emojis as _E
 from modules.db import get_database
 from repositories.user import get_user
+from services.metrics import inc_global_metric
 from utils.eco_helpers import apply_inflation, make_log
 from utils.ui_contract import add_section, gameplay_result_embed, set_surface_footer, surface_embed
 
@@ -103,6 +104,7 @@ class WorkCommand(commands.Cog):
             from modules.db import invalidate_user_data
 
             await invalidate_user_data(interaction.guild.id, interaction.user.id)
+            await inc_global_metric("work_runs_total")
             await quest_hook(interaction.guild.id, interaction.user.id, "work")
             await apply_inflation(db, interaction.guild.id, final_earned, eco)
             set_surface_footer(
@@ -169,6 +171,7 @@ class WorkCommand(commands.Cog):
                 },
             )
             await quest_hook(interaction.guild.id, interaction.user.id, "work")
+            await inc_global_metric("work_runs_total")
             if outcome in {"win", "draw"}:
                 await apply_inflation(db, interaction.guild.id, final_earned, eco)
 
@@ -343,6 +346,7 @@ class WorkCommand(commands.Cog):
 
         await invalidate_user_data(interaction.guild.id, interaction.user.id)
         await quest_hook(interaction.guild.id, interaction.user.id, "work")
+        await inc_global_metric("work_runs_total")
         await apply_inflation(db, interaction.guild.id, final_pay, eco)
 
         earned_text = f"**+{final_earned:,}** {curr}"
@@ -362,7 +366,7 @@ class WorkCommand(commands.Cog):
     @app_commands.command(name="work", description="Працювати та заробляти валюту")
     async def work(self, interaction: discord.Interaction):
         try:
-            from commands.administration.economy_setup import get_eco
+            from commands.administration.economy_setup_shared import get_eco
             from utils.eco_helpers import check_account_age
             from modules.db import get_guild_settings
 

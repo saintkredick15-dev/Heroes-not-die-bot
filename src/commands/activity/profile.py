@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from discord import app_commands
 from discord.ext import commands
 
+from config.constants import Emojis as _E
 from modules.db import get_database
 from repositories.user import get_level_xp, get_user
 from utils.ui_contract import add_section, set_surface_footer, surface_embed
@@ -21,7 +22,7 @@ E_CHAT = "<:chat:1485608210202361976>"
 E_MICRO = "<:micro:1485608331484729344>"
 E_STAR = "<:star:1485626121847574631>"
 E_CALENDAR = "<:info:1485638054201921536>"
-E_COIN = "<:coin:1485610808003133552>"
+E_COIN = _E.COIN.value
 E_FLAME = "<:flame:1485618663489929356>"
 E_SHIELD = "<:shield:1485606277081071666>"
 E_BOOST = "<:boost:1485610043033518131>"

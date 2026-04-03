@@ -13,10 +13,10 @@ from services.automod import find_matching_rule, reload_guild_automod_cache
 
 from .automod_setup import MODULES as AUTOMOD_MODULES
 from .automod_setup import MODULE_SETTINGS as AUTOMOD_SETTINGS
-from .economy_setup import DEFAULT_ECO, get_eco, save_eco
+from .economy_setup_shared import DEFAULT_ECO, get_eco, save_eco
 from .logs_setup import LOG_TYPES
-from .settings import RESTRICTABLE_COMMANDS
 from .welcome import get_greetings_settings
+from utils.restrictions import normalize_command_restrictions
 from utils.ui_contract import add_section, compact_kv, set_surface_footer, surface_embed
 
 db = get_database()
@@ -88,7 +88,7 @@ AUTOMOD_DEFAULTS.update({
 
 LOG_DEFAULTS = {key: None for mapping in LOG_TYPES.values() for key in mapping}
 LOG_DEFAULTS.update({"log_whitelist_channels": [], "log_whitelist_roles": [], "stats_interval_days": 7})
-SERVER_DEFAULTS = {"levelup_channel_id": None, "command_restrictions": {}}
+SERVER_DEFAULTS = {"command_restrictions": {}}
 WARNING_DEFAULTS = {"warn_escalation": [], "warn_decay_days": 0}
 
 WELCOME_KEYS = {
@@ -119,7 +119,7 @@ def _status_icon(enabled: bool) -> str:
 
 def _trim_preview(values: list[str], limit: int = 3) -> str:
     if not values:
-        return f"{E_CROSS} none"
+        return f"{E_CROSS} немає"
     preview = ", ".join(values[:limit])
     if len(values) > limit:
         preview += f" +{len(values) - limit}"
@@ -133,7 +133,7 @@ def _summarize_patch_keys(patch: dict, limit: int = 6) -> str:
 
 def _stringify_value(value) -> str:
     if isinstance(value, bool):
-        return "on" if value else "off"
+        return "увімкнено" if value else "вимкнено"
     if isinstance(value, float):
         return f"{value:.2f}".rstrip("0").rstrip(".")
     if isinstance(value, list):
@@ -141,7 +141,7 @@ def _stringify_value(value) -> str:
             return "[]"
         if len(value) <= 3:
             return json.dumps(value, ensure_ascii=False)
-        return f"[{len(value)} items]"
+        return f"[{len(value)} елементів]"
     if isinstance(value, dict):
         if not value:
             return "{}"
@@ -149,7 +149,7 @@ def _stringify_value(value) -> str:
         suffix = "" if len(value) <= 3 else f" +{len(value) - 3}"
         return "{" + ", ".join(str(key) for key in keys) + "}" + suffix
     if value in (None, ""):
-        return "none"
+        return "немає"
     return str(value)
 
 
@@ -161,8 +161,8 @@ def _build_diff_lines(current: dict, patch: dict, limit: int = 5) -> list[str]:
             continue
         lines.append(f"`{key}`: `{_stringify_value(old_value)}` -> `{_stringify_value(new_value)}`")
     if len(lines) > limit:
-        lines = lines[:limit] + [f"+{len(lines) - limit} more changes"]
-    return lines or ["No effective value change detected."]
+        lines = lines[:limit] + [f"+{len(lines) - limit} змін"]
+    return lines or ["Ефективних змін значень не виявлено."]
 
 
 def _export_payload(module: str, payload: dict) -> dict:
@@ -179,9 +179,9 @@ def _unwrap_config_payload(module: str, payload):
     data = _ensure_patch_dict(payload)
     if {"module", "version", "patch"}.issubset(data.keys()):
         if data["module"] != module:
-            raise ValueError(f"Envelope module `{data['module']}` does not match selected module `{module}`.")
+            raise ValueError(f"Модуль у JSON-обгортці `{data['module']}` не збігається з вибраним модулем `{module}`.")
         if data["version"] != CONFIG_SCHEMA_VERSION:
-            raise ValueError(f"Unsupported config version `{data['version']}`.")
+            raise ValueError(f"Непідтримувана версія конфіга `{data['version']}`.")
         return _ensure_patch_dict(data["patch"])
     return data
 
@@ -192,7 +192,7 @@ def _is_color(value: str) -> bool:
 
 def _ensure_patch_dict(payload):
     if not isinstance(payload, dict) or not payload:
-        raise ValueError("Import expects a non-empty JSON object.")
+        raise ValueError("Імпорт очікує непорожній JSON-об'єкт.")
     return payload
 
 
@@ -200,83 +200,83 @@ def _validate_economy_patch(payload: dict) -> dict:
     result = {}
     for key, value in _ensure_patch_dict(payload).items():
         if key not in DEFAULT_ECO:
-            raise ValueError(f"`{key}` is not a supported economy setting.")
+            raise ValueError(f"`{key}` не є підтримуваним параметром економіки.")
         if key in ECONOMY_RUNTIME_KEYS:
-            raise ValueError(f"`{key}` is runtime state and cannot be edited via `/config`.")
+            raise ValueError(f"`{key}` є службовим runtime-станом і не редагується через `/config`.")
         if key == "msg_earn":
             if not isinstance(value, list) or len(value) != 2 or any(not isinstance(item, int) or item < 0 for item in value) or value[0] > value[1]:
-                raise ValueError("`msg_earn` must be [min, max].")
+                raise ValueError("`msg_earn` має бути у форматі [min, max].")
         elif key == "enabled_minigames":
             if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
-                raise ValueError("`enabled_minigames` must be a list of strings.")
+                raise ValueError("`enabled_minigames` має бути списком рядків.")
             value = list(dict.fromkeys(value))
         elif key == "shop_roles":
             if not isinstance(value, list) or any(not isinstance(item, dict) or not isinstance(item.get("role_id"), int) or not isinstance(item.get("price"), int) for item in value):
-                raise ValueError("`shop_roles` must contain objects with `role_id` and `price`.")
+                raise ValueError("`shop_roles` має містити об'єкти з `role_id` і `price`.")
             seen_roles = set()
             normalized = []
             for item in value:
                 role_id = item["role_id"]
                 price = item["price"]
                 if role_id <= 0 or price < 0:
-                    raise ValueError("`shop_roles` entries must have positive `role_id` and non-negative `price`.")
+                    raise ValueError("У `shop_roles` `role_id` має бути додатним, а `price` — невід'ємним.")
                 if role_id in seen_roles:
-                    raise ValueError("`shop_roles` must not contain duplicate roles.")
+                    raise ValueError("`shop_roles` не може містити дублікати ролей.")
                 seen_roles.add(role_id)
                 normalized.append({"role_id": role_id, "price": price})
             value = normalized
         elif key == "season_winner_roles":
             if not isinstance(value, dict) or any(not isinstance(sub_key, str) or not isinstance(sub_value, int) for sub_key, sub_value in value.items()):
-                raise ValueError("`season_winner_roles` must be an object of string -> int.")
+                raise ValueError("`season_winner_roles` має бути об'єктом string -> int.")
             if any(not sub_key.isdigit() or int(sub_key) <= 0 or sub_value <= 0 for sub_key, sub_value in value.items()):
-                raise ValueError("`season_winner_roles` must use positive numeric positions and role IDs.")
+                raise ValueError("`season_winner_roles` має використовувати додатні місця та ID ролей.")
         elif key in {"work_type"}:
             if value not in {"simple", "complex", "both"}:
-                raise ValueError("`work_type` must be simple, complex or both.")
+                raise ValueError("`work_type` має бути simple, complex або both.")
         elif key in {"bank_interest_interval"}:
             if value not in {"daily", "weekly"}:
-                raise ValueError("`bank_interest_interval` must be daily or weekly.")
+                raise ValueError("`bank_interest_interval` має бути daily або weekly.")
         elif key in {"transfer_tax_percent"}:
             if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 50:
-                raise ValueError("`transfer_tax_percent` must be integer between 0 and 50.")
+                raise ValueError("`transfer_tax_percent` має бути цілим числом від 0 до 50.")
         elif key in {"transfer_daily_limit", "fund_goal", "fund_current", "season_start_bonus", "season_start", "auction_anti_snipe_seconds"}:
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-                raise ValueError(f"`{key}` must be a non-negative integer.")
+                raise ValueError(f"`{key}` має бути невід'ємним цілим числом.")
         elif key in {"season_duration_days", "season_number"}:
             minimum = 1
             if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
-                raise ValueError(f"`{key}` must be integer >= {minimum}.")
+                raise ValueError(f"`{key}` має бути цілим числом >= {minimum}.")
         elif key in {"auction_channel_id", "season_announce_channel_id"}:
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-                raise ValueError(f"`{key}` must be channel ID or 0.")
+                raise ValueError(f"`{key}` має бути ID каналу або 0.")
         elif key in {"quests_daily_count", "quests_weekly_count", "quests_daily_reward", "quests_weekly_reward", "quests_target_multiplier"}:
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                 raise ValueError(f"`{key}` must be a non-negative integer.")
         elif key == "season_history":
             if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
-                raise ValueError("`season_history` must be a list of objects.")
+                raise ValueError("`season_history` має бути списком об'єктів.")
         elif key == "bank_interest_rate":
             if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0 or value > 100:
-                raise ValueError("`bank_interest_rate` must be a number between 0 and 100.")
+                raise ValueError("`bank_interest_rate` має бути числом від 0 до 100.")
         else:
             default = DEFAULT_ECO[key]
             if isinstance(default, list):
                 if not isinstance(value, list):
-                    raise ValueError(f"`{key}` must be a list.")
+                    raise ValueError(f"`{key}` має бути списком.")
             elif isinstance(default, dict):
                 if not isinstance(value, dict):
-                    raise ValueError(f"`{key}` must be an object.")
+                    raise ValueError(f"`{key}` має бути об'єктом.")
             if isinstance(default, bool) and not isinstance(value, bool):
-                raise ValueError(f"`{key}` must be boolean.")
+                raise ValueError(f"`{key}` має бути булевим значенням.")
             if isinstance(default, int) and not isinstance(default, bool) and (isinstance(value, bool) or not isinstance(value, int)):
-                raise ValueError(f"`{key}` must be integer.")
+                raise ValueError(f"`{key}` має бути цілим числом.")
             if isinstance(default, float) and (isinstance(value, bool) or not isinstance(value, (int, float))):
-                raise ValueError(f"`{key}` must be number.")
+                raise ValueError(f"`{key}` має бути числом.")
             if isinstance(default, str) and not isinstance(value, str):
-                raise ValueError(f"`{key}` must be string.")
+                raise ValueError(f"`{key}` має бути рядком.")
         result[key] = value
     if "work_min" in result and "work_max" in result and result["work_min"] > result["work_max"]:
-        raise ValueError("`work_min` must be <= `work_max`.")
+        raise ValueError("`work_min` має бути <= `work_max`.")
     return result
 
 
@@ -284,49 +284,49 @@ def _validate_automod_patch(payload: dict) -> dict:
     result = {}
     for key, value in _ensure_patch_dict(payload).items():
         if key not in AUTOMOD_DEFAULTS:
-            raise ValueError(f"`{key}` is not a supported automod setting.")
+            raise ValueError(f"`{key}` не є підтримуваним параметром автомоду.")
         if key.endswith("_action"):
             if not isinstance(value, str):
-                raise ValueError(f"`{key}` must contain warn/mute/delete.")
+                raise ValueError(f"`{key}` має містити warn/mute/delete.")
             actions = [action.strip() for action in value.split(",") if action.strip()]
             if not actions or any(action not in {"warn", "mute", "delete"} for action in actions):
-                raise ValueError(f"`{key}` must contain warn/mute/delete.")
+                raise ValueError(f"`{key}` має містити warn/mute/delete.")
         elif key in {"am_antiinvite_allowed_servers"}:
             if not isinstance(value, list) or any(not isinstance(item, (int, dict)) for item in value):
-                raise ValueError("`am_antiinvite_allowed_servers` must be a list of IDs or objects.")
+                raise ValueError("`am_antiinvite_allowed_servers` має бути списком ID або об'єктів.")
         elif key in {"am_antilink_allowed_domains"}:
             if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
-                raise ValueError("`am_antilink_allowed_domains` must be a list of strings.")
+                raise ValueError("`am_antilink_allowed_domains` має бути списком рядків.")
         elif key in {"am_whitelist_channels", "am_whitelist_roles"}:
             if not isinstance(value, list) or any(not isinstance(item, int) for item in value):
-                raise ValueError(f"`{key}` must be a list of ints.")
+                raise ValueError(f"`{key}` має бути списком цілих чисел.")
         elif key == "automod_rules":
             if not isinstance(value, list):
-                raise ValueError("`automod_rules` must be a list of rule objects with `trigger`.")
+                raise ValueError("`automod_rules` має бути списком об'єктів правил із `trigger`.")
             for item in value:
                 if not isinstance(item, dict) or not isinstance(item.get("trigger"), str):
-                    raise ValueError("`automod_rules` must be a list of rule objects with `trigger`.")
+                    raise ValueError("`automod_rules` має бути списком об'єктів правил із `trigger`.")
                 if item.get("target", "both") not in {"message", "profile", "both"}:
-                    raise ValueError("`automod_rules[].target` must be message/profile/both.")
+                    raise ValueError("`automod_rules[].target` має бути message/profile/both.")
                 if item.get("match", "contains") not in {"contains", "exact"}:
-                    raise ValueError("`automod_rules[].match` must be contains/exact.")
+                    raise ValueError("`automod_rules[].match` має бути contains/exact.")
                 for list_key in ("only_channels", "ignore_channels", "only_roles", "ignore_roles"):
                     if list_key in item and (not isinstance(item[list_key], list) or any(not isinstance(entry, int) for entry in item[list_key])):
-                        raise ValueError(f"`automod_rules[].{list_key}` must be a list of ints.")
+                        raise ValueError(f"`automod_rules[].{list_key}` має бути списком цілих чисел.")
                 if "log_channel_id" in item and item["log_channel_id"] is not None and not isinstance(item["log_channel_id"], int):
-                    raise ValueError("`automod_rules[].log_channel_id` must be int or null.")
+                    raise ValueError("`automod_rules[].log_channel_id` має бути int або null.")
                 if "response_text" in item and not isinstance(item["response_text"], str):
-                    raise ValueError("`automod_rules[].response_text` must be string.")
+                    raise ValueError("`automod_rules[].response_text` має бути рядком.")
                 if "mute_dur" in item and not isinstance(item["mute_dur"], str):
-                    raise ValueError("`automod_rules[].mute_dur` must be string.")
+                    raise ValueError("`automod_rules[].mute_dur` має бути рядком.")
         else:
             default = AUTOMOD_DEFAULTS[key]
             if isinstance(default, bool) and not isinstance(value, bool):
-                raise ValueError(f"`{key}` must be boolean.")
+                raise ValueError(f"`{key}` має бути булевим значенням.")
             if isinstance(default, int) and not isinstance(default, bool) and (isinstance(value, bool) or not isinstance(value, int)):
-                raise ValueError(f"`{key}` must be integer.")
+                raise ValueError(f"`{key}` має бути цілим числом.")
             if isinstance(default, str) and not isinstance(value, str):
-                raise ValueError(f"`{key}` must be string.")
+                raise ValueError(f"`{key}` має бути рядком.")
         result[key] = value
     return result
 
@@ -339,17 +339,17 @@ def _validate_simple_patch(payload: dict, defaults: dict, module_name: str) -> d
         default = defaults[key]
         if isinstance(default, list):
             if not isinstance(value, list):
-                raise ValueError(f"`{key}` must be a list.")
+                raise ValueError(f"`{key}` має бути списком.")
         elif isinstance(default, dict):
             if not isinstance(value, dict):
-                raise ValueError(f"`{key}` must be an object.")
+                raise ValueError(f"`{key}` має бути об'єктом.")
         elif default is None:
             if value is not None and not isinstance(value, int):
-                raise ValueError(f"`{key}` must be int or null.")
+                raise ValueError(f"`{key}` має бути int або null.")
         elif isinstance(default, bool) and not isinstance(value, bool):
-            raise ValueError(f"`{key}` must be boolean.")
+            raise ValueError(f"`{key}` має бути булевим значенням.")
         elif isinstance(default, int) and not isinstance(default, bool) and (isinstance(value, bool) or not isinstance(value, int)):
-            raise ValueError(f"`{key}` must be integer.")
+            raise ValueError(f"`{key}` має бути цілим числом.")
         result[key] = value
     return result
 
@@ -357,17 +357,15 @@ def _validate_simple_patch(payload: dict, defaults: dict, module_name: str) -> d
 def _validate_server_patch(payload: dict) -> dict:
     result = {}
     for key, value in _ensure_patch_dict(payload).items():
-        if key == "levelup_channel_id":
-            if value is not None and not isinstance(value, int):
-                raise ValueError("`levelup_channel_id` must be int or null.")
-        elif key == "command_restrictions":
+        if key == "command_restrictions":
             if not isinstance(value, dict):
-                raise ValueError("`command_restrictions` must be an object.")
+                raise ValueError("`command_restrictions` має бути об'єктом.")
             for cmd_name, channels in value.items():
                 if not isinstance(cmd_name, str) or not isinstance(channels, list) or any(not isinstance(channel_id, int) for channel_id in channels):
-                    raise ValueError("`command_restrictions` must map command names to int lists.")
+                    raise ValueError("`command_restrictions` має зберігати назви команд і списки ID каналів.")
+            value = normalize_command_restrictions(value)
         else:
-            raise ValueError(f"`{key}` is not a supported server setting.")
+            raise ValueError(f"`{key}` не є підтримуваним параметром сервера.")
         result[key] = value
     return result
 
@@ -377,10 +375,10 @@ def _validate_warning_patch(payload: dict) -> dict:
     for key, value in _ensure_patch_dict(payload).items():
         if key == "warn_decay_days":
             if isinstance(value, bool) or not isinstance(value, int):
-                raise ValueError("`warn_decay_days` must be integer.")
+                raise ValueError("`warn_decay_days` має бути цілим числом.")
         elif key == "warn_escalation":
             if not isinstance(value, list):
-                raise ValueError("`warn_escalation` must be a list.")
+                raise ValueError("`warn_escalation` має бути списком.")
             for item in value:
                 if (
                     not isinstance(item, dict)
@@ -388,9 +386,9 @@ def _validate_warning_patch(payload: dict) -> dict:
                     or item.get("action") not in {"mute", "kick", "ban"}
                     or not isinstance(item.get("duration", ""), str)
                 ):
-                    raise ValueError("`warn_escalation` entries must contain `count`, `action`, `duration`.")
+                    raise ValueError("Елементи `warn_escalation` мають містити `count`, `action`, `duration`.")
         else:
-            raise ValueError(f"`{key}` is not a supported warnings setting.")
+            raise ValueError(f"`{key}` не є підтримуваним параметром попереджень.")
         result[key] = value
     return result
 
@@ -399,15 +397,15 @@ def _validate_logs_patch(payload: dict) -> dict:
     result = {}
     for key, value in _ensure_patch_dict(payload).items():
         if key not in LOG_DEFAULTS:
-            raise ValueError(f"`{key}` is not a supported logs setting.")
+            raise ValueError(f"`{key}` не є підтримуваним параметром логів.")
         if key == "stats_interval_days":
             if isinstance(value, bool) or not isinstance(value, int):
-                raise ValueError("`stats_interval_days` must be integer.")
+                raise ValueError("`stats_interval_days` має бути цілим числом.")
         elif key in {"log_whitelist_channels", "log_whitelist_roles"}:
             if not isinstance(value, list) or any(not isinstance(item, int) for item in value):
-                raise ValueError(f"`{key}` must be a list of ints.")
+                raise ValueError(f"`{key}` має бути списком цілих чисел.")
         elif value is not None and not isinstance(value, int):
-            raise ValueError(f"`{key}` must be int or null.")
+            raise ValueError(f"`{key}` має бути int або null.")
         result[key] = value
     return result
 
@@ -416,19 +414,19 @@ def _validate_welcome_patch(payload: dict) -> dict:
     result = {}
     for key, value in _ensure_patch_dict(payload).items():
         if key not in WELCOME_KEYS:
-            raise ValueError(f"`{key}` is not a supported welcome setting.")
+            raise ValueError(f"`{key}` не є підтримуваним параметром привітання.")
         if key.endswith("_channel_id") or key == "boost_role_id":
             if value is not None and not isinstance(value, int):
-                raise ValueError(f"`{key}` must be int or null.")
+                raise ValueError(f"`{key}` має бути int або null.")
         elif key.endswith("_text") or key.endswith("_font_name") or key.endswith("_bg_url"):
             if not isinstance(value, str):
-                raise ValueError(f"`{key}` must be string.")
+                raise ValueError(f"`{key}` має бути рядком.")
         elif key.endswith("_image_enabled"):
             if not isinstance(value, bool):
-                raise ValueError(f"`{key}` must be boolean.")
+                raise ValueError(f"`{key}` має бути булевим значенням.")
         elif key.endswith("_font_color") or key.endswith("_outline_color") or key.endswith("_bg_color"):
             if not isinstance(value, str) or not _is_color(value):
-                raise ValueError(f"`{key}` must be a HEX color.")
+                raise ValueError(f"`{key}` має бути HEX-кольором.")
             value = value if value.startswith("#") else f"#{value}"
         result[key] = value
     return result
@@ -436,8 +434,12 @@ def _validate_welcome_patch(payload: dict) -> dict:
 
 async def _load_payloads(guild_id: int) -> dict[str, dict]:
     settings = await _col.find_one({"_id": guild_id}) or {}
+    restrictions = normalize_command_restrictions(settings.get("command_restrictions"))
+    if restrictions != settings.get("command_restrictions", {}):
+        settings["command_restrictions"] = restrictions
+        await _col.update_one({"_id": guild_id}, {"$set": {"command_restrictions": restrictions}}, upsert=True)
     payloads = {
-        "server": {key: settings.get(key, default) for key, default in SERVER_DEFAULTS.items()},
+        "server": {"command_restrictions": restrictions},
         "economy": get_eco(settings),
         "automod": {key: settings.get(key, default) for key, default in AUTOMOD_DEFAULTS.items()},
         "logs": {key: settings.get(key, default) for key, default in LOG_DEFAULTS.items()},
@@ -475,83 +477,39 @@ async def _apply_patch_to_module(interaction: discord.Interaction, module: str, 
         patch = _validate_welcome_patch(_unwrap_config_payload(module, payload))
         await _col.update_one({"_id": interaction.guild.id}, {"$set": patch}, upsert=True)
         return len(patch)
-    raise ValueError("Unsupported module.")
+    raise ValueError("Непідтримуваний модуль.")
 
 
 def _summary_lines(module: str, payload: dict) -> list[str]:
     if module == "economy":
         return [
-            f"Enabled {_status_icon(payload.get('enabled', False))}",
-            f"Daily `{payload.get('daily_amount', 0)}` | Work `{payload.get('work_min', 0)}-{payload.get('work_max', 0)}`",
-            f"Rob {_status_icon(payload.get('rob_enabled', False))} | Gambling {_status_icon(payload.get('gambling_enabled', False))}",
-            f"Season {_status_icon(payload.get('season_enabled', False))} | Quests {_status_icon(payload.get('quests_enabled', False))} | Shop roles `{len(payload.get('shop_roles', []))}`",
-            f"Transfer tax `{payload.get('transfer_tax_percent', 0)}%` | Fund goal `{payload.get('fund_goal', 0):,}` | Auction `{payload.get('auction_anti_snipe_seconds', 30)}s`",
+            f"Стан {_status_icon(payload.get('enabled', False))}",
+            f"Щоденна `{payload.get('daily_amount', 0)}` | Робота `{payload.get('work_min', 0)}-{payload.get('work_max', 0)}`",
+            f"Пограбування {_status_icon(payload.get('rob_enabled', False))} | Гемблінг {_status_icon(payload.get('gambling_enabled', False))}",
+            f"Сезон {_status_icon(payload.get('season_enabled', False))} | Квести {_status_icon(payload.get('quests_enabled', False))} | Ролі магазину `{len(payload.get('shop_roles', []))}`",
+            f"Податок на переказ `{payload.get('transfer_tax_percent', 0)}%` | Ціль фонду `{payload.get('fund_goal', 0):,}` | Антиснайп `{payload.get('auction_anti_snipe_seconds', 30)}с`",
         ]
     if module == "automod":
         enabled = sum(1 for key in AUTOMOD_MODULES if payload.get(key, False))
         return [
-            f"Modules `{enabled}/{len(AUTOMOD_MODULES)}`",
+            f"Модулі `{enabled}/{len(AUTOMOD_MODULES)}`",
             f"Довірені домени `{len(payload.get('am_antilink_allowed_domains', []))}`",
-            f"Rules `{len(payload.get('automod_rules', []))}`",
+            f"Правила `{len(payload.get('automod_rules', []))}`",
         ]
     if module == "server":
         restricted = len([key for key, value in payload.get("command_restrictions", {}).items() if value])
-        return [f"Level-up channel: {'set' if payload.get('levelup_channel_id') else 'off'}", f"Restricted commands `{restricted}`", f"Known commands `{len(RESTRICTABLE_COMMANDS)}`"]
+        return [f"Обмежених команд `{restricted}`", "XP та level-up керуються через `/xp_setup`."]
     if module == "logs":
         configured = len([key for key, value in payload.items() if key not in {'log_whitelist_channels', 'log_whitelist_roles', 'stats_interval_days'} and value])
-        return [f"Configured log channels `{configured}`", f"Stats interval `{payload.get('stats_interval_days', 7)}` days", f"Whitelist ch `{len(payload.get('log_whitelist_channels', []))}` / roles `{len(payload.get('log_whitelist_roles', []))}`"]
+        return [f"Налаштованих лог-каналів `{configured}`", f"Інтервал статистики `{payload.get('stats_interval_days', 7)}` днів", f"Дозволені канали `{len(payload.get('log_whitelist_channels', []))}` / ролі `{len(payload.get('log_whitelist_roles', []))}`"]
     if module == "warnings":
         rules = payload.get("warn_escalation", [])
-        return [f"Escalations `{len(rules)}`", f"Decay `{payload.get('warn_decay_days', 0)}` days", f"Top action `{rules[0]['action']}`" if rules else f"{E_CROSS} no escalation"]
+        return [f"Ескалацій `{len(rules)}`", f"Спадання `{payload.get('warn_decay_days', 0)}` днів", f"Верхня дія `{rules[0]['action']}`" if rules else f"{E_CROSS} Без ескалації"]
     return [
-        f"Welcome {'set' if payload.get('welcome_channel_id') else 'off'}",
-        f"Goodbye {'set' if payload.get('goodbye_channel_id') else 'off'}",
-        f"Boost {'set' if payload.get('boost_channel_id') else 'off'}",
+        f"Привітання {'увімкнено' if payload.get('welcome_channel_id') else 'вимкнено'}",
+        f"Прощання {'увімкнено' if payload.get('goodbye_channel_id') else 'вимкнено'}",
+        f"Бусти {'увімкнено' if payload.get('boost_channel_id') else 'вимкнено'}",
     ]
-
-
-def _build_embed(guild: discord.Guild, payloads: dict[str, dict], module: str | None) -> discord.Embed:
-    if module is None:
-        embed = discord.Embed(
-            title=f"{E_SETTING} /config",
-            description="Єдиний центр керування модулями сервера: вибери модуль, застосуй preset, імпортуй або експортуй JSON patch.",
-            color=EMBED_COLOR,
-        )
-        for key, meta in MODULE_META.items():
-            embed.add_field(name=f"{meta['emoji']} {meta['label']}", value="\n".join(_summary_lines(key, payloads[key])), inline=False)
-        embed.set_footer(text=f"Server: {guild.name} | Це orchestration layer над окремими setup командами.")
-        return embed
-
-    meta = MODULE_META[module]
-    embed = discord.Embed(
-        title=f"{meta['emoji']} {meta['label']}",
-        description=f"Швидкий центр для `{meta['command']}`: presets, import/export і короткий контроль без сирого доступу до БД.",
-        color=EMBED_COLOR,
-    )
-    embed.add_field(name="Поточний стан", value="\n".join(_summary_lines(module, payloads[module])), inline=False)
-    if module == "economy":
-        payload = payloads[module]
-        embed.add_field(
-            name="Systems",
-            value=(
-                f"Quests: daily `{payload.get('quests_daily_count', 0)}` / weekly `{payload.get('quests_weekly_count', 0)}`\n"
-                f"Season: `{payload.get('season_duration_days', 0)}`d | winners `{len(payload.get('season_winner_roles', {}))}`\n"
-                f"Fund: current `{payload.get('fund_current', 0):,}` / goal `{payload.get('fund_goal', 0):,}`\n"
-                f"Shop roles: `{len(payload.get('shop_roles', []))}` | Transfer limit `{payload.get('transfer_daily_limit', 0):,}`"
-            ),
-            inline=False,
-        )
-    if module == "automod":
-        domains = [f"`{domain}`" for domain in payloads[module].get("am_antilink_allowed_domains", [])]
-        words = [f"`{rule.get('trigger', '')}`" for rule in payloads[module].get("automod_rules", []) if rule.get("trigger")]
-        embed.add_field(name="Trusted / Rules", value=f"Domains: {_trim_preview(domains)}\nRules: {_trim_preview(words)}", inline=False)
-    if module == "server":
-        restricted = [f"`/{name}`" for name, channels in payloads[module].get("command_restrictions", {}).items() if channels]
-        embed.add_field(name="Restrictions", value=_trim_preview(restricted, limit=5), inline=False)
-    presets = ", ".join(f"`{name}`" for name in PRESET_MAP.get(module, {})) or f"{E_CROSS} no presets"
-    embed.add_field(name="Presets", value=presets, inline=False)
-    embed.set_footer(text="Import accepts partial JSON patches only. Raw unvalidated dumps are intentionally blocked.")
-    return embed
 
 
 def _simulate_automod_message(payload: dict, content: str) -> list[str]:
@@ -559,7 +517,7 @@ def _simulate_automod_message(payload: dict, content: str) -> list[str]:
     text = content or ""
 
     if payload.get("am_antiinvite") and _INVITE_RE.search(text):
-        results.append(f"antiinvite -> `{payload.get('am_antiinvite_action', 'delete')}`")
+        results.append(f"Запрошення -> `{payload.get('am_antiinvite_action', 'delete')}`")
 
     if payload.get("am_antilink") and _URL_RE.search(text):
         domains = [domain.lower() for domain in payload.get("am_antilink_allowed_domains", [])]
@@ -570,30 +528,30 @@ def _simulate_automod_message(payload: dict, content: str) -> list[str]:
                 blocked = True
                 break
         if blocked:
-            results.append(f"antilink -> `{payload.get('am_antilink_action', 'delete')}`")
+            results.append(f"Посилання -> `{payload.get('am_antilink_action', 'delete')}`")
 
     if payload.get("am_caps"):
         letters = [char for char in text if char.isalpha()]
         if letters:
             ratio = sum(1 for char in letters if char.isupper()) / len(letters) * 100
             if len(letters) >= payload.get("am_caps_minlen", 8) and ratio >= payload.get("am_caps_percent", 70):
-                results.append(f"caps -> `{payload.get('am_caps_action', 'delete')}`")
+                results.append(f"Caps lock -> `{payload.get('am_caps_action', 'delete')}`")
 
     if payload.get("am_mentions"):
         mention_count = text.count("<@") + text.count("@everyone") * 5 + text.count("@here") * 5
         if mention_count >= payload.get("am_mentions_max", 5):
-            results.append(f"mentions -> `{payload.get('am_mentions_action', 'warn')}`")
+            results.append(f"Масові згадки -> `{payload.get('am_mentions_action', 'warn')}`")
 
     if payload.get("am_emojispam"):
         emoji_count = len(_EMOJI_RE.findall(text))
         if emoji_count >= payload.get("am_emojispam_max", 10):
-            results.append(f"emoji spam -> `{payload.get('am_emojispam_action', 'delete')}`")
+            results.append(f"Спам емодзі -> `{payload.get('am_emojispam_action', 'delete')}`")
 
     rule = find_matching_rule(payload.get("automod_rules", []), text, target="message")
     if rule:
-        results.append(f"custom rule `{rule.get('trigger', '?')}` -> `{rule.get('action', 'warn')}`")
+        results.append(f"Кастомне правило `{rule.get('trigger', '?')}` -> `{rule.get('action', 'warn')}`")
 
-    return results or ["No static rule matched. Stateful spam/image checks are not simulated here."]
+    return results or ["Жодне статичне правило не спрацювало. Перевірки спаму й зображень зі станом тут не моделюються."]
 
 
 def _build_embed(guild: discord.Guild, payloads: dict[str, dict], module: str | None) -> discord.Embed:
@@ -601,18 +559,18 @@ def _build_embed(guild: discord.Guild, payloads: dict[str, dict], module: str | 
         embed = surface_embed(
             "admin",
             f"{E_SETTING} /config",
-            "Єдиний центр керування модулями сервера: спочатку огляд, потім preset-и, import/export і швидкі редактори.",
+            "Керуйте модулями сервера: огляд, пресети, імпорт, експорт і швидкі редактори.",
         )
         for key, meta in MODULE_META.items():
             add_section(embed, f"{meta['emoji']} {meta['label']}", _summary_lines(key, payloads[key]))
-        set_surface_footer(embed, "admin", f"{guild.name} • orchestration layer над окремими setup-командами")
+        set_surface_footer(embed, "admin", guild.name)
         return embed
 
     meta = MODULE_META[module]
     embed = surface_embed(
         "admin",
         f"{meta['emoji']} {meta['label']}",
-        f"Швидкий центр для `{meta['command']}`: огляд, preset-и, import/export і короткий контроль без сирого доступу до БД.",
+        f"Огляд поточного стану, пресети, імпорт, експорт і швидкі редактори для `{meta['command']}`.",
     )
     add_section(embed, "Поточний стан", _summary_lines(module, payloads[module]))
 
@@ -622,10 +580,10 @@ def _build_embed(guild: discord.Guild, payloads: dict[str, dict], module: str | 
             embed,
             "Системи",
             [
-                compact_kv("Квести", f"daily `{payload.get('quests_daily_count', 0)}` / weekly `{payload.get('quests_weekly_count', 0)}`"),
+                compact_kv("Квести", f"денні `{payload.get('quests_daily_count', 0)}` / тижневі `{payload.get('quests_weekly_count', 0)}`"),
                 compact_kv("Сезон", f"`{payload.get('season_duration_days', 0)}` днів • ролей `{len(payload.get('season_winner_roles', {}))}`"),
                 compact_kv("Фонд", f"ціль `{payload.get('fund_goal', 0):,}`"),
-                compact_kv("Shop roles", f"`{len(payload.get('shop_roles', []))}` • ліміт переказу `{payload.get('transfer_daily_limit', 0):,}`"),
+                compact_kv("Ролі магазину", f"`{len(payload.get('shop_roles', []))}` • ліміт переказу `{payload.get('transfer_daily_limit', 0):,}`"),
             ],
         )
     if module == "automod":
@@ -636,9 +594,9 @@ def _build_embed(guild: discord.Guild, payloads: dict[str, dict], module: str | 
         restricted = [f"`/{name}`" for name, channels in payloads[module].get("command_restrictions", {}).items() if channels]
         add_section(embed, "Обмеження", [_trim_preview(restricted, limit=5)])
 
-    presets = ", ".join(f"`{name}`" for name in PRESET_MAP.get(module, {})) or f"{E_CROSS} no presets"
-    add_section(embed, "Preset-и", [presets])
-    set_surface_footer(embed, "admin", "Import приймає лише partial JSON patches. Сирі дампи навмисно заблоковані.")
+    presets = ", ".join(f"`{name}`" for name in PRESET_MAP.get(module, {})) or f"{E_CROSS} Немає пресетів"
+    add_section(embed, "Пресети", [presets])
+    set_surface_footer(embed, "admin", "Імпорт приймає лише часткові JSON-патчі.")
     return embed
 
 
@@ -653,7 +611,7 @@ class ModuleSelect(discord.ui.Select):
             )
             for key, meta in MODULE_META.items()
         ]
-        super().__init__(placeholder="Оберіть модуль для config...", min_values=1, max_values=1, options=options, row=0)
+        super().__init__(placeholder="Оберіть модуль для /config...", min_values=1, max_values=1, options=options, row=0)
 
     async def callback(self, interaction: discord.Interaction):
         await ConfigView.refresh_message(interaction, self.values[0])
@@ -662,7 +620,7 @@ class ModuleSelect(discord.ui.Select):
 class PresetSelect(discord.ui.Select):
     def __init__(self, module: str):
         options = [discord.SelectOption(label=name, value=name) for name in PRESET_MAP[module]]
-        super().__init__(placeholder="Apply preset...", min_values=1, max_values=1, options=options, row=1)
+        super().__init__(placeholder="Застосувати пресет...", min_values=1, max_values=1, options=options, row=1)
         self.module = module
 
     async def callback(self, interaction: discord.Interaction):
@@ -674,14 +632,14 @@ class PresetSelect(discord.ui.Select):
             interaction,
             self.module,
             notice=(
-                f"{E_CHECK} Preset `{self.values[0]}` applied. Updated `{changed}` keys: {_summarize_patch_keys(patch)}.\n"
+                f"{E_CHECK} Пресет `{self.values[0]}` застосовано. Оновлено `{changed}` ключів: {_summarize_patch_keys(patch)}.\n"
                 + "\n".join(f"- {line}" for line in diff_lines)
             ),
         )
 
 
 class ImportModal(discord.ui.Modal):
-    patch_input = discord.ui.TextInput(label="JSON patch", style=discord.TextStyle.paragraph, placeholder='{"daily_amount": 300}', max_length=4000, required=True)
+    patch_input = discord.ui.TextInput(label="JSON-патч", style=discord.TextStyle.paragraph, placeholder='{"daily_amount": 300}', max_length=4000, required=True)
 
     def __init__(self, module: str, current_payload: dict):
         super().__init__(title=f"Імпорт: {MODULE_META[module]['label']}")
@@ -693,7 +651,7 @@ class ImportModal(discord.ui.Modal):
             payload = json.loads(_strip_code_block(self.patch_input.value))
             changed = await _apply_patch_to_module(interaction, self.module, payload)
         except json.JSONDecodeError as exc:
-            return await interaction.response.send_message(f"{E_CROSS} Invalid JSON: `{exc.msg}`.", ephemeral=True)
+            return await interaction.response.send_message(f"{E_CROSS} Некоректний JSON: `{exc.msg}`.", ephemeral=True)
         except ValueError as exc:
             return await interaction.response.send_message(f"{E_CROSS} {exc}", ephemeral=True)
         patch = _unwrap_config_payload(self.module, payload)
@@ -702,7 +660,7 @@ class ImportModal(discord.ui.Modal):
             interaction,
             self.module,
             notice=(
-                f"{E_CHECK} Import applied. Updated `{changed}` keys: {_summarize_patch_keys(patch)}.\n"
+                f"{E_CHECK} Імпорт застосовано. Оновлено `{changed}` ключів: {_summarize_patch_keys(patch)}.\n"
                 + "\n".join(f"- {line}" for line in diff_lines)
             ),
         )
@@ -710,7 +668,7 @@ class ImportModal(discord.ui.Modal):
 
 class ImportButton(discord.ui.Button):
     def __init__(self, module: str, current_payload: dict):
-        super().__init__(label="Імпорт patch", style=discord.ButtonStyle.primary, row=2)
+        super().__init__(label="Імпорт патча", style=discord.ButtonStyle.primary, row=2)
         self.module = module
         self.current_payload = current_payload
 
@@ -732,7 +690,7 @@ class ExportButton(discord.ui.Button):
         }
         raw = json.dumps(envelope, ensure_ascii=False, indent=2).encode("utf-8")
         file = discord.File(io.BytesIO(raw), filename=f"{self.module}_config.json")
-        await interaction.response.send_message(content=f"{E_CHECK} Export for `{self.module}` in schema v{CONFIG_SCHEMA_VERSION}.", file=file, ephemeral=True)
+        await interaction.response.send_message(content=f"{E_CHECK} Експорт `{self.module}` у схемі v{CONFIG_SCHEMA_VERSION}.", file=file, ephemeral=True)
 
 
 class EconomyPolicyModal(discord.ui.Modal, title="Швидка політика економіки"):
@@ -796,7 +754,7 @@ class EconomySystemsModal(discord.ui.Modal, title="Швидкі системи �
     quests_weekly = discord.ui.TextInput(label="К-сть тижневих квестів", max_length=4)
     season_duration = discord.ui.TextInput(label="Тривалість сезону (днів)", max_length=5)
     fund_goal = discord.ui.TextInput(label="Ціль фонду", max_length=12)
-    anti_snipe = discord.ui.TextInput(label="Anti-snipe аукціону (сек)", max_length=5)
+    anti_snipe = discord.ui.TextInput(label="Антиснайп аукціону (сек)", max_length=5)
 
     def __init__(self, payload: dict):
         super().__init__()
@@ -916,7 +874,7 @@ class EconomyFundPolicyButton(discord.ui.Button):
 
 class EconomyAuctionPolicyModal(discord.ui.Modal, title="Політика аукціону"):
     channel_id = discord.ui.TextInput(label="ID каналу аукціону (0=off)", max_length=20)
-    anti_snipe = discord.ui.TextInput(label="Anti-snipe (секунди)", max_length=5)
+    anti_snipe = discord.ui.TextInput(label="Антиснайп (секунди)", max_length=5)
 
     def __init__(self, payload: dict):
         super().__init__()
@@ -1076,26 +1034,13 @@ class EconomyShopRoleRemoveSelect(discord.ui.Select):
 def _build_shop_roles_embed(payload: dict) -> discord.Embed:
     lines = [_format_shop_role(entry) for entry in payload.get("shop_roles", [])[:15]]
     if len(payload.get("shop_roles", [])) > 15:
-        lines.append(f"+{len(payload['shop_roles']) - 15} more")
-    embed = discord.Embed(
-        title="Ролі магазину",
-        description="\n".join(lines) if lines else f"{E_CROSS} Ролі магазину ще не налаштовані.",
-        color=EMBED_COLOR,
-    )
-    embed.set_footer(text="Тут можна додати роль, змінити її ціну або прибрати з магазину.")
-    return embed
-
-
-def _build_shop_roles_embed(payload: dict) -> discord.Embed:
-    lines = [_format_shop_role(entry) for entry in payload.get("shop_roles", [])[:15]]
-    if len(payload.get("shop_roles", [])) > 15:
-        lines.append(f"+{len(payload['shop_roles']) - 15} more")
+        lines.append(f"+{len(payload['shop_roles']) - 15} ще")
     embed = surface_embed(
         "admin",
         "Ролі магазину",
         "\n".join(lines) if lines else f"{E_CROSS} Ролі магазину ще не налаштовані.",
     )
-    set_surface_footer(embed, "admin", "Огляд -> додати -> оновити ціну -> видалити роль")
+    set_surface_footer(embed, "admin", "Додайте роль, змініть її ціну або приберіть її з магазину.")
     return embed
 
 

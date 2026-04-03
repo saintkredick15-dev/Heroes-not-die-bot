@@ -10,8 +10,9 @@ from discord.ext import commands
 
 from modules.db import get_database
 from repositories.user import get_user
-from commands.administration.economy_setup import DEFAULT_ECO, get_eco
+from commands.administration.economy_setup_shared import DEFAULT_ECO, get_eco
 from commands.economy.quests import quest_hook
+from services.metrics import inc_global_metric
 from utils.eco_helpers import make_log
 from utils.ui_contract import gameplay_result_embed, set_surface_footer, surface_embed
 
@@ -28,7 +29,14 @@ E_COIN     = _E.COIN.value
 E_CROSS    = _E.CROSS.value
 E_CHECK    = _E.CHECK.value
 E_SLOTS    = _E.SLOTS.value
+E_SLOTS_ALT = _E.SLOTS_ALT.value
 E_HELP     = _E.HELP.value
+E_PLUS     = _E.PLUS.value
+E_MINUS    = _E.MINUS.value
+E_HOURGLASS = _E.HOURGLASS.value
+E_WARNING  = _E.WARN.value
+E_ROULETTE = _E.ROULETTE.value
+E_STATS    = _E.STATS.value
 COLOR_WIN  = 0x57f287
 COLOR_LOSE = 0xed4245
 COLOR_BASE = 0x1a1a2e
@@ -44,17 +52,22 @@ def _gameplay_tone_from_color(color: int) -> str:
         return "warning"
     return "base"
 
+
+def _currency_emoji(eco: dict) -> str:
+    curr = eco.get("currency_emoji") or E_COIN
+    return E_COIN if curr == "\U0001FA99" else curr
+
 async def check_economy(interaction: discord.Interaction) -> dict | None:
     from modules.db import get_guild_settings
     settings = await get_guild_settings(db, interaction.guild.id)
     eco = get_eco(settings)
 
     if not eco.get("enabled", True):
-        await interaction.response.send_message("<:close:1485598320935174317> Економіка вимкнена.", ephemeral=True)
+        await interaction.response.send_message(f"{E_CROSS} Економіка вимкнена.", ephemeral=True)
         return None
     if not eco.get("gambling_enabled", False):
         await interaction.response.send_message(
-            "🎰 Гемблінг вимкнено на цьому сервері. Адмін може увімкнути через `/economy_setup`.",
+            f"{E_SLOTS_ALT} Гемблінг вимкнено на цьому сервері. Адмін може увімкнути через `/economy_setup`.",
             ephemeral=True
         )
         return None
@@ -71,14 +84,14 @@ async def check_economy(interaction: discord.Interaction) -> dict | None:
             remaining = cooldown - (now - last_bet)
             from utils.eco_helpers import fmt_duration
             await interaction.response.send_message(
-                f"<:hourglass:1485598603937579181> Почекай ще **{fmt_duration(remaining)}** між ставками.", ephemeral=True
+                f"{E_HOURGLASS} Почекай ще **{fmt_duration(remaining)}** між ставками.", ephemeral=True
             )
             return None
 
     return eco
 
 async def check_balance(interaction: discord.Interaction, user_data: dict, bet: int, eco: dict) -> bool:
-    curr    = eco.get("currency_emoji", E_COIN)
+    curr    = _currency_emoji(eco)
     max_bet = eco.get("gambling_max_bet", 10000)
     daily_cap = eco.get("gambling_daily_cap", 0)
 
@@ -121,8 +134,9 @@ async def atomic_bet(interaction: discord.Interaction, bet: int, eco: dict) -> b
     if result:
         from modules.db import invalidate_user_data
         await invalidate_user_data(interaction.guild.id, interaction.user.id)
+        await inc_global_metric("gambling_sessions_total")
     if not result:
-        curr = eco.get("currency_emoji", E_COIN)
+        curr = _currency_emoji(eco)
         await interaction.response.send_message(
             f"{E_CROSS} Недостатньо монет у гаманці для ставки або виконується інша транзакція.",
             ephemeral=True
@@ -209,7 +223,7 @@ BJ_HELP_TEXT = (
     "• **Stand** — зупинитись, дилер добирає\n"
     "• **Double Down** — подвоїти ставку, взяти 1 карту і зупинитись\n"
     "• **Split** — якщо перші 2 карти однакові: розбити на 2 руки\n\n"
-    "**Blackjack** (А + 10/J/Q/K) = виплата **1.5×** ставки <:celebration_Confetti:1485626240734855441>\n"
+    f"**Blackjack** (А + 10/J/Q/K) = виплата **1.5×** ставки {_E.CELEBRATION.value}\n"
     "**Дилер** добирає до 17+."
 )
 
@@ -252,12 +266,12 @@ class BlackjackView(discord.ui.View):
 
     async def interaction_check(self, i: discord.Interaction) -> bool:
         if i.user.id != self.owner_id:
-            await i.response.send_message("<:close:1485598320935174317> Це не твоя гра!", ephemeral=True)
+            await i.response.send_message(f"{E_CROSS} Це не твоя гра!", ephemeral=True)
             return False
         return True
 
     def build_embed(self, reveal_dealer: bool = True) -> discord.Embed:
-        curr  = self.eco.get("currency_emoji", E_COIN)
+        curr  = _currency_emoji(self.eco)
         p_tot = hand_total(self.p_cards)
         d_tot = hand_total(self.d_cards)
 
@@ -298,7 +312,7 @@ class BlackjackView(discord.ui.View):
     async def _end(self, interaction: discord.Interaction, payout: int, msg: str, color: int):
         for child in self.children:
             child.disabled = True
-        curr  = self.eco.get("currency_emoji", E_COIN)
+        curr  = _currency_emoji(self.eco)
         embed = surface_embed("gameplay", "🃏 Blackjack — Результат", tone=_gameplay_tone_from_color(color))
         embed.add_field(name=f"Твоя рука ({hand_total(self.p_cards)})", value=fmt_hand(self.p_cards), inline=False)
         embed.add_field(name=f"Дилер ({hand_total(self.d_cards)})",     value=fmt_hand(self.d_cards),  inline=False)
@@ -359,23 +373,23 @@ class BlackjackView(discord.ui.View):
 
             for child in self.children:
                 child.disabled = True
-            curr = self.eco.get("currency_emoji", E_COIN)
+            curr = _currency_emoji(self.eco)
             net_profit = total_delta - (self.bet * 2) 
             embed = surface_embed("gameplay", "🃏 Blackjack — Результат (Split)", tone="success" if net_profit > 0 else "danger" if net_profit < 0 else "warning")
             embed.add_field(name=f"Рука A ({p_tot})", value=fmt_hand(self.p_cards), inline=True)
             embed.add_field(name=f"Рука B ({b_tot})", value=fmt_hand(self.split_hand_b), inline=True)
             embed.add_field(name=f"Дилер ({d_tot})", value=fmt_hand(self.d_cards), inline=False)
-            result_str = f"{'<:check:1485597845883981905> +' if net_profit > 0 else ('🤝 ' if net_profit == 0 else '<:close:1485598320935174317> -')}**{abs(net_profit):,}** {curr}"
+            result_str = f"{E_CHECK + ' +' if net_profit > 0 else (E_MINUS + ' ' if net_profit == 0 else E_CROSS + ' -')}**{abs(net_profit):,}** {curr}"
             embed.add_field(name="Підсумок", value=result_str, inline=False)
             await finalize(self.guild_id, self.owner_id, total_delta, f"Blackjack Split {'WIN' if net_profit > 0 else 'LOSE'}", self.eco)
             await interaction.response.edit_message(embed=embed, view=self)
         else:
             if d_tot > 21 or p_tot > d_tot:
-                await self._end(interaction, self.bet * 2, "<:check:1485597845883981905> Виграш! +", COLOR_WIN)
+                await self._end(interaction, self.bet * 2, f"{E_CHECK} Виграш! +", COLOR_WIN)
             elif p_tot == d_tot:
-                await self._end(interaction, self.bet, "🤝 Нічия.", COLOR_DRAW)
+                await self._end(interaction, self.bet, f"{E_MINUS} Нічия.", COLOR_DRAW)
             else:
-                await self._end(interaction, 0, "<:close:1485598320935174317> Дилер переміг. -", COLOR_LOSE)
+                await self._end(interaction, 0, f"{E_CROSS} Дилер переміг. -", COLOR_LOSE)
 
     @discord.ui.button(label="2× Double", style=discord.ButtonStyle.danger, row=0)
     async def double_down(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -427,7 +441,7 @@ class BlackjackView(discord.ui.View):
         self._refresh_action_buttons()
         await interaction.response.edit_message(embed=self.build_embed(reveal_dealer=False), view=self)
 
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:help:1485604736588583053>"), style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(E_HELP), style=discord.ButtonStyle.secondary, row=1)
     async def help_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed = discord.Embed(description=BJ_HELP_TEXT, color=COLOR_BASE)
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -454,7 +468,7 @@ ROULETTE_HELP_TEXT = (
     "25-36           → ×3   (дюжини)\n"
     "0–36 (число)   → ×35  (пряме попадання)\n"
     "```\n"
-    "<:warning:1485598476850040843> Число **0** — програш для всіх ставок крім прямого `0`."
+    f"{E_WARNING} Число **0** — програш для всіх ставок крім прямого `0`."
 )
 
 def resolve_roulette_bet(bet_type: str, result_num: int):
@@ -497,7 +511,7 @@ class RouletteView(discord.ui.View):
 
     async def interaction_check(self, i: discord.Interaction) -> bool:
         if i.user.id != self.owner_id:
-            await i.response.send_message("<:close:1485598320935174317> Це не твоя гра!", ephemeral=True)
+            await i.response.send_message(f"{E_CROSS} Це не твоя гра!", ephemeral=True)
             return False
         return True
 
@@ -508,13 +522,13 @@ class RouletteView(discord.ui.View):
         result_num   = random.randint(0, 36)
         res = resolve_roulette_bet(bet_type, result_num)
         if res is None:
-            await interaction.response.send_message("<:close:1485598320935174317> Помилка типу ставки.", ephemeral=True)
+            await interaction.response.send_message(f"{E_CROSS} Помилка типу ставки.", ephemeral=True)
             return
 
         won, mult = res
         payout = self.bet * mult if won else 0
         net_profit = payout - self.bet
-        curr  = self.eco.get("currency_emoji", E_COIN)
+        curr  = _currency_emoji(self.eco)
 
         # ── Анімація ──────────────────────────────────────────────────────────
         await interaction.response.defer()
@@ -522,7 +536,7 @@ class RouletteView(discord.ui.View):
         def _spin_frame(step: int) -> discord.Embed:
             nums = [random.randint(0, 36) for _ in range(5)]
             slots = " | ".join(f"**{n}**" for n in nums)
-            e = surface_embed("gameplay", "🎡 Рулетка крутиться...")
+            e = surface_embed("gameplay", f"{E_ROULETTE} Рулетка крутиться...")
             e.add_field(name=f"{'🔄' * step} Кулька летить...", value=f"[ {slots} ]", inline=False)
             set_surface_footer(e, "gameplay", f"Ставка: {self.bet:,} {self.eco['currency_name']}")
             return e
@@ -535,12 +549,12 @@ class RouletteView(discord.ui.View):
         await finalize(self.guild_id, self.owner_id, payout, f"Roulette {'WIN' if won else 'LOSE'}", self.eco)
 
         result_color = "🔴" if result_num in RED_NUMS else ("⚫ Zero" if result_num == 0 else "⚫")
-        embed = surface_embed("gameplay", "🎡 Рулетка зупинилась!", tone="success" if won else "danger")
+        embed = surface_embed("gameplay", f"{E_ROULETTE} Рулетка зупинилась!", tone="success" if won else "danger")
         embed.add_field(name="Випало", value=f"**{result_num}** {result_color}", inline=True)
         embed.add_field(name="Ставка", value=f"`{bet_type}`  ×{mult}", inline=True)
         embed.add_field(
             name="Результат",
-            value=f"{'<:check:1485597845883981905> **Виграш!** +' if won else '<:close:1485598320935174317> **Програш.** -'}**{abs(net_profit):,}** {curr}",
+            value=f"{E_CHECK + ' **Виграш!** +' if won else E_CROSS + ' **Програш.** -'}**{abs(net_profit):,}** {curr}",
             inline=False
         )
         await interaction.edit_original_response(embed=embed, view=self)
@@ -576,7 +590,7 @@ class RouletteView(discord.ui.View):
     async def dozen3(self, i, b): await self._spin(i, "25-36")
 
     # ── Help ───────────────────────────────────────────────────────────────────
-    @discord.ui.button(emoji=discord.PartialEmoji.from_str("<:help:1485604736588583053>"), style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(emoji=discord.PartialEmoji.from_str(E_HELP), style=discord.ButtonStyle.secondary, row=3)
     async def help_btn(self, i: discord.Interaction, b):
         embed = discord.Embed(description=ROULETTE_HELP_TEXT, color=COLOR_BASE)
         await i.response.send_message(embed=embed, ephemeral=True)
@@ -601,14 +615,14 @@ class HighLowView(discord.ui.View):
 
     async def interaction_check(self, i: discord.Interaction) -> bool:
         if i.user.id != self.owner_id:
-            await i.response.send_message("<:close:1485598320935174317> Це не твоя гра!", ephemeral=True)
+            await i.response.send_message(f"{E_CROSS} Це не твоя гра!", ephemeral=True)
             return False
         return True
 
     async def _resolve(self, interaction: discord.Interaction, guess_higher: bool):
         for child in self.children: child.disabled = True
         second = random.randint(1, 100)
-        curr = self.eco.get("currency_emoji", E_COIN)
+        curr = _currency_emoji(self.eco)
 
         if second == self.first_num:
             won = None
@@ -617,20 +631,20 @@ class HighLowView(discord.ui.View):
 
         if won is None:
             delta  = self.bet
-            result = f"🤝 Нічия! Числа однакові ({second}). Ставку повернено."
+            result = f"{E_MINUS} Нічия! Числа однакові ({second}). Ставку повернено."
             color  = COLOR_DRAW
         elif won:
             delta  = self.bet * 2
-            result = f"<:check:1485597845883981905> Правильно! Були **{self.first_num}** → **{second}**. +**{self.bet:,}** {curr}"
+            result = f"{E_CHECK} Правильно! Були **{self.first_num}** → **{second}**. +**{self.bet:,}** {curr}"
             color  = COLOR_WIN
         else:
             delta  = 0
-            result = f"<:close:1485598320935174317> Неправильно! Були **{self.first_num}** → **{second}**. -**{self.bet:,}** {curr}"
+            result = f"{E_CROSS} Неправильно! Були **{self.first_num}** → **{second}**. -**{self.bet:,}** {curr}"
             color  = COLOR_LOSE
 
         await finalize(self.guild_id, self.owner_id, delta, f"HighLow {'WIN' if won else ('DRAW' if won is None else 'LOSE')}", self.eco)
 
-        embed = gameplay_result_embed("📊 High or Low — Результат", result, tone=_gameplay_tone_from_color(color))
+        embed = gameplay_result_embed(f"{E_STATS} High or Low — Результат", result, tone=_gameplay_tone_from_color(color))
         await interaction.response.edit_message(embed=embed, view=self)
 
     @discord.ui.button(label="📈 Вище",  style=discord.ButtonStyle.success)
@@ -661,7 +675,7 @@ class GamblingCog(commands.Cog):
         if not await atomic_bet(interaction, ставка, eco): return
 
         user_data = await get_user(db, interaction.guild.id, interaction.user.id)
-        curr = eco.get("currency_emoji", E_COIN)
+        curr = _currency_emoji(eco)
         reels = random.choices(SLOT_SYMBOLS, weights=SLOT_WEIGHTS, k=3)
         combo = tuple(reels)
 
@@ -685,11 +699,11 @@ class GamblingCog(commands.Cog):
             winnings = int(ставка * payout_mult)
             delta    = winnings - ставка
             color    = COLOR_WIN
-            result   = f"<:celebration_Confetti:1485626240734855441> Виграш! **+{delta:,}** {curr}  *(×{payout_mult})*"
+            result   = f"{_E.CELEBRATION.value} Виграш! **+{delta:,}** {curr}  *(×{payout_mult})*"
         else:
             delta  = -ставка
             color  = COLOR_LOSE
-            result = f"😞 Не пощастило. **{ставка:,}** {curr} списано."
+            result = f"{E_CROSS} Не пощастило. **{ставка:,}** {curr} списано."
 
         await finalize(interaction.guild.id, interaction.user.id, winnings if payout_mult else 0, f"Slots {'WIN' if payout_mult else 'LOSE'}", eco)
 
@@ -706,8 +720,8 @@ class GamblingCog(commands.Cog):
     @app_commands.command(name="coinflip", description="Орел або решка")
     @app_commands.describe(ставка="Скільки поставити", вибір="heads (Орел) або tails (Решка)")
     @app_commands.choices(вибір=[
-        app_commands.Choice(name="🦅 Орел", value="heads"),
-        app_commands.Choice(name="🪙 Решка", value="tails"),
+        app_commands.Choice(name="Орел", value="heads"),
+        app_commands.Choice(name="Решка", value="tails"),
     ])
     async def coinflip(self, interaction: discord.Interaction, ставка: int, вибір: str):
         eco = await check_economy(interaction)
@@ -715,22 +729,22 @@ class GamblingCog(commands.Cog):
         
         if not await atomic_bet(interaction, ставка, eco): return
 
-        curr = eco.get("currency_emoji", E_COIN)
+        curr = _currency_emoji(eco)
         result = random.choice(["heads", "tails"])
         won = result == вибір
 
-        result_name = "🦅 Орел" if result == "heads" else "🪙 Решка"
-        chosen_name = "🦅 Орел" if вибір == "heads" else "🪙 Решка"
+        result_name = "Орел" if result == "heads" else "Решка"
+        chosen_name = "Орел" if вибір == "heads" else "Решка"
 
         delta = ставка * 2 if won else 0
         await finalize(interaction.guild.id, interaction.user.id, delta, f"Coinflip {'WIN' if won else 'LOSE'}", eco)
 
-        embed = surface_embed("gameplay", "🪙 Монетка у повітрі...", tone="success" if won else "danger")
+        embed = surface_embed("gameplay", f"{E_COIN} Монетка у повітрі...", tone="success" if won else "danger")
         embed.add_field(name="Випало",     value=result_name, inline=True)
         embed.add_field(name="Твій вибір", value=chosen_name, inline=True)
         embed.add_field(
             name="Результат",
-            value=f"{'<:check:1485597845883981905> **Виграш!** +' if won else '<:close:1485598320935174317> **Програш.** -'}**{ставка:,}** {curr}",
+            value=f"{E_CHECK + ' **Виграш!** +' if won else E_CROSS + ' **Програш.** -'}**{ставка:,}** {curr}",
             inline=False
         )
         set_surface_footer(embed, "gameplay", f"Ставка: {ставка:,} {eco['currency_name']}")
@@ -747,7 +761,7 @@ class GamblingCog(commands.Cog):
         if not await atomic_bet(interaction, ставка, eco): return
         
         user_data = await get_user(db, interaction.guild.id, interaction.user.id)
-        curr = eco.get("currency_emoji", E_COIN)
+        curr = _currency_emoji(eco)
         first = random.randint(1, 100)
 
         embed = surface_embed(
@@ -777,7 +791,7 @@ class GamblingCog(commands.Cog):
         d_cards = [deck.pop(), deck.pop()]
 
         if is_blackjack(p_cards):
-            curr = eco.get("currency_emoji", E_COIN)
+            curr = _currency_emoji(eco)
             if is_blackjack(d_cards):
                 
                 await db.users.update_one(
@@ -795,7 +809,7 @@ class GamblingCog(commands.Cog):
                     {"guild_id": interaction.guild.id, "user_id": interaction.user.id},
                     {"$inc": {"wallet": ставка + win_amount, "total_earned": win_amount, "week_earned": win_amount, "month_earned": win_amount}},
                 )
-                embed = gameplay_result_embed("🃏 BLACKJACK! <:celebration_Confetti:1485626240734855441>", f"Натуральний Blackjack! Виплата **×1.5** = **+{win_amount:,}** {curr}", tone="success")
+                embed = gameplay_result_embed(f"🃏 BLACKJACK! {_E.CELEBRATION.value}", f"Натуральний Blackjack! Виплата **×1.5** = **+{win_amount:,}** {curr}", tone="success")
                 embed.add_field(name=f"Твоя рука ({hand_total(p_cards)})", value=fmt_hand(p_cards), inline=True)
                 embed.add_field(name=f"Дилер ({hand_total(d_cards)})", value=fmt_hand(d_cards), inline=True)
                 return await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -815,7 +829,7 @@ class GamblingCog(commands.Cog):
         if not await atomic_bet(interaction, ставка, eco): return
 
         user_data = await get_user(db, interaction.guild.id, interaction.user.id)
-        curr = eco.get("currency_emoji", E_COIN)
+        curr = _currency_emoji(eco)
         embed = surface_embed(
             "gameplay",
             "🎡 Рулетка",

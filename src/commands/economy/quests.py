@@ -6,6 +6,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from config.constants import Emojis
+from commands.administration.economy_setup_shared import get_eco, normalize_currency_emoji
 
 from modules.db import get_database
 from repositories.user import get_user
@@ -56,7 +57,7 @@ async def get_or_roll_quests(guild_id: int, user_id: int, eco: dict) -> dict:
 async def quest_hook(guild_id: int, user_id: int, action: str, amount: int = 1):
     """Викликається з інших модулів (work, gambling, duel, etc)"""
     settings = await db.guild_settings.find_one({"_id": guild_id}) or {}
-    eco = settings.get("economy", {})
+    eco = get_eco(settings)
     if not eco.get("enabled", True) or not eco.get("quests_enabled", True):
         return
         
@@ -119,7 +120,8 @@ class QuestsView(discord.ui.View):
         
         self.quests_obj = user_quests
         embed = build_quests_embed(interaction.user, user_quests, self.eco)
-        await interaction.response.edit_message(content=f"<:check:1485597845883981905> Нагорода отримана: **{total_coins}** {self.eco.get('currency_emoji', '<:coin:1485610808003133552>')}", embed=embed, view=self)
+        currency = normalize_currency_emoji(self.eco.get("currency_emoji"))
+        await interaction.response.edit_message(content=f"<:check:1485597845883981905> Нагорода отримана: **{total_coins}** {currency}", embed=embed, view=self)
 
 def build_progress_bar(progress: int, target: int, length: int = 10) -> str:
     if target <= 0: return "█" * length
@@ -127,7 +129,7 @@ def build_progress_bar(progress: int, target: int, length: int = 10) -> str:
     return "█" * filled + "░" * (length - filled)
 
 def build_quests_embed(user: discord.Member, quests_obj: dict, eco: dict) -> discord.Embed:
-    curr = eco.get("currency_emoji", "<:coin:1485610808003133552>")
+    curr = normalize_currency_emoji(eco.get("currency_emoji"))
     embed = discord.Embed(
         title=f"<:menuandlist:1485605053246083143> Завдання {user.display_name}", 
         color=0x000000

@@ -596,7 +596,7 @@ class ActivityCog(commands.Cog):
         first_embed.set_image(url="https://i.imgur.com/ftmM1HG.png")
 
         second_embed = discord.Embed(
-            title="**Gartic Phone** — HEROES NOT DIE",
+            title="**Gartic Phone**",
             description="Гра, що поєднує «зламаний телефон» і малювання, де гравці по черзі малюють та підписують малюнки, створюючи кумедний ланцюжок інтерпретаці.",
             color=0x2B2D31,
         )

@@ -14,16 +14,19 @@ from discord.ext import commands
 import time
 import random
 
+from config.constants import Emojis as _E
 from modules.db import get_database
 from repositories.user import get_user
-from commands.administration.economy_setup import get_eco
+from commands.administration.economy_setup_shared import get_eco, normalize_currency_emoji
 from commands.economy.quests import quest_hook
+from services.metrics import inc_global_metric
 from utils.eco_helpers import make_log
 from utils.ui_contract import gameplay_result_embed, set_surface_footer, surface_embed
 
 db = get_database()
+add_history = make_log
 
-E_COIN   = "<:coin:1485610808003133552>"
+E_COIN   = _E.COIN.value
 E_CHECK  = "<:check:1485597845883981905>"
 E_CROSS  = "<:close:1485598320935174317>"
 
@@ -169,7 +172,7 @@ class DuelGame:
         return f"**{self.ch.display_name}** `{self.ch_wins} : {self.tg_wins}` **{self.tg.display_name}**"
 
     async def run(self, msg: discord.Message):
-        curr       = self.eco.get("currency_emoji", E_COIN)
+        curr       = normalize_currency_emoji(self.eco.get("currency_emoji", E_COIN))
         timer      = self.eco.get("duel_timer", self.eco.get("event_timer", 15))
         max_rounds = self.eco.get("duel_max_rounds", 9)
         draw_refund= self.eco.get("duel_draw_refund", True)
@@ -304,6 +307,7 @@ class ChallengeView(discord.ui.View):
         self.eco        = eco
         self.guild_id   = guild_id
         self.resolved   = False
+        self.message: discord.Message | None = None
 
     async def interaction_check(self, i: discord.Interaction) -> bool:
         if i.user.id != self.target.id:
@@ -317,7 +321,7 @@ class ChallengeView(discord.ui.View):
         self.resolved = True
         for c in self.children: c.disabled = True
 
-        curr    = self.eco.get("currency_emoji", E_COIN)
+        curr    = normalize_currency_emoji(self.eco.get("currency_emoji", E_COIN))
         ch_data = await get_user(db, self.guild_id, self.challenger.id)
         tg_data = await get_user(db, self.guild_id, self.target.id)
 
@@ -336,6 +340,7 @@ class ChallengeView(discord.ui.View):
 
         await db.users.update_one({"guild_id": self.guild_id, "user_id": self.challenger.id}, {"$inc": {"wallet": -self.bet}})
         await db.users.update_one({"guild_id": self.guild_id, "user_id": self.target.id},     {"$inc": {"wallet": -self.bet}})
+        await inc_global_metric("duel_started_total")
 
         start = surface_embed(
             "gameplay",
@@ -360,8 +365,23 @@ class ChallengeView(discord.ui.View):
         )
 
     async def on_timeout(self):
+        if self.resolved:
+            return
         self.resolved = True
-        for c in self.children: c.disabled = True
+        for c in self.children:
+            c.disabled = True
+        if not self.message:
+            return
+        curr = normalize_currency_emoji(self.eco.get("currency_emoji", E_COIN))
+        embed = gameplay_result_embed(
+            "Час на прийняття вийшов",
+            f"{E_CROSS} {self.target.mention} не прийняв виклик протягом 60 секунд.\n\nСтавка: **{self.bet:,}** {curr} кожен.",
+            tone="warning",
+        )
+        try:
+            await self.message.edit(embed=embed, view=self)
+        except discord.HTTPException:
+            pass
 
 # ── Команда ───────────────────────────────────────────────────────────────────
 
@@ -374,7 +394,7 @@ class DuelCommand(commands.Cog):
     async def duel(self, interaction: discord.Interaction, суперник: discord.Member, ставка: int):
         settings = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
         eco      = get_eco(settings)
-        curr     = eco.get("currency_emoji", E_COIN)
+        curr     = normalize_currency_emoji(eco.get("currency_emoji", E_COIN))
 
         if not eco.get("enabled", True):
             await interaction.response.send_message("Економіка вимкнена.", ephemeral=True)
@@ -412,6 +432,7 @@ class DuelCommand(commands.Cog):
         set_surface_footer(embed, "gameplay", "Прийняття запускає раундовий матч із прихованими ходами.")
         view = ChallengeView(interaction.user, суперник, ставка, eco, interaction.guild.id)
         await interaction.response.send_message(embed=embed, view=view)
+        view.message = await interaction.original_response()
 
 async def setup(bot):
     await bot.add_cog(DuelCommand(bot))

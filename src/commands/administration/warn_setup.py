@@ -5,23 +5,27 @@ warn_setup.py — Панель налаштування попереджень (
 import discord
 from discord import app_commands
 from discord.ext import commands
+from config.constants import Emojis as _E
 from modules.db import get_database
 
 db = get_database()
 _col = db.guild_settings
 
 # ── Емодзі ────────────────────────────────────────────────────────────────────
-E_WARN    = "<:warning:1485598476850040843>"
-E_CROSS   = "<:close:1485598320935174317>"
-E_CHECK   = "<:check:1485597845883981905>"
-E_SETTING = "<:settings:1485606007668342865>"
+E_WARN    = _E.WARN.value
+E_CROSS   = _E.CROSS.value
+E_CHECK   = _E.CHECK.value
+E_SETTING = _E.SETTINGS.value
+E_MUTE    = _E.MUTE.value
+E_KICK    = _E.KICK.value
+E_BAN     = _E.BAN.value
 
 EMBED_COLOR = 0x1a1a2e
 
 ACTION_LABELS = {
-    "mute": "🔇 Мут",
-    "kick": "👢 Кік",
-    "ban": "🔨 Бан",
+    "mute": f"{E_MUTE} Мут",
+    "kick": f"{E_KICK} Кік",
+    "ban": f"{E_BAN} Бан",
 }
 
 async def _get(guild_id: int) -> dict:

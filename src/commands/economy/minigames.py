@@ -242,7 +242,7 @@ class MathQuizView(BaseMinigame):
             choices = list(dict.fromkeys(choices))
         random.shuffle(choices)
 
-        for choice in choices[:3]:
+        for choice in choices:
             button = discord.ui.Button(label=str(choice), style=discord.ButtonStyle.primary)
             button.callback = self._make_callback(choice)
             self.add_item(button)
@@ -475,7 +475,7 @@ class ReactionTestView(BaseMinigame):
         self.green_idx = random.randint(0, 3)
         for index in range(4):
             style = discord.ButtonStyle.success if index == self.green_idx else discord.ButtonStyle.secondary
-            button = discord.ui.Button(label="ТИСНИ" if index == self.green_idx else "Ні", style=style)
+            button = discord.ui.Button(label="ТИСНИ" if index == self.green_idx else "ПАСТКА", style=style)
             button.callback = self._make_callback(index)
             self.add_item(button)
 

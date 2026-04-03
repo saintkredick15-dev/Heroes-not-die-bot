@@ -2,7 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from commands.administration.economy_setup import get_eco
+from commands.administration.economy_setup_shared import get_eco
 from modules.db import get_database
 from utils.ui_contract import add_section, set_surface_footer, surface_embed
 

@@ -9,6 +9,7 @@
 
 import asyncio
 import io
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 import discord
@@ -17,6 +18,7 @@ from discord.ext import commands
 
 from modules.db import get_database
 from modules.logger import Logger
+from services.metrics import inc_global_metric
 from utils.ui_contract import add_section, compact_kv, set_surface_footer, surface_embed
 
 log = Logger("Tickets")
@@ -34,6 +36,7 @@ E_SUPPORTROLE = "<:ticket:1485608010192519300>"
 E_CLIPBOARD = "<:clipboard:1485728386453340331>"
 
 EMBED_COLOR = 0x1A1A2E
+TICKET_CARD_COLOR = 0xF2F3F5
 TRANSCRIPT_MAX_BYTES = 7_500_000
 
 
@@ -71,6 +74,80 @@ def _safe_text(value: str | None) -> str:
 
 def _member_label(member: discord.abc.User | None, fallback: str) -> str:
     return member.mention if member else fallback
+
+
+def _ticket_card_embed(title: str, description: str | None = None) -> discord.Embed:
+    embed = discord.Embed(title=title, color=TICKET_CARD_COLOR)
+    if description:
+        embed.description = description
+    return embed
+
+
+def _build_panel_embed(title: str, description: str) -> discord.Embed:
+    embed = _ticket_card_embed(title, description)
+    return embed
+
+
+def _serialize_button(button_data: dict) -> dict:
+    style_raw = button_data.get("style", discord.ButtonStyle.blurple)
+    if isinstance(style_raw, discord.ButtonStyle):
+        style_value = style_raw.value
+    else:
+        try:
+            style_value = discord.ButtonStyle(style_raw).value
+        except Exception:
+            style_value = discord.ButtonStyle.blurple.value
+    return {
+        "label": str(button_data.get("label") or "Тікет").strip() or "Тікет",
+        "emoji": str(button_data.get("emoji") or "").strip() or None,
+        "style": style_value,
+    }
+
+
+def _load_panel_buttons(config: dict) -> list[dict]:
+    raw_buttons = config.get("panel_buttons", [])
+    if not isinstance(raw_buttons, list):
+        return []
+    buttons: list[dict] = []
+    for item in raw_buttons[:10]:
+        if not isinstance(item, dict):
+            continue
+        buttons.append(_serialize_button(item))
+    return buttons
+
+
+@dataclass
+class TicketWizardState:
+    category_id: int | None = None
+    log_channel_id: int | None = None
+    support_role_ids: list[int] = field(default_factory=list)
+    panel_title: str = "Служба підтримки"
+    panel_desc: str = "Натисніть кнопку нижче, щоб зв'язатися з адміністрацією."
+    panel_buttons: list[dict] = field(default_factory=list)
+    panel_channel_id: int | None = None
+
+    @classmethod
+    def from_config(cls, config: dict) -> "TicketWizardState":
+        return cls(
+            category_id=config.get("category_id"),
+            log_channel_id=config.get("log_channel_id"),
+            support_role_ids=[role_id for role_id in config.get("support_role_ids", []) if isinstance(role_id, int)],
+            panel_title=str(config.get("panel_title") or "Служба підтримки"),
+            panel_desc=str(config.get("panel_desc") or "Натисніть кнопку нижче, щоб зв'язатися з адміністрацією."),
+            panel_buttons=_load_panel_buttons(config),
+            panel_channel_id=config.get("panel_channel_id"),
+        )
+
+    def as_config_patch(self) -> dict:
+        return {
+            "category_id": self.category_id,
+            "log_channel_id": self.log_channel_id,
+            "support_role_ids": list(self.support_role_ids),
+            "panel_title": self.panel_title,
+            "panel_desc": self.panel_desc,
+            "panel_buttons": [dict(button) for button in self.panel_buttons],
+            "panel_channel_id": self.panel_channel_id,
+        }
 
 
 def _truncate_transcript(raw: str) -> bytes:
@@ -138,23 +215,33 @@ def _build_close_embed(
     claimed_by: discord.Member | None,
     reason: str,
 ) -> discord.Embed:
-    embed = surface_embed("admin", "Тікет закрито", tone="warning")
+    embed = _ticket_card_embed("Тікет закрито")
     embed.timestamp = closed_at
-    embed.set_author(name=guild.name)
-    add_section(
-        embed,
-        "Підсумок",
-        [
-            compact_kv("Ticket ID", str(ticket_id)),
-            compact_kv("Відкрив", _member_label(opened_by, "Невідомо")),
-            compact_kv("Взяв", _member_label(claimed_by, "Не взято")),
-            compact_kv("Закрив", closed_by.mention),
-            compact_kv("Відкрито", _fmt_dt(opened_at)),
-            compact_kv("Закрито", _fmt_dt(closed_at)),
-            compact_kv("Причина", reason),
-        ],
+    embed.add_field(name=f"{E_CLIPBOARD} Ticket ID", value=str(ticket_id), inline=False)
+    embed.add_field(name=f"{E_OPENED} Відкрив", value=_member_label(opened_by, "Невідомо"), inline=False)
+    embed.add_field(name=f"{E_CLAIMED} Взяв", value=_member_label(claimed_by, "Не взято"), inline=False)
+    embed.add_field(name=f"{E_CLOSED} Закрив", value=closed_by.mention, inline=False)
+    embed.add_field(name=f"{E_CLOCK} Відкрито", value=_fmt_dt(opened_at), inline=False)
+    embed.add_field(name=f"{E_CLOCK} Закрито", value=_fmt_dt(closed_at), inline=False)
+    embed.add_field(name=f"{E_REASON} Причина", value=reason, inline=False)
+    return embed
+
+
+def _build_open_embed(ticket_id: int | str, user: discord.Member, opened_at: datetime) -> discord.Embed:
+    embed = _ticket_card_embed(
+        "Тікет створено",
+        "Опишіть проблему нижче. Команда підтримки відповість у цьому каналі.",
     )
-    set_surface_footer(embed, "admin", "Transcript надсилається в лог-канал, opener отримує DM-підсумок.")
+    embed.add_field(name=f"{E_CLIPBOARD} ID тікета", value=str(ticket_id), inline=False)
+    embed.add_field(name=f"{E_OPENED} Відкрив", value=user.mention, inline=False)
+    embed.add_field(name=f"{E_CLOCK} Час відкриття", value=_fmt_dt(opened_at), inline=False)
+    return embed
+
+
+def _build_claim_embed(ticket_id: int | str, claimer: discord.Member) -> discord.Embed:
+    embed = _ticket_card_embed("Тікет взято в роботу")
+    embed.add_field(name="Ticket ID", value=str(ticket_id), inline=False)
+    embed.add_field(name="Працівник", value=claimer.mention, inline=False)
     return embed
 
 
@@ -204,8 +291,9 @@ async def _do_close_ticket(interaction: discord.Interaction, ticket_data: dict, 
 
     notice = "Тікет буде закрито через 5 секунд."
     if transcript_logged:
-        notice += " Transcript надіслано в лог-канал."
+        notice += " Підсумок і транскрипт надіслано в лог-канал."
     await interaction.response.send_message(notice, ephemeral=True)
+    await inc_global_metric("tickets_closed_total")
 
     await asyncio.sleep(5)
     deleted = False
@@ -237,39 +325,25 @@ class CloseReasonModal(discord.ui.Modal, title="Закрити тікет"):
         await _do_close_ticket(interaction, self._ticket_data, reason_text)
 
 
-class RoleInputModal(discord.ui.Modal, title="Додати роль за ID"):
+class RoleInputModal(discord.ui.Modal, title="Додати роль підтримки"):
     role_id = discord.ui.TextInput(label="ID ролі", placeholder="Наприклад: 123456789012345678")
+
+    def __init__(self):
+        super().__init__()
+        self.result_role_id: int | None = None
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            r_id = int(self.role_id.value.strip())
+            self.result_role_id = int(self.role_id.value.strip())
         except ValueError:
             await interaction.response.send_message(f"{E_CLOSED} Невірний формат ID.", ephemeral=True)
+            self.stop()
             return
-
-        role = interaction.guild.get_role(r_id)
-        if not role:
-            try:
-                role = await interaction.guild.fetch_role(r_id)
-            except (discord.NotFound, discord.HTTPException):
-                role = None
-
-        if not role:
-            await interaction.response.send_message(f"{E_CLOSED} Роль `{r_id}` не знайдено.", ephemeral=True)
-            return
-
-        config = await get_config(interaction.guild.id)
-        current = config.get("support_role_ids", [])
-        if r_id not in current:
-            current.append(r_id)
-            await update_config(interaction.guild.id, {"support_role_ids": current})
-            await interaction.response.send_message(f"{E_OPENED} Роль {role.mention} додана.", ephemeral=True)
-            return
-
-        await interaction.response.send_message(f"{E_REASON} Роль {role.mention} вже у списку.", ephemeral=True)
+        await interaction.response.defer()
+        self.stop()
 
 
-class PanelContentModal(discord.ui.Modal, title="Налаштування панелі"):
+class PanelContentModal(discord.ui.Modal, title="Текст панелі"):
     panel_title = discord.ui.TextInput(label="Заголовок", default="Служба підтримки")
     panel_desc = discord.ui.TextInput(
         label="Опис",
@@ -279,36 +353,38 @@ class PanelContentModal(discord.ui.Modal, title="Налаштування пан
 
     def __init__(self, current_title: str, current_desc: str):
         super().__init__()
+        self.result_title: str | None = None
+        self.result_desc: str | None = None
         self.panel_title.default = current_title
         self.panel_desc.default = current_desc
 
     async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.send_message(f"{E_OPENED} Текст панелі оновлено.", ephemeral=True)
+        self.result_title = self.panel_title.value.strip() or "Служба підтримки"
+        self.result_desc = self.panel_desc.value.strip() or "Натисніть кнопку нижче, щоб зв'язатися з адміністрацією."
+        await interaction.response.defer()
+        self.stop()
 
 
 class ButtonConfigModal(discord.ui.Modal, title="Додати кнопку"):
     btn_label = discord.ui.TextInput(label="Текст кнопки", placeholder="Створити тікет")
     btn_emoji = discord.ui.TextInput(label="Emoji (необов'язково)", required=False, placeholder=E_TICKET)
 
-    def __init__(self, view_instance):
+    def __init__(self):
         super().__init__()
-        self.view_instance = view_instance
+        self.result_button: dict | None = None
 
     async def on_submit(self, interaction: discord.Interaction):
-        if len(self.view_instance.custom_buttons) >= 10:
-            await interaction.response.send_message(f"{E_CLOSED} Максимум 10 кнопок.", ephemeral=True)
-            return
-
         label = self.btn_label.value.strip() or "Тікет"
         emoji_str = self.btn_emoji.value.strip() or None
-        self.view_instance.custom_buttons.append(
+        self.result_button = _serialize_button(
             {
                 "label": label,
                 "emoji": emoji_str,
-                "style": discord.ButtonStyle.blurple,
+                "style": discord.ButtonStyle.blurple.value,
             }
         )
-        await interaction.response.send_message(f"{E_OPENED} Кнопку «{label}» додано.", ephemeral=True)
+        await interaction.response.defer()
+        self.stop()
 
 
 class TicketControlView(discord.ui.View):
@@ -344,10 +420,7 @@ class TicketControlView(discord.ui.View):
             {"channel_id": interaction.channel.id},
             {"$set": {"claimed_by": interaction.user.id}},
         )
-        embed = discord.Embed(
-            description=f"{E_CLAIMED} {interaction.user.mention} взяв цей тікет.",
-            color=EMBED_COLOR,
-        )
+        embed = _build_claim_embed(td.get("ticket_id", "?"), interaction.user)
         await interaction.response.send_message(embed=embed)
 
     @discord.ui.button(
@@ -395,21 +468,38 @@ class DynamicTicketView(discord.ui.View):
             return
 
         for i, bd in enumerate(buttons_config):
+            button_data = _serialize_button(bd)
             emoji = None
-            if bd.get("emoji"):
+            if button_data.get("emoji"):
                 try:
-                    emoji = discord.PartialEmoji.from_str(bd["emoji"])
+                    emoji = discord.PartialEmoji.from_str(button_data["emoji"])
                 except Exception:
                     emoji = None
 
             btn = discord.ui.Button(
-                label=bd["label"],
+                label=button_data["label"],
                 emoji=emoji,
-                style=bd.get("style", discord.ButtonStyle.blurple),
+                style=discord.ButtonStyle(button_data.get("style", discord.ButtonStyle.blurple.value)),
                 custom_id=f"ticket_create_{i}_v2",
             )
             btn.callback = self._ticket_callback
             self.add_item(btn)
+
+    async def _ticket_callback(self, interaction: discord.Interaction):
+        await create_ticket_routine(interaction)
+
+
+class TicketPanelButtonsView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        for index in range(10):
+            button = discord.ui.Button(
+                label=f"Тікет {index + 1}",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"ticket_create_{index}_v2",
+            )
+            button.callback = self._ticket_callback
+            self.add_item(button)
 
     async def _ticket_callback(self, interaction: discord.Interaction):
         await create_ticket_routine(interaction)
@@ -468,133 +558,311 @@ async def create_ticket_routine(interaction: discord.Interaction):
             "claimed_by": None,
         }
     )
+    await inc_global_metric("tickets_opened_total")
 
     await interaction.response.send_message(f"{E_OPENED} Тікет #{ticket_id}: {channel.mention}", ephemeral=True)
 
-    embed = surface_embed("admin", "Тікет створено", tone="info")
-    embed.set_author(name=guild.name)
-    add_section(
-        embed,
-        "Старт",
-        [
-            compact_kv("Ticket ID", str(ticket_id)),
-            compact_kv("Користувач", user.mention),
-            compact_kv("Відкрито", _fmt_dt(opened_at)),
-            "Опишіть проблему нижче — команда підтримки відповість у цьому каналі.",
-        ],
-    )
-    set_surface_footer(embed, "admin", "Staff може взяти тікет у роботу або закрити його з причиною.")
+    embed = _build_open_embed(ticket_id, user, opened_at)
     await channel.send(embed=embed, view=TicketControlView())
 
 
-class TicketAdminView(discord.ui.View):
+class TicketWizardStepButton(discord.ui.Button):
+    def __init__(self, label: str, target_step: str, row: int):
+        super().__init__(label=label, style=discord.ButtonStyle.secondary, row=row)
+        self.target_step = target_step
+
+    async def callback(self, interaction: discord.Interaction):
+        view: "TicketWizardView" = self.view
+        new_view = TicketWizardView(view.state, self.target_step)
+        await interaction.response.edit_message(embed=new_view.build_embed(interaction.guild), view=new_view)
+
+
+class TicketCategorySelect(discord.ui.ChannelSelect):
+    def __init__(self, state: TicketWizardState):
+        defaults = [discord.Object(id=state.category_id)] if state.category_id else []
+        super().__init__(
+            placeholder="Категорія для тікетів",
+            channel_types=[discord.ChannelType.category],
+            min_values=0,
+            max_values=1,
+            row=0,
+            default_values=defaults,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        view: "TicketWizardView" = self.view
+        category = self.values[0] if self.values else None
+        view.state.category_id = category.id if category else None
+        await update_config(interaction.guild.id, view.state.as_config_patch())
+        new_view = TicketWizardView(view.state, view.step)
+        await interaction.response.edit_message(embed=new_view.build_embed(interaction.guild), view=new_view)
+
+
+class TicketLogChannelSelect(discord.ui.ChannelSelect):
+    def __init__(self, state: TicketWizardState):
+        defaults = [discord.Object(id=state.log_channel_id)] if state.log_channel_id else []
+        super().__init__(
+            placeholder="Лог-канал для закритих тікетів",
+            channel_types=[discord.ChannelType.text],
+            min_values=0,
+            max_values=1,
+            row=1,
+            default_values=defaults,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        view: "TicketWizardView" = self.view
+        channel = self.values[0] if self.values else None
+        view.state.log_channel_id = channel.id if channel else None
+        await update_config(interaction.guild.id, view.state.as_config_patch())
+        new_view = TicketWizardView(view.state, view.step)
+        await interaction.response.edit_message(embed=new_view.build_embed(interaction.guild), view=new_view)
+
+
+class TicketSupportRoleSelect(discord.ui.RoleSelect):
+    def __init__(self, state: TicketWizardState):
+        defaults = [discord.Object(id=role_id) for role_id in state.support_role_ids[:25]]
+        super().__init__(
+            placeholder="Ролі підтримки",
+            min_values=0,
+            max_values=20,
+            row=0,
+            default_values=defaults,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        view: "TicketWizardView" = self.view
+        view.state.support_role_ids = [role.id for role in self.values]
+        await update_config(interaction.guild.id, view.state.as_config_patch())
+        new_view = TicketWizardView(view.state, view.step)
+        await interaction.response.edit_message(embed=new_view.build_embed(interaction.guild), view=new_view)
+
+
+class TicketPanelChannelSelect(discord.ui.ChannelSelect):
+    def __init__(self, state: TicketWizardState):
+        defaults = [discord.Object(id=state.panel_channel_id)] if state.panel_channel_id else []
+        super().__init__(
+            placeholder="Канал для публікації панелі",
+            channel_types=[discord.ChannelType.text],
+            min_values=0,
+            max_values=1,
+            row=0,
+            default_values=defaults,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        view: "TicketWizardView" = self.view
+        channel = self.values[0] if self.values else None
+        view.state.panel_channel_id = channel.id if channel else None
+        await update_config(interaction.guild.id, view.state.as_config_patch())
+        new_view = TicketWizardView(view.state, view.step)
+        await interaction.response.edit_message(embed=new_view.build_embed(interaction.guild), view=new_view)
+
+
+class TicketRoleIdButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(timeout=300)
-        self.embed_title = "Служба підтримки"
-        self.embed_desc = "Натисніть кнопку нижче, щоб зв'язатися з адміністрацією."
-        self.custom_buttons: list = []
-        self.target_channel_id: int | None = None
+        super().__init__(label="Додати роль за ID", emoji=discord.PartialEmoji.from_str(E_SUPPORTROLE), style=discord.ButtonStyle.secondary, row=1)
 
-    @discord.ui.select(
-        cls=discord.ui.ChannelSelect,
-        channel_types=[discord.ChannelType.category],
-        placeholder="Категорія для тікетів",
-        min_values=0,
-        max_values=1,
-        row=0,
-    )
-    async def select_category(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
-        cat = select.values[0] if select.values else None
-        await update_config(interaction.guild.id, {"category_id": cat.id if cat else None})
-        label = cat.mention if cat else "Стандартна (Tickets)"
-        await interaction.response.send_message(f"{E_OPENED} Категорія: {label}", ephemeral=True)
-
-    @discord.ui.select(
-        cls=discord.ui.ChannelSelect,
-        channel_types=[discord.ChannelType.text],
-        placeholder="Лог-канал (закриті тікети)",
-        min_values=0,
-        max_values=1,
-        row=1,
-    )
-    async def select_log_channel(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
-        ch = select.values[0] if select.values else None
-        await update_config(interaction.guild.id, {"log_channel_id": ch.id if ch else None})
-        label = ch.mention if ch else "Відключено"
-        await interaction.response.send_message(f"{E_OPENED} Лог-канал: {label}", ephemeral=True)
-
-    @discord.ui.select(
-        cls=discord.ui.ChannelSelect,
-        channel_types=[discord.ChannelType.text],
-        placeholder="Канал для публікації панелі",
-        min_values=0,
-        max_values=1,
-        row=2,
-    )
-    async def select_panel_channel(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
-        ch = select.values[0] if select.values else None
-        self.target_channel_id = ch.id if ch else None
-        label = ch.mention if ch else "Поточний канал"
-        await interaction.response.send_message(f"{E_OPENED} Панель буде надіслана в: {label}", ephemeral=True)
-
-    @discord.ui.select(
-        cls=discord.ui.RoleSelect,
-        placeholder="Ролі підтримки",
-        min_values=0,
-        max_values=20,
-        row=3,
-    )
-    async def select_roles(self, interaction: discord.Interaction, select: discord.ui.RoleSelect):
-        role_ids = [role.id for role in select.values]
-        await update_config(interaction.guild.id, {"support_role_ids": role_ids})
-        mentions = ", ".join(role.mention for role in select.values) or "Очищено"
-        await interaction.response.send_message(f"{E_OPENED} Ролі підтримки: {mentions}", ephemeral=True)
-
-    @discord.ui.button(label="Роль за ID", style=discord.ButtonStyle.secondary, row=4)
-    async def add_role_id(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(RoleInputModal())
-
-    @discord.ui.button(label="Текст панелі", style=discord.ButtonStyle.secondary, row=4)
-    async def edit_text(self, interaction: discord.Interaction, button: discord.ui.Button):
-        modal = PanelContentModal(self.embed_title, self.embed_desc)
+    async def callback(self, interaction: discord.Interaction):
+        view: "TicketWizardView" = self.view
+        modal = RoleInputModal()
         await interaction.response.send_modal(modal)
         await modal.wait()
-        self.embed_title = modal.panel_title.value
-        self.embed_desc = modal.panel_desc.value
-        await interaction.edit_original_response(embed=self._build_preview())
+        if modal.result_role_id is None:
+            return
 
-    @discord.ui.button(label="Додати кнопку", style=discord.ButtonStyle.secondary, row=4)
-    async def add_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if len(self.custom_buttons) >= 10:
+        role = interaction.guild.get_role(modal.result_role_id)
+        if not role:
+            try:
+                role = await interaction.guild.fetch_role(modal.result_role_id)
+            except (discord.NotFound, discord.HTTPException):
+                role = None
+        if not role:
+            await interaction.followup.send(f"{E_CLOSED} Роль `{modal.result_role_id}` не знайдено.", ephemeral=True)
+            return
+
+        if role.id not in view.state.support_role_ids:
+            view.state.support_role_ids.append(role.id)
+            await update_config(interaction.guild.id, view.state.as_config_patch())
+        new_view = TicketWizardView(view.state, view.step)
+        await interaction.edit_original_response(embed=new_view.build_embed(interaction.guild), view=new_view)
+        await interaction.followup.send(f"{E_OPENED} Роль {role.mention} додана.", ephemeral=True)
+
+
+class TicketPanelTextButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="Текст панелі", emoji=discord.PartialEmoji.from_str(E_CLIPBOARD), style=discord.ButtonStyle.secondary, row=0)
+
+    async def callback(self, interaction: discord.Interaction):
+        view: "TicketWizardView" = self.view
+        modal = PanelContentModal(view.state.panel_title, view.state.panel_desc)
+        await interaction.response.send_modal(modal)
+        await modal.wait()
+        if modal.result_title is None or modal.result_desc is None:
+            return
+        view.state.panel_title = modal.result_title
+        view.state.panel_desc = modal.result_desc
+        await update_config(interaction.guild.id, view.state.as_config_patch())
+        new_view = TicketWizardView(view.state, view.step)
+        await interaction.edit_original_response(embed=new_view.build_embed(interaction.guild), view=new_view)
+        await interaction.followup.send(f"{E_OPENED} Текст панелі оновлено.", ephemeral=True)
+
+
+class TicketAddPanelButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="Додати кнопку", emoji=discord.PartialEmoji.from_str(E_TICKET), style=discord.ButtonStyle.secondary, row=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        view: "TicketWizardView" = self.view
+        if len(view.state.panel_buttons) >= 10:
             await interaction.response.send_message(f"{E_CLOSED} Максимум 10 кнопок.", ephemeral=True)
             return
-        await interaction.response.send_modal(ButtonConfigModal(self))
 
-    @discord.ui.button(
-        label="Надіслати панель",
-        emoji=discord.PartialEmoji.from_str(E_CLIPBOARD),
-        style=discord.ButtonStyle.success,
-        row=4,
-    )
-    async def send_panel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        target_ch = interaction.guild.get_channel(self.target_channel_id) if self.target_channel_id else interaction.channel
-        if not target_ch:
-            await interaction.response.send_message(f"{E_CLOSED} Канал не знайдено.", ephemeral=True)
+        modal = ButtonConfigModal()
+        await interaction.response.send_modal(modal)
+        await modal.wait()
+        if modal.result_button is None:
+            return
+        view.state.panel_buttons.append(modal.result_button)
+        await update_config(interaction.guild.id, view.state.as_config_patch())
+        new_view = TicketWizardView(view.state, view.step)
+        await interaction.edit_original_response(embed=new_view.build_embed(interaction.guild), view=new_view)
+        await interaction.followup.send(f"{E_OPENED} Кнопку «{modal.result_button['label']}» додано.", ephemeral=True)
+
+
+class TicketResetPanelButtonsButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="Скинути кнопки", emoji=discord.PartialEmoji.from_str(E_DELETE), style=discord.ButtonStyle.danger, row=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        view: "TicketWizardView" = self.view
+        view.state.panel_buttons = []
+        await update_config(interaction.guild.id, view.state.as_config_patch())
+        new_view = TicketWizardView(view.state, view.step)
+        await interaction.response.edit_message(embed=new_view.build_embed(interaction.guild), view=new_view)
+
+
+class TicketPublishPanelButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="Надіслати панель", emoji=discord.PartialEmoji.from_str(E_CLIPBOARD), style=discord.ButtonStyle.success, row=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        view: "TicketWizardView" = self.view
+        target_channel = interaction.guild.get_channel(view.state.panel_channel_id) if view.state.panel_channel_id else interaction.channel
+        if not target_channel:
+            await interaction.response.send_message(f"{E_CLOSED} Канал для публікації не знайдено.", ephemeral=True)
             return
 
         try:
-            final_view = DynamicTicketView(self.custom_buttons) if self.custom_buttons else TicketView()
-            await target_ch.send(embed=self._build_preview(), view=final_view)
-            await interaction.response.edit_message(
-                content=f"{E_OPENED} Панель надіслана в {target_ch.mention}!",
-                embed=None,
-                view=None,
-            )
+            final_view = DynamicTicketView(view.state.panel_buttons) if view.state.panel_buttons else TicketView()
+            await target_channel.send(embed=_build_panel_embed(view.state.panel_title, view.state.panel_desc), view=final_view)
         except discord.HTTPException as exc:
             await interaction.response.send_message(f"{E_CLOSED} Помилка: {exc}", ephemeral=True)
+            return
 
-    def _build_preview(self) -> discord.Embed:
-        return discord.Embed(title=self.embed_title, description=self.embed_desc, color=EMBED_COLOR)
+        await update_config(interaction.guild.id, view.state.as_config_patch())
+        new_view = TicketWizardView(view.state, view.step)
+        await interaction.response.edit_message(embed=new_view.build_embed(interaction.guild), view=new_view)
+        await interaction.followup.send(f"{E_OPENED} Панель надіслана в {target_channel.mention}.", ephemeral=True)
+
+
+class TicketWizardView(discord.ui.View):
+    STEPS = (
+        ("basic", "Основне"),
+        ("team", "Команда"),
+        ("panel", "Панель"),
+        ("publish", "Публікація"),
+    )
+
+    def __init__(self, state: TicketWizardState, step: str = "basic"):
+        super().__init__(timeout=600)
+        self.state = state
+        self.step = step if step in {key for key, _ in self.STEPS} else "basic"
+        self._build_items()
+
+    def _step_index(self) -> int:
+        return next(index for index, (key, _) in enumerate(self.STEPS) if key == self.step)
+
+    def _step_label(self) -> str:
+        return next(label for key, label in self.STEPS if key == self.step)
+
+    def _build_items(self):
+        if self.step == "basic":
+            self.add_item(TicketCategorySelect(self.state))
+            self.add_item(TicketLogChannelSelect(self.state))
+        elif self.step == "team":
+            self.add_item(TicketSupportRoleSelect(self.state))
+            self.add_item(TicketRoleIdButton())
+        elif self.step == "panel":
+            self.add_item(TicketPanelTextButton())
+            self.add_item(TicketAddPanelButton())
+            self.add_item(TicketResetPanelButtonsButton())
+        elif self.step == "publish":
+            self.add_item(TicketPanelChannelSelect(self.state))
+            self.add_item(TicketPublishPanelButton())
+
+        step_index = self._step_index()
+        if step_index > 0:
+            prev_step = self.STEPS[step_index - 1][0]
+            self.add_item(TicketWizardStepButton("← Назад", prev_step, row=4))
+        if step_index < len(self.STEPS) - 1:
+            next_step = self.STEPS[step_index + 1][0]
+            self.add_item(TicketWizardStepButton("Далі →", next_step, row=4))
+
+    def build_embed(self, guild: discord.Guild) -> discord.Embed:
+        embed = surface_embed(
+            "admin",
+            f"{E_TICKET} Тікет сетап",
+            f"Крок {self._step_index() + 1}/4 — {self._step_label()}",
+        )
+
+        category_label = f"<#{self.state.category_id}>" if self.state.category_id else "Стандартна (Tickets)"
+        log_label = f"<#{self.state.log_channel_id}>" if self.state.log_channel_id else "Не налаштовано"
+        panel_channel = f"<#{self.state.panel_channel_id}>" if self.state.panel_channel_id else "Поточний канал"
+        roles_label = ", ".join(f"<@&{role_id}>" for role_id in self.state.support_role_ids) if self.state.support_role_ids else "Не налаштовано"
+
+        add_section(
+            embed,
+            "Поточний стан",
+            [
+                compact_kv(f"{E_TICKET} Категорія", category_label),
+                compact_kv(f"{E_CLIPBOARD} Лог-канал", log_label),
+                compact_kv(f"{E_SUPPORTROLE} Ролі підтримки", roles_label),
+                compact_kv("Кнопки панелі", str(len(self.state.panel_buttons) or 1)),
+                compact_kv("Канал публікації", panel_channel),
+            ],
+        )
+
+        if self.step == "basic":
+            add_section(embed, "Що налаштовується", ["Категорія для нових тікетів.", "Канал, куди надсилається підсумок закриття і транскрипт."])
+        elif self.step == "team":
+            add_section(embed, "Що налаштовується", ["Ролі, які можуть брати і закривати тікети.", "За потреби роль можна додати вручну через ID."])
+        elif self.step == "panel":
+            button_lines = [f"• {button['label']}" for button in self.state.panel_buttons[:10]] or ["• Стандартна кнопка «Створити тікет»"]
+            add_section(
+                embed,
+                "Панель",
+                [
+                    compact_kv("Заголовок", self.state.panel_title),
+                    compact_kv("Опис", self.state.panel_desc),
+                    "Кнопки:",
+                    *button_lines,
+                ],
+            )
+        elif self.step == "publish":
+            add_section(
+                embed,
+                "Публікація",
+                [
+                    compact_kv("Канал", panel_channel),
+                    compact_kv("Заголовок", self.state.panel_title),
+                    compact_kv("Опис", self.state.panel_desc),
+                    compact_kv("Кнопки", ", ".join(button["label"] for button in self.state.panel_buttons[:5]) if self.state.panel_buttons else "Стандартна кнопка"),
+                ],
+            )
+
+        set_surface_footer(embed, "admin", "Налаштуйте крок і переходьте далі.")
+        return embed
 
 
 class TicketSystem(commands.Cog):
@@ -603,36 +871,20 @@ class TicketSystem(commands.Cog):
 
     async def cog_load(self):
         self.bot.add_view(TicketView())
+        self.bot.add_view(TicketPanelButtonsView())
         self.bot.add_view(TicketControlView())
         await collection.create_index("_id")
         await db.active_tickets.create_index("channel_id", unique=True, background=True)
         await db.active_tickets.create_index("guild_id", background=True)
         log.info("Ticket persistent views registered")
 
-    @app_commands.command(name="ticket", description="Управління системою тікетів")
+    @app_commands.command(name="ticket_setup", description="Налаштування системи тікетів")
     @app_commands.default_permissions(administrator=True)
     async def ticket_admin(self, interaction: discord.Interaction):
         config = await get_config(interaction.guild.id)
-        cat_id = config.get("category_id")
-        log_id = config.get("log_channel_id")
-        role_ids = config.get("support_role_ids", [])
-
-        embed = surface_embed("admin", "Система тікетів", tone="info")
-        add_section(
-            embed,
-            "Поточний стан",
-            [
-                compact_kv("Категорія", f"<#{cat_id}>" if cat_id else "Стандартна"),
-                compact_kv("Лог-канал", f"<#{log_id}>" if log_id else "Не налаштовано"),
-                compact_kv(
-                    "Ролі підтримки",
-                    ", ".join(f"<@&{role_id}>" for role_id in role_ids) if role_ids else "Не налаштовано",
-                ),
-                "Використовуй селектори нижче для повного налаштування панелі.",
-            ],
-        )
-        set_surface_footer(embed, "admin", "Close summary і transcript працюють через той самий ticket pipeline.")
-        await interaction.response.send_message(embed=embed, view=TicketAdminView(), ephemeral=True)
+        state = TicketWizardState.from_config(config)
+        view = TicketWizardView(state, "basic")
+        await interaction.response.send_message(embed=view.build_embed(interaction.guild), view=view, ephemeral=True)
 
 
 async def setup(bot):

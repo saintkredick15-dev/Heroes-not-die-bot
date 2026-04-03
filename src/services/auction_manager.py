@@ -3,7 +3,7 @@ import time
 import asyncio
 from config.constants import Emojis
 from modules.db import get_database
-from commands.administration.economy_setup import get_eco
+from commands.administration.economy_setup_shared import get_eco, normalize_currency_emoji
 from repositories.user import get_user
 from utils.eco_helpers import make_log
 
@@ -16,6 +16,10 @@ E_CHECK = Emojis.CHECK.value
 E_CROSS = Emojis.CANCEL.value
 E_EDIT = Emojis.EDIT.value
 E_WARN = Emojis.WARN.value
+
+
+def _curr(eco: dict) -> str:
+    return normalize_currency_emoji(eco.get("currency_emoji") or Emojis.COIN.value)
 
 class CustomBidModal(discord.ui.Modal, title="Зробити свою ставку"):
     amount = discord.ui.TextInput(label="Сума ставки", max_length=15)
@@ -55,10 +59,10 @@ class AuctionView(discord.ui.View):
             return await interaction.response.send_message(f"{E_CROSS} Аукціон вже завершено!", ephemeral=True)
             
         if bid_amount <= self.current_bid and self.highest_bidder is not None:
-            return await interaction.response.send_message(f"{E_CROSS} Ваша ставка повинна бути більшою за `{self.current_bid:,}` {self.eco['currency_emoji']}!", ephemeral=True)
+            return await interaction.response.send_message(f"{E_CROSS} Ваша ставка повинна бути більшою за `{self.current_bid:,}` {_curr(self.eco)}!", ephemeral=True)
         
         if bid_amount < self.current_bid and self.highest_bidder is None:
-            return await interaction.response.send_message(f"{E_CROSS} Початкова ставка `{self.current_bid:,}` {self.eco['currency_emoji']}!", ephemeral=True)
+            return await interaction.response.send_message(f"{E_CROSS} Початкова ставка `{self.current_bid:,}` {_curr(self.eco)}!", ephemeral=True)
             
         if self.highest_bidder == user_id:
             return await interaction.response.send_message(f"{E_CROSS} Ваша ставка вже є найвищою!", ephemeral=True)
@@ -100,7 +104,7 @@ class AuctionView(discord.ui.View):
         if time_left < self.anti_snipe and self.anti_snipe > 0:
             self.end_time += self.anti_snipe
             
-        await interaction.response.send_message(f"{E_CHECK} Ви успішно поставили **{bid_amount:,}** {self.eco['currency_emoji']}!", ephemeral=True)
+        await interaction.response.send_message(f"{E_CHECK} Ви успішно поставили **{bid_amount:,}** {_curr(self.eco)}!", ephemeral=True)
 
     @discord.ui.button(label="+100", style=discord.ButtonStyle.primary, custom_id="auc_plus_100")
     async def btn_plus_100(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -145,7 +149,7 @@ class AuctionManager:
         return True, "Аукціон запущено."
 
     def _build_embed(self, lot: dict, view: AuctionView, eco: dict) -> discord.Embed:
-        curr = eco.get("currency_emoji", E_COIN)
+        curr = _curr(eco)
         embed = discord.Embed(
             title=f"{E_AUCTION} Аукціон: {lot['name']}",
             description=f"**Опис:**\n{lot.get('desc', 'Немає')}",
@@ -200,7 +204,7 @@ class AuctionManager:
             if view.highest_bidder:
                 amount = view.current_bid
                 embed.title = f"{E_CHECK} Аукціон завершено: {view.lot['name']}"
-                embed.description = f"<:celebration_Confetti:1485626240734855441> Переможець: <@{view.highest_bidder}>\n<:coins:1485612564619727011> Фінальна ставка: `{amount:,}` {eco['currency_emoji']}\n\n*Перевірте свій інвентар або ролі!*"
+                embed.description = f"<:celebration_Confetti:1485626240734855441> Переможець: <@{view.highest_bidder}>\n<:coins:1485612564619727011> Фінальна ставка: `{amount:,}` {_curr(eco)}\n\n*Перевірте свій інвентар або ролі!*"
                 
                 import re
                 role_match = re.search(r"<@&(\d+)>", view.lot["name"])

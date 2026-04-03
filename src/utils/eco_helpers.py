@@ -63,7 +63,7 @@ async def apply_inflation(db, guild_id: int, generated_amount: int, eco_settings
     # Глобальне підвищення цін в магазині при друкарні грошей сервером
     if generated_amount <= 0: return
     if not eco_settings:
-        from commands.administration.economy_setup import get_eco
+        from commands.administration.economy_setup_shared import get_eco
         from modules.db import get_guild_settings
         settings = await get_guild_settings(db, guild_id)
         eco_settings = get_eco(settings)

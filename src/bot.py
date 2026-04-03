@@ -6,7 +6,7 @@ import os
 import sys
 import traceback
 from dotenv import load_dotenv
-from config.constants import Emojis, OWNER_IDS
+from config.constants import Emojis
 from modules.logger import Logger
 from rich.progress import Progress
 
@@ -42,16 +42,25 @@ intents.reactions = True
 intents.voice_states = True
 intents.message_content = True
 
-
 from services.automod import load_automod_cache
+from services.metrics import inc_global_metric, mark_user_active, set_global_timestamp
 from modules.db import get_database
+from utils.restrictions import normalize_command_restrictions
+
 db = get_database()
 
 
 # ── Command Tree з перевіркою обмежень ────────────────────────────────────────
 # Кеш: { guild_id: { "meme": [ch_ids], "avatar": [ch_ids], ... } }
 _restriction_cache: dict[int, dict] = {}
-_SYNC_MANAGER_IDS = set(OWNER_IDS) | {int(uid) for uid in config.get("dev", []) if isinstance(uid, int)}
+_SYNC_MANAGER_IDS = {961262391314755665}
+
+
+async def _normalize_guild_restrictions_doc(doc: dict) -> dict[str, list[int]]:
+    restrictions = normalize_command_restrictions(doc.get("command_restrictions"))
+    if restrictions != doc.get("command_restrictions", {}):
+        await db.guild_settings.update_one({"_id": doc["_id"]}, {"$set": {"command_restrictions": restrictions}})
+    return restrictions
 
 
 class RestrictedTree(app_commands.CommandTree):
@@ -64,11 +73,11 @@ class RestrictedTree(app_commands.CommandTree):
         guild_id = interaction.guild.id
         restrictions = _restriction_cache.get(guild_id)
 
-        # Fallback: якщо кеш порожній — підвантажуємо з БД
+        # Fallback: якщо кеш порожній, підвантажуємо з БД.
         if restrictions is None:
             doc = await db.guild_settings.find_one({"_id": guild_id})
             if doc and "command_restrictions" in doc:
-                restrictions = doc["command_restrictions"]
+                restrictions = await _normalize_guild_restrictions_doc(doc)
                 _restriction_cache[guild_id] = restrictions
                 log.info(f"[RESTRICT] Loaded from DB for guild {guild_id}: {restrictions}")
             else:
@@ -88,9 +97,13 @@ class RestrictedTree(app_commands.CommandTree):
 
         allowed_channels = restrictions[cmd_name]
         if not allowed_channels:
+            await inc_global_metric("commands_used_total")
+            await mark_user_active(interaction.guild.id, interaction.user.id)
             return True
 
         if interaction.channel_id in allowed_channels:
+            await inc_global_metric("commands_used_total")
+            await mark_user_active(interaction.guild.id, interaction.user.id)
             return True
 
         ch_list = ", ".join(f"<#{c}>" for c in allowed_channels)
@@ -102,6 +115,7 @@ class RestrictedTree(app_commands.CommandTree):
         return False
 
     async def on_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
+        await inc_global_metric("command_errors_total")
         original = getattr(error, "original", error)
         command_name = getattr(interaction.command, "name", "unknown")
         guild_id = getattr(interaction.guild, "id", "dm")
@@ -144,33 +158,39 @@ class HeroesBot(commands.Bot):
         await load_automod_cache(self)
 
         # 1. Івенти (src/events)
-        events_path = os.path.join(CURRENT_DIR, 'events')
+        events_path = os.path.join(CURRENT_DIR, "events")
         if os.path.exists(events_path):
             for filename in os.listdir(events_path):
-                if filename.endswith('.py') and not filename.startswith('_'):
+                if filename.endswith(".py") and not filename.startswith("_"):
                     # Якщо `python src/bot.py`, sys.path може не включати `src`
-                    extensions.append(('event', f'events.{filename[:-3]}', filename[:-3]))
+                    extensions.append(("event", f"events.{filename[:-3]}", filename[:-3]))
         else:
             log.warning(f"Events folder not found at: {events_path}")
 
         # 2. Команди (src/commands/**)
-        commands_path = os.path.join(CURRENT_DIR, 'commands')
+        commands_path = os.path.join(CURRENT_DIR, "commands")
         if os.path.exists(commands_path):
             for category in os.listdir(commands_path):
                 category_path = os.path.join(commands_path, category)
                 if os.path.isdir(category_path):
                     for filename in os.listdir(category_path):
-                        if filename.endswith('.py') and not filename.startswith('_'):
-                            extensions.append((
-                                'command',
-                                f'commands.{category}.{filename[:-3]}',
-                                f'{category}.{filename[:-3]}',
-                            ))
+                        if (
+                            filename.endswith(".py")
+                            and not filename.startswith("_")
+                            and not filename.endswith(("_shared.py", "_extras.py"))
+                        ):
+                            extensions.append(
+                                (
+                                    "command",
+                                    f"commands.{category}.{filename[:-3]}",
+                                    f"{category}.{filename[:-3]}",
+                                )
+                            )
         else:
             log.warning(f"Commands folder not found at: {commands_path}")
 
         # 3. Сервіси
-        extensions.append(('service', 'services.scheduler', 'scheduler'))
+        extensions.append(("service", "services.scheduler", "scheduler"))
 
         # Завантаження з прогрес-баром
         with Progress() as progress:
@@ -180,20 +200,16 @@ class HeroesBot(commands.Bot):
                     await self.load_extension(ext_path)
                     log.info(f"Loaded {ext_type}: {ext_name}")
                     success += 1
-                except Exception as e:
-                    log.error(f"Failed to load {ext_type} {ext_name}: {e}")
+                except Exception as exc:
+                    log.error(f"Failed to load {ext_type} {ext_name}: {exc}")
                     errors += 1
                 progress.update(task, advance=1)
 
         log.info(f"Extensions loaded: {success} success, {errors} errors")
         if errors > 0:
-            log.critical(
-                f"{errors} cog(s) not loaded — частина функцій бота недоступна! "
-                "Перевір логи вище."
-            )
+            log.critical(f"{errors} cog(s) not loaded — частина функцій бота недоступна! Перевір логи вище.")
 
-        # Sync slash-команд глобально (до 1 год щоб з'явились у всіх)
-        # Для dev — замінити на bot.tree.sync(guild=discord.Object(id=config["guild"]))
+        # Automatic sync на старті вимкнений. Використовуємо ручний !sync.
         log.info("Automatic slash sync disabled on startup. Use !sync manually when command schema changes.")
 
 
@@ -205,19 +221,18 @@ bot = HeroesBot(
 
 
 # ── Хуки для перезавантаження кешу обмежень ───────────────────────────────────
-
 async def _load_restrictions():
     """Завантажити обмеження при старті."""
     _restriction_cache.clear()
     async for doc in db.guild_settings.find({"command_restrictions": {"$exists": True}}):
-        _restriction_cache[doc["_id"]] = doc.get("command_restrictions", {})
+        _restriction_cache[doc["_id"]] = await _normalize_guild_restrictions_doc(doc)
     log.info(f"[RESTRICT] Loaded restrictions for {len(_restriction_cache)} guild(s)")
 
 
 async def reload_restrictions_cache(guild_id: int):
     doc = await db.guild_settings.find_one({"_id": guild_id})
     if doc and "command_restrictions" in doc:
-        _restriction_cache[guild_id] = doc["command_restrictions"]
+        _restriction_cache[guild_id] = await _normalize_guild_restrictions_doc(doc)
     else:
         _restriction_cache.pop(guild_id, None)
 
@@ -225,7 +240,8 @@ async def reload_restrictions_cache(guild_id: int):
 def _is_sync_manager(user_id: int) -> bool:
     return user_id in _SYNC_MANAGER_IDS
 
-# Зберігаємо функцію в бот для доступу з інших модулів
+
+# Зберігаємо функцію в bot для доступу з інших модулів
 bot.reload_restrictions = reload_restrictions_cache
 
 
@@ -240,25 +256,57 @@ async def sync_commands(ctx: commands.Context, scope: str = "guild"):
     if not _is_sync_manager(ctx.author.id):
         return
 
+    try:
+        await ctx.message.delete()
+    except discord.HTTPException:
+        pass
+
+    async def _send_sync_result(message: str):
+        try:
+            await ctx.author.send(message)
+        except discord.HTTPException:
+            try:
+                await ctx.send(message, delete_after=10)
+            except discord.HTTPException:
+                pass
+
     normalized = scope.strip().lower()
     if normalized in {"global", "g"}:
         synced = await bot.tree.sync()
-        await ctx.send(f"{Emojis.CHECK.value} Global sync done. Synced **{len(synced)}** command(s).")
+        await set_global_timestamp("last_command_sync_at")
+        await _send_sync_result(f"{Emojis.CHECK.value} Global sync done. Synced **{len(synced)}** command(s).")
         log.info(f"[SYNC] Global sync requested by {ctx.author} ({ctx.author.id}) -> {len(synced)} command(s)")
         return
 
-    guild_id = int(config.get("guild", 0) or 0)
+    guild_id = 0
+    scope_label = "guild"
+    if normalized in {"guild", "here", "current", "c"}:
+        guild_id = getattr(ctx.guild, "id", 0) or 0
+    elif normalized in {"dev", "config"}:
+        guild_id = int(config.get("guild", 0) or 0)
+        scope_label = "dev guild"
+    elif normalized.isdigit():
+        guild_id = int(normalized)
+        scope_label = "explicit guild"
+    else:
+        guild_id = getattr(ctx.guild, "id", 0) or int(config.get("guild", 0) or 0)
+
     if guild_id <= 0:
-        await ctx.send(f"{Emojis.CROSS.value} У config.json не задано `guild` для dev sync.")
+        await _send_sync_result(f"{Emojis.CROSS.value} Немає guild ID для sync. Запусти `!sync` у сервері, `!sync dev` або `!sync global`.")
         return
 
-    synced = await bot.tree.sync(guild=discord.Object(id=guild_id))
-    await ctx.send(
-        f"{Emojis.CHECK.value} Dev guild sync done for `{guild_id}`. Synced **{len(synced)}** command(s)."
+    guild_obj = discord.Object(id=guild_id)
+    bot.tree.clear_commands(guild=guild_obj)
+    bot.tree.copy_global_to(guild=guild_obj)
+    synced = await bot.tree.sync(guild=guild_obj)
+    await set_global_timestamp("last_command_sync_at")
+    await _send_sync_result(
+        f"{Emojis.CHECK.value} {scope_label.capitalize()} sync done for `{guild_id}`. Synced **{len(synced)}** command(s)."
     )
     log.info(
-        f"[SYNC] Dev guild sync requested by {ctx.author} ({ctx.author.id}) for guild={guild_id} -> {len(synced)} command(s)"
+        f"[SYNC] {scope_label} sync requested by {ctx.author} ({ctx.author.id}) for guild={guild_id} -> {len(synced)} command(s)"
     )
 
 
 bot.run(TOKEN)
+

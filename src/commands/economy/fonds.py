@@ -2,14 +2,15 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from commands.administration.economy_setup import get_eco
+from commands.administration.economy_setup_shared import get_eco, normalize_currency_emoji
+from config.constants import Emojis as _E
 from modules.db import get_database
 from utils.eco_helpers import make_log
 from utils.ui_contract import add_section, gameplay_result_embed, set_surface_footer, surface_embed
 
 db = get_database()
 
-E_COIN = "<:coin:1485610808003133552>"
+E_COIN = _E.COIN.value
 E_CROSS = "<:close:1485598320935174317>"
 E_BANK = "<:bank_safe:1485637217132216571>"
 
@@ -28,7 +29,7 @@ def generate_progress_bar(current: int, total: int, length: int = 20) -> str:
 def build_fund_embed(eco: dict, guild: discord.Guild | None = None) -> discord.Embed:
     goal = eco.get("fund_goal", 1_000_000)
     current = eco.get("fund_current", 0)
-    curr_emoji = eco.get("currency_emoji", E_COIN)
+    curr_emoji = normalize_currency_emoji(eco.get("currency_emoji", E_COIN))
     pct = (current / goal * 100) if goal > 0 else 0
     bar = generate_progress_bar(current, goal, 20)
 
@@ -91,7 +92,7 @@ class FundDonateModal(discord.ui.Modal, title="Зробити внесок у ф
         await interaction.response.send_message(
             embed=gameplay_result_embed(
                 "Внесок зараховано",
-                f"Ти успішно переказав **{val:,}** {self.eco.get('currency_emoji', E_COIN)} у фонд сервера.",
+                f"Ти успішно переказав **{val:,}** {normalize_currency_emoji(self.eco.get('currency_emoji', E_COIN))} у фонд сервера.",
                 tone="success",
             ),
             ephemeral=True,

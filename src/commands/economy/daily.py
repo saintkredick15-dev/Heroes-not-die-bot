@@ -11,15 +11,36 @@ try:
 except ImportError:
     ImageCaptcha = None
 
+from commands.administration.economy_setup_shared import get_eco, normalize_currency_emoji
+from config.constants import Emojis as _E
 from modules.db import get_database
 from repositories.user import get_user
 from commands.economy.quests import quest_hook
-from utils.eco_helpers import apply_inflation
+from services.metrics import inc_global_metric
+from utils.eco_helpers import apply_inflation, make_log
 from utils.ui_contract import gameplay_result_embed, set_surface_footer, surface_embed
 
 db = get_database()
+E_COIN = _E.COIN.value
+E_GIFT = _E.GIFT.value
+E_FLAME = _E.FLAME.value
+E_HOURGLASS = _E.HOURGLASS.value
+E_CHECK = _E.CHECK.value
+E_CROSS = _E.CROSS.value
+E_WARN = _E.WARN.value
+E_TYPING = _E.TYPING.value
 
-class CaptchaModal(discord.ui.Modal, title="🤖 Перевірка на людяність"):
+
+def _currency_emoji(eco: dict) -> str:
+    return normalize_currency_emoji(eco.get("currency_emoji") or E_COIN)
+
+
+def _daily_cooldown_seconds(eco: dict) -> int:
+    raw = int(eco.get("daily_cooldown", 86400) or 86400)
+    # Legacy configs could store hours; current config stores seconds.
+    return raw * 3600 if 0 < raw <= 168 else raw
+
+class CaptchaModal(discord.ui.Modal, title="Перевірка на людяність"):
     captcha_input = discord.ui.TextInput(
         label="Введіть текст з картинки:",
         placeholder="Літери і цифри з малюнку",
@@ -34,10 +55,10 @@ class CaptchaModal(discord.ui.Modal, title="🤖 Перевірка на люд�
 
     async def on_submit(self, interaction: discord.Interaction):
         if self.captcha_input.value.strip() == self.expected_text:
-            await interaction.response.edit_message(content="<:check:1485597845883981905> Капча пройдена успішно!", embed=None, view=None, attachments=[])
+            await interaction.response.edit_message(content=f"{E_CHECK} Капча пройдена успішно!", embed=None, view=None, attachments=[])
             await self.daily_callback(interaction)
         else:
-            await interaction.response.edit_message(content="<:close:1485598320935174317> Неправильний текст. Спробуй ще раз пізніше.", embed=None, view=None, attachments=[])
+            await interaction.response.edit_message(content=f"{E_CROSS} Неправильний текст. Спробуй ще раз пізніше.", embed=None, view=None, attachments=[])
 
 class CaptchaView(discord.ui.View):
     def __init__(self, owner_id: int, expected_text: str, daily_callback):
@@ -48,11 +69,11 @@ class CaptchaView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message("<:close:1485598320935174317> Це не твоя капча!", ephemeral=True)
+            await interaction.response.send_message(f"{E_CROSS} Це не твоя капча!", ephemeral=True)
             return False
         return True
 
-    @discord.ui.button(label="Відповісти", style=discord.ButtonStyle.primary, emoji="🤖")
+    @discord.ui.button(label="Відповісти", style=discord.ButtonStyle.primary, emoji=E_TYPING)
     async def enter_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(CaptchaModal(self.expected_text, self.daily_callback))
 
@@ -61,8 +82,7 @@ class DailyCommand(commands.Cog):
         self.bot = bot
 
     async def execute_daily(self, interaction: discord.Interaction, eco: dict, user_data: dict, now: int, last_daily: int):
-        cd_hours = eco.get("daily_cooldown", 24)
-        cooldown = int(cd_hours * 3600)
+        cooldown = _daily_cooldown_seconds(eco)
         streak = user_data.get("daily_streak", 0)
         
         if last_daily and (now - last_daily) > (cooldown * 2):
@@ -80,7 +100,7 @@ class DailyCommand(commands.Cog):
         bank = user_data.get("bank", 0)
         final_earned, tax, tax_pct_str = calculate_tax(earned, wallet, bank)
 
-        log_item = {"log": f"🟢 **{final_earned}** | Щоденна нагорода (Streak: {streak}) | <t:{now}:t>"}
+        log_item = make_log(final_earned, f"Щоденна нагорода (Streak: {streak})")
 
         await db.users.update_one(
             {"guild_id": interaction.guild.id, "user_id": interaction.user.id},
@@ -92,23 +112,24 @@ class DailyCommand(commands.Cog):
         )
         from modules.db import invalidate_user_data
         await invalidate_user_data(interaction.guild.id, interaction.user.id)
+        await inc_global_metric("daily_claims_total")
         
         await quest_hook(interaction.guild.id, interaction.user.id, "economy.daily")
         await apply_inflation(db, interaction.guild.id, final_earned, eco)
 
-        emoji = eco.get("currency_emoji", "<:coin:1485610808003133552>")
-        flame = "<:flame:1485618663489929356>"
-        calendar = "<:info:1485638054201921536>"
+        emoji = _currency_emoji(eco)
+        flame = E_FLAME
         
         earned_text = f"{final_earned} {emoji}"
         if tax > 0:
             earned_text += f"\n*(Податок на багатство {tax_pct_str}: -{tax} {emoji})*"
 
-        embed = gameplay_result_embed(
-            f"{calendar} Щоденна нагорода",
+        embed = surface_embed(
+            "admin",
+            f"{E_GIFT} Щоденна нагорода",
             f"Ти успішно отримав свою щоденну нагороду!\n\n**Базова нагорода:** {base_amount} {emoji}\n**Бонус ({streak} {flame}):** +{streak_bonus} {emoji}\n\n**Всього зараховано:** {earned_text}",
-            tone="success",
         )
+        set_surface_footer(embed, "admin", "Нагорода вже зарахована на баланс.")
         if interaction.response.is_done():
             await interaction.followup.send(embed=embed, ephemeral=True)
         else:
@@ -119,9 +140,9 @@ class DailyCommand(commands.Cog):
         try:
             from modules.db import get_guild_settings
             settings = await get_guild_settings(db, interaction.guild.id)
-            eco = settings.get("economy", {})
+            eco = get_eco(settings)
             if not eco.get("enabled", True):
-                await interaction.response.send_message("<:close:1485598320935174317> Економіка на цьому сервері вимкнена.", ephemeral=True)
+                await interaction.response.send_message(f"{E_CROSS} Економіка на цьому сервері вимкнена.", ephemeral=True)
                 return
             # Ріжемо фермерів: твінкам тут не місце
             from utils.eco_helpers import check_account_age
@@ -132,14 +153,13 @@ class DailyCommand(commands.Cog):
             now = int(time.time())
             last_daily = user_data.get("daily_last", 0)
             
-            cd_hours = eco.get("daily_cooldown", 24)
-            cooldown = int(cd_hours * 3600)
+            cooldown = _daily_cooldown_seconds(eco)
 
             if last_daily and (now - last_daily) < cooldown:
                 remaining = int(cooldown - (now - last_daily))
                 h, m = divmod(remaining // 60, 60)
                 time_str = f"{h}г {m}хв"
-                await interaction.response.send_message(f"<:hourglass:1485598603937579181> Ти вже отримав свою щоденну нагороду! Повертайся через **{time_str}**.", ephemeral=True)
+                await interaction.response.send_message(f"{E_HOURGLASS} Ти вже отримав свою щоденну нагороду! Повертайся через **{time_str}**.", ephemeral=True)
                 return
 
             if eco.get("captcha_enabled", False) and ImageCaptcha:
@@ -153,7 +173,7 @@ class DailyCommand(commands.Cog):
                 file = discord.File(fp=BytesIO(image_bytes), filename="captcha.png")
                 embed = surface_embed(
                     "gameplay",
-                    "🤖 Перевірка",
+                    f"{E_TYPING} Перевірка",
                     "Розвʼяжи капчу щоб отримати щоденну нагороду.\nНатисни **Відповісти** коли будеш готовий.",
                     tone="warning",
                 )
@@ -171,9 +191,9 @@ class DailyCommand(commands.Cog):
 
         except Exception as e:
             if not interaction.response.is_done():
-                await interaction.response.send_message(f"<:warning:1485598476850040843> Помилка: `{e}`", ephemeral=True)
+                await interaction.response.send_message(f"{E_WARN} Помилка: `{e}`", ephemeral=True)
             else:
-                await interaction.followup.send(f"<:warning:1485598476850040843> Помилка: `{e}`", ephemeral=True)
+                await interaction.followup.send(f"{E_WARN} Помилка: `{e}`", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(DailyCommand(bot))

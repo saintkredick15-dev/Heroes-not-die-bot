@@ -5,7 +5,8 @@ import datetime
 from config.constants import Emojis
 from modules.db import get_database
 from repositories.user import get_user
-from commands.administration.economy_setup import get_eco
+from commands.administration.economy_setup_shared import get_eco, normalize_currency_emoji
+from services.metrics import set_global_timestamp
 
 db = get_database()
 
@@ -73,6 +74,7 @@ class SchedulerCog(commands.Cog):
                                 }
                             )
                     updates["scheduler_state.last_bank_interest"] = today_str
+                    await set_global_timestamp("last_interest_payout_at")
 
             # 4. Перевірка на Season Reset
             season_duration = eco.get("season_duration_days", 30)
@@ -107,7 +109,7 @@ async def perform_season_reset(guild: discord.Guild, eco: dict = None, gd: dict 
         eco = get_eco(gd)
 
     season_num = eco.get("season_number", 1)
-    curr = eco.get("currency_emoji", Emojis.COIN.value)
+    curr = normalize_currency_emoji(eco.get("currency_emoji") or Emojis.COIN.value)
     curr_name = eco.get("currency_name", "Coin")
 
     # 1. Знайти топ 3 гравців (за wallet + bank)
@@ -180,6 +182,7 @@ async def perform_season_reset(guild: discord.Guild, eco: dict = None, gd: dict 
         {"_id": guild_id},
         {"$set": {"economy": eco, "season_history": history}}
     )
+    await set_global_timestamp("last_season_reset_at")
 
     # 6. Публікуємо підсумок сезону — тільки якщо адмін вказав канал
     announce_channel_id = eco.get("season_announce_channel_id", 0)

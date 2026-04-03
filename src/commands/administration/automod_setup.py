@@ -38,7 +38,7 @@ MODULES = {
     "am_caps":       {"label": "Анти-капс",        "emoji": "<:warning:1485598476850040843>",  "desc": "Блокує повідомлення з великою кількістю CAPS."},
     "am_mentions":   {"label": "Анти-згадки",      "emoji": "<:members:1485607710035542118>",   "desc": "Блокує масові згадки в одному повідомленні."},
     "am_emojispam":  {"label": "Emoji-спам",       "emoji": "<:star:1485626121847574631>",     "desc": "Блокує повідомлення з надмірною кількістю емодзі."},
-    "am_imagespam":  {"label": "Image-спам",      "emoji": "???",     "desc": "Ловить масове закидання картинок/файлів."},
+    "am_imagespam":  {"label": "Image-спам",      "emoji": "<:noimage:1486420408348446960>",     "desc": "Ловить масове закидання картинок/файлів."},
 }
 
 MODULE_SETTINGS = {
@@ -282,120 +282,6 @@ def _module_snapshot(key: str, settings: dict) -> list[str]:
 def _build_main_embed(settings: dict) -> discord.Embed:
     enabled_count = sum(1 for key in MODULES if settings.get(key, False))
     total_count = len(MODULES)
-    embed = discord.Embed(
-        title=f"{E_HAMMER} Автомодерація",
-        description=(
-            f"Активно модулів: `{enabled_count}/{total_count}`\n"
-            "Верхні кнопки відкривають модулі, нижні контролі керують whitelist і кастомними правилами. `Керувати правилами` відкриває rule-by-rule editor."
-        ),
-        color=EMBED_COLOR,
-    )
-    for key, mod in MODULES.items():
-        enabled = settings.get(key, False)
-        details = "\n".join(_module_snapshot(key, settings))
-        value = _status_text(enabled)
-        if details:
-            value = f"{value}\n{details}"
-        embed.add_field(name=f"{mod['emoji']} {mod['label']}", value=value, inline=True)
-
-    wl_ch = settings.get("am_whitelist_channels", [])
-    wl_roles = settings.get("am_whitelist_roles", [])
-    wl_text = (
-        f"Канали: {_preview_values(wl_ch, f'{E_CROSS} не вибрано', formatter=lambda c: f'<#{c}>')}\n"
-        f"Ролі: {_preview_values(wl_roles, f'{E_CROSS} не вибрано', formatter=lambda r: f'<@&{r}>')}\n"
-        "*Адміністратори ігноруються.*"
-    )
-    embed.add_field(name=f"{E_SETTING} Білий список", value=wl_text, inline=False)
-
-    rules = settings.get("automod_rules", [])
-    if rules:
-        words = "\n".join(_rule_preview(rule) for rule in rules[:4])
-        suffix = f"\n+ ще `{len(rules) - 4}` правил" if len(rules) > 4 else ""
-        embed.add_field(
-            name=f"{E_NO} Кастомні правила",
-            value=(
-                f"Кількість: `{len(rules)}`\n"
-                f"{words}{suffix}\n"
-                "`trigger | action | target | match | reason | ...`"
-            ),
-            inline=False,
-        )
-    else:
-        embed.add_field(
-            name=f"{E_NO} Кастомні правила",
-            value=f"{E_CROSS} не додано\n`trigger | action | target | match | reason | ...`",
-            inline=False,
-        )
-    embed.set_footer(text="Спочатку вмикайте потрібні модулі, потім додавайте винятки і кастомні правила. `/config` краще підходить для preset-ів та import/export.")
-    return embed
-
-def _build_module_embed(key: str, settings: dict) -> discord.Embed:
-    mod = MODULES[key]
-    enabled = settings.get(key, False)
-    status = _status_text(enabled)
-
-    embed = discord.Embed(
-        title=f"{mod['emoji']} {mod['label']}",
-        description=f"{mod['desc']}\nСтатус: {status}",
-        color=EMBED_COLOR,
-    )
-    snapshot = _module_snapshot(key, settings)
-    if snapshot:
-        embed.add_field(name="Поточна поведінка", value="\n".join(snapshot), inline=False)
-
-    if key in MODULE_SETTINGS:
-        for skey, sinfo in MODULE_SETTINGS[key].items():
-            if skey.endswith("_mute_dur"):
-                action_key = skey.replace("_mute_dur", "_action")
-                if settings.get(action_key, "") != "mute":
-                    continue
-            val = settings.get(skey, sinfo["default"])
-            if val == "":
-                val = "—"
-            embed.add_field(name=sinfo["name"], value=f"`{val}`", inline=True)
-
-    if key == "am_antispam":
-        dup = settings.get("am_antispam_duplicates", False)
-        dup_status = f"{E_CHECK} Увімкнено" if dup else f"{E_CROSS} Вимкнено"
-        embed.add_field(name="Ловити повтори", value=dup_status, inline=True)
-
-    elif key == "am_antiinvite":
-        allowed = settings.get("am_antiinvite_allowed_servers", [])
-        if allowed:
-            if isinstance(allowed[0], dict):
-                names = ", ".join(f"`{s.get('name', '?')}`" for s in allowed)
-            else:
-                names = ", ".join(f"`{s}`" for s in allowed)
-            embed.add_field(name="Дозволені сервери", value=names, inline=False)
-        else:
-            embed.add_field(name="Дозволені сервери", value=f"{E_CROSS} не вказано", inline=False)
-
-    elif key == "am_antilink":
-        allowed = settings.get("am_antilink_allowed_domains", [])
-        if allowed:
-            embed.add_field(name="Дозволені домени", value=", ".join(f"`{d}`" for d in allowed), inline=False)
-        else:
-            embed.add_field(name="Дозволені домени", value=f"{E_CROSS} не вказано", inline=False)
-
-    rules = settings.get("automod_rules", [])
-    if rules:
-        profile_rules = sum(1 for rule in rules if rule.get("target", "both") in {"profile", "both"})
-        message_rules = sum(1 for rule in rules if rule.get("target", "both") in {"message", "both"})
-        embed.add_field(
-            name="Шар кастомних правил",
-            value=f"Повідомлення: `{message_rules}`\nПрофілі: `{profile_rules}`",
-            inline=True,
-        )
-
-    embed.set_footer(text="Пороги й дії змінюються тут. Для rich custom rules використовуйте `Керувати правилами` або `/config` import/export.")
-
-    return embed
-
-# ── Modals ────────────────────────────────────────────────────────────────────
-
-def _build_main_embed(settings: dict) -> discord.Embed:
-    enabled_count = sum(1 for key in MODULES if settings.get(key, False))
-    total_count = len(MODULES)
     embed = surface_embed(
         "admin",
         f"{E_HAMMER} Автомодерація",
@@ -426,7 +312,7 @@ def _build_main_embed(settings: dict) -> discord.Embed:
     else:
         add_section(embed, f"{E_NO} Кастомні правила", [f"{E_CROSS} не додано", "`trigger | action | target | match | reason | ...`"])
 
-    set_surface_footer(embed, "admin", "Спочатку вмикай модулі, потім додавай винятки і кастомні правила. `/config` краще підходить для preset-ів та import/export.")
+    set_surface_footer(embed, "admin", "Спочатку вмикай модулі, потім додавай винятки і кастомні правила.")
     return embed
 
 
@@ -471,7 +357,7 @@ def _build_module_embed(key: str, settings: dict) -> discord.Embed:
         message_rules = sum(1 for rule in rules if rule.get("target", "both") in {"message", "both"})
         add_section(embed, "Кастомний шар", [compact_kv("Повідомлення", f"`{message_rules}`"), compact_kv("Профілі", f"`{profile_rules}`")])
 
-    set_surface_footer(embed, "admin", "Пороги й дії змінюються тут. Для rich custom rules використовуй `Керувати правилами` або `/config` import/export.")
+    set_surface_footer(embed, "admin", "Пороги й дії змінюються тут. Для складних сценаріїв використовуй `Керувати правилами`.")
     return embed
 
 
@@ -925,7 +811,14 @@ class ModuleSubView(discord.ui.View):
 class ModuleButton(discord.ui.Button):
     def __init__(self, key: str, mod: dict, enabled: bool, row: int):
         self.mod_key = key
-        emoji = discord.PartialEmoji.from_str(mod["emoji"]) if mod["emoji"].startswith("<") else mod["emoji"]
+        raw_emoji = "<:noimage:1486420408348446960>" if key == "am_imagespam" else mod["emoji"]
+        if raw_emoji.startswith("<"):
+            parsed = discord.PartialEmoji.from_str(raw_emoji)
+            emoji = parsed if parsed.id else discord.PartialEmoji.from_str(E_NO)
+        elif raw_emoji and set(raw_emoji) == {"?"}:
+            emoji = discord.PartialEmoji.from_str(E_NO)
+        else:
+            emoji = raw_emoji
         style = discord.ButtonStyle.green if enabled else discord.ButtonStyle.gray
         super().__init__(label=mod["label"], style=style, emoji=emoji, row=row)
 
@@ -1013,3 +906,4 @@ class AutomodSetupCog(commands.Cog):
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(AutomodSetupCog(bot))
+
