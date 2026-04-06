@@ -187,14 +187,14 @@ class RulesView(discord.ui.View):
     @discord.ui.button(
         label="Правила серверу",
         style=discord.ButtonStyle.secondary,
-        emoji="📜",
+        emoji=Emojis.CLIPBOARD.value,
         custom_id="server_rules",
     )
     async def server_rules(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
         embed = discord.Embed(
-            title="📜・Правила серверу Vangard:",
+            title=f"{Emojis.CLIPBOARD.value}・Правила серверу Vangard:",
             description="""```
 1. Повага до інших — заборонені образи, приниження, тролінг, цькування, провокації та будь-які прояви токсичності.
  1.1 Мовний етикет — не зловживайте нецензурною лексикою, уникайте хамства та агресивного тону.
