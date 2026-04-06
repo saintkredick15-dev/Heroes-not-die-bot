@@ -45,7 +45,7 @@ intents.message_content = True
 from services.automod import load_automod_cache
 from services.metrics import inc_global_metric, mark_user_active, set_global_timestamp
 from modules.db import get_database
-from utils.restrictions import normalize_command_restrictions
+from utils.restrictions import normalize_command_restrictions, normalize_role_ids
 
 db = get_database()
 
@@ -56,11 +56,22 @@ _restriction_cache: dict[int, dict] = {}
 _SYNC_MANAGER_IDS = {961262391314755665}
 
 
-async def _normalize_guild_restrictions_doc(doc: dict) -> dict[str, list[int]]:
+async def _normalize_guild_restrictions_doc(doc: dict) -> dict[str, object]:
     restrictions = normalize_command_restrictions(doc.get("command_restrictions"))
+    bypass_role_ids = normalize_role_ids(doc.get("command_bypass_role_ids"))
+
+    updates = {}
     if restrictions != doc.get("command_restrictions", {}):
-        await db.guild_settings.update_one({"_id": doc["_id"]}, {"$set": {"command_restrictions": restrictions}})
-    return restrictions
+        updates["command_restrictions"] = restrictions
+    if bypass_role_ids != doc.get("command_bypass_role_ids", []):
+        updates["command_bypass_role_ids"] = bypass_role_ids
+    if updates:
+        await db.guild_settings.update_one({"_id": doc["_id"]}, {"$set": updates})
+
+    return {
+        "command_restrictions": restrictions,
+        "command_bypass_role_ids": bypass_role_ids,
+    }
 
 
 class RestrictedTree(app_commands.CommandTree):
@@ -71,18 +82,21 @@ class RestrictedTree(app_commands.CommandTree):
             return True
 
         guild_id = interaction.guild.id
-        restrictions = _restriction_cache.get(guild_id)
+        restriction_payload = _restriction_cache.get(guild_id)
 
         # Fallback: якщо кеш порожній, підвантажуємо з БД.
-        if restrictions is None:
+        if restriction_payload is None:
             doc = await db.guild_settings.find_one({"_id": guild_id})
-            if doc and "command_restrictions" in doc:
-                restrictions = await _normalize_guild_restrictions_doc(doc)
-                _restriction_cache[guild_id] = restrictions
-                log.info(f"[RESTRICT] Loaded from DB for guild {guild_id}: {restrictions}")
+            if doc and ("command_restrictions" in doc or "command_bypass_role_ids" in doc):
+                restriction_payload = await _normalize_guild_restrictions_doc(doc)
+                _restriction_cache[guild_id] = restriction_payload
+                log.info(f"[RESTRICT] Loaded from DB for guild {guild_id}: {restriction_payload}")
             else:
                 _restriction_cache[guild_id] = {}
                 return True
+
+        restrictions = restriction_payload.get("command_restrictions", {}) if restriction_payload else {}
+        bypass_role_ids = set(restriction_payload.get("command_bypass_role_ids", [])) if restriction_payload else set()
 
         if not restrictions:
             return True
@@ -102,6 +116,17 @@ class RestrictedTree(app_commands.CommandTree):
             return True
 
         if interaction.channel_id in allowed_channels:
+            await inc_global_metric("commands_used_total")
+            await mark_user_active(interaction.guild.id, interaction.user.id)
+            return True
+
+        if interaction.guild.owner_id == interaction.user.id:
+            await inc_global_metric("commands_used_total")
+            await mark_user_active(interaction.guild.id, interaction.user.id)
+            return True
+
+        member_roles = getattr(interaction.user, "roles", [])
+        if bypass_role_ids and any(getattr(role, "id", 0) in bypass_role_ids for role in member_roles):
             await inc_global_metric("commands_used_total")
             await mark_user_active(interaction.guild.id, interaction.user.id)
             return True
@@ -224,14 +249,21 @@ bot = HeroesBot(
 async def _load_restrictions():
     """Завантажити обмеження при старті."""
     _restriction_cache.clear()
-    async for doc in db.guild_settings.find({"command_restrictions": {"$exists": True}}):
+    async for doc in db.guild_settings.find(
+        {
+            "$or": [
+                {"command_restrictions": {"$exists": True}},
+                {"command_bypass_role_ids": {"$exists": True}},
+            ]
+        }
+    ):
         _restriction_cache[doc["_id"]] = await _normalize_guild_restrictions_doc(doc)
     log.info(f"[RESTRICT] Loaded restrictions for {len(_restriction_cache)} guild(s)")
 
 
 async def reload_restrictions_cache(guild_id: int):
     doc = await db.guild_settings.find_one({"_id": guild_id})
-    if doc and "command_restrictions" in doc:
+    if doc and ("command_restrictions" in doc or "command_bypass_role_ids" in doc):
         _restriction_cache[guild_id] = await _normalize_guild_restrictions_doc(doc)
     else:
         _restriction_cache.pop(guild_id, None)

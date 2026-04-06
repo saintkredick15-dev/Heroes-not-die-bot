@@ -13,7 +13,7 @@ from repositories.user import get_user
 from commands.administration.economy_setup_shared import DEFAULT_ECO, get_eco
 from commands.economy.quests import quest_hook
 from services.metrics import inc_global_metric
-from utils.eco_helpers import make_log
+from utils.eco_helpers import add_daily_earnings_inc, make_log
 from utils.ui_contract import gameplay_result_embed, set_surface_footer, surface_embed
 
 db = get_database()
@@ -157,6 +157,7 @@ async def finalize(guild_id: int, user_id: int, delta: int, desc: str, eco: dict
         inc["week_earned"]  = delta
         inc["month_earned"] = delta
         inc["gambling_earned_today"] = delta
+        add_daily_earnings_inc(inc, delta)
     upd = {
         "$inc": inc,
         "$push": {"eco_history": {"$each": [make_log(delta, desc)], "$slice": -50}}
@@ -805,9 +806,11 @@ class GamblingCog(commands.Cog):
             else:
                 
                 win_amount = int(ставка * 1.5)
+                inc_query = {"wallet": ставка + win_amount, "total_earned": win_amount, "week_earned": win_amount, "month_earned": win_amount}
+                add_daily_earnings_inc(inc_query, win_amount)
                 await db.users.update_one(
                     {"guild_id": interaction.guild.id, "user_id": interaction.user.id},
-                    {"$inc": {"wallet": ставка + win_amount, "total_earned": win_amount, "week_earned": win_amount, "month_earned": win_amount}},
+                    {"$inc": inc_query},
                 )
                 embed = gameplay_result_embed(f"🃏 BLACKJACK! {_E.CELEBRATION.value}", f"Натуральний Blackjack! Виплата **×1.5** = **+{win_amount:,}** {curr}", tone="success")
                 embed.add_field(name=f"Твоя рука ({hand_total(p_cards)})", value=fmt_hand(p_cards), inline=True)

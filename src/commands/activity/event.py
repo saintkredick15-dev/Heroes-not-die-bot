@@ -1,6 +1,7 @@
 import discord
 from discord import app_commands, File
 from discord.ext import commands
+from config.constants import Emojis
 from modules.db import get_database
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
@@ -274,7 +275,7 @@ class RulesView(discord.ui.View):
     @discord.ui.button(
         label="Ролі",
         style=discord.ButtonStyle.secondary,
-        emoji="🎭",
+        emoji=Emojis.ROLE.value,
         custom_id="roles_info",
     )
     async def roles_info(
@@ -378,7 +379,7 @@ class RulesView(discord.ui.View):
         )
 
     @discord.ui.button(
-        label="FAQ", style=discord.ButtonStyle.secondary, emoji="❓", custom_id="faq"
+        label="FAQ", style=discord.ButtonStyle.secondary, emoji=Emojis.QUIZ.value, custom_id="faq"
     )
     async def faq(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed = discord.Embed(
@@ -431,15 +432,15 @@ ID учасника.
     @discord.ui.button(
         label="Ігрова категорія",
         style=discord.ButtonStyle.secondary,
-        emoji="🎮",
+        emoji=Emojis.JOYSTICK.value,
         custom_id="gaming_category",
     )
     async def gaming_category(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
         embed = discord.Embed(
-            title="🎮・Ігрова категорія:",
-            description="Ігрова категорія містить правила щодо ігор котрі є на сервері, гайди до ігор, тощо. (адмін знову не придумав, тєрпітє хохлі)",
+            title=f"{Emojis.JOYSTICK.value}・Ігрова категорія:",
+            description="Ігрова категорія містить правила для ігор на сервері, гайди та корисні матеріали для участі в ігрових активностях.",
             color=0x36393F,
         )
 
@@ -448,7 +449,7 @@ ID учасника.
             discord.ui.Button(
                 label="Правила HOI4",
                 url="https://docs.google.com/document/d/1LQ9tpaG0uU2KXThB7Z95pTCUK0LFwjNKhA3Q9BUj4oI/edit?usp=sharing",
-                emoji="📋",
+                emoji=Emojis.CLIPBOARD.value,
                 style=discord.ButtonStyle.link,
             )
         )
@@ -635,13 +636,13 @@ class ActivityCog(commands.Cog):
             color=0x36393F  
         )
         description = [
-            "```🎀・Ласкаво просимо на сервер!```",
+            f"{Emojis.STAR_SHINE.value} **Ласкаво просимо на сервер!**",
             "Раді бачити вас на нашому сервері! Щоб швидко влитися та",
             "стати активним учасником, ознайомтеся з основними розділами",
             "сервера за допомогою кнопок нижче. Це допоможе освоїтися,",
             "уникнути порушень і зробити ваше перебування цікавим.\n",
             "Бажаємо приємного проведення часу!\n",
-            "```📋・Інформація про сервер:```",
+            f"{Emojis.CLIPBOARD.value} **Інформація про сервер:**",
             "— **Правила сервера**",
             "Ознайомтеся з ними, щоб підтримувати дружню атмосферу.\n",
             "— **Ролі**",
@@ -649,8 +650,7 @@ class ActivityCog(commands.Cog):
             "— **ЧаПи**",
             "Відповіді на часті запитання та не тільки.\n",
             "— **Ігрова категорія**",
-            "Правила ігор на сервері, гайди, тощо.",
-            "*(адмін не додумав шо тут напісять ще)*",
+            "Правила ігор на сервері, гайди та матеріали для участі в подіях і тематичних ігрових каналах.",
         ]
         embed.description = str.join("\n", description)
         embed.set_image(url=f"attachment://{divider_file.filename}")

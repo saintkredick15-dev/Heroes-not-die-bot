@@ -19,6 +19,7 @@ from commands.economy.quests import quest_hook
 from services.metrics import inc_global_metric
 from utils.eco_helpers import apply_inflation, make_log
 from utils.ui_contract import gameplay_result_embed, set_surface_footer, surface_embed
+from utils.eco_helpers import add_daily_earnings_inc
 
 db = get_database()
 E_COIN = _E.COIN.value
@@ -102,10 +103,13 @@ class DailyCommand(commands.Cog):
 
         log_item = make_log(final_earned, f"Щоденна нагорода (Streak: {streak})")
 
+        inc_query = {"wallet": final_earned, "total_earned": final_earned}
+        add_daily_earnings_inc(inc_query, final_earned, timestamp=now)
+
         await db.users.update_one(
             {"guild_id": interaction.guild.id, "user_id": interaction.user.id},
             {
-                "$inc": {"wallet": final_earned, "total_earned": final_earned},
+                "$inc": inc_query,
                 "$set": {"daily_last": now, "daily_streak": streak},
                 "$push": {"eco_history": {"$each": [log_item], "$slice": -50}}
             }

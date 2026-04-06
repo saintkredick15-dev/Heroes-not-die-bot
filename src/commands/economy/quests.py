@@ -11,6 +11,7 @@ from commands.administration.economy_setup_shared import get_eco, normalize_curr
 from modules.db import get_database
 from repositories.user import get_user
 from commands.economy.quests_data import get_random_quests
+from utils.eco_helpers import add_daily_earnings_inc
 
 db = get_database()
 
@@ -109,10 +110,13 @@ class QuestsView(discord.ui.View):
         if claimed_count == 0:
             return await interaction.response.send_message("<:close:1485598320935174317> Немає виконаних квестів для отримання нагороди.", ephemeral=True)
             
+        inc_query = {"wallet": total_coins, "total_earned": total_coins}
+        add_daily_earnings_inc(inc_query, total_coins)
+
         await db.users.update_one(
             {"guild_id": interaction.guild.id, "user_id": interaction.user.id},
             {
-                "$inc": {"wallet": total_coins, "total_earned": total_coins},
+                "$inc": inc_query,
                 "$set": {"quests": user_quests},
                 "$push": {"eco_history": {"$each": [{"log": f"{Emojis.PLUS.value} **{total_coins}** | Нагороди за квести ({claimed_count} шт) | <t:{int(time.time())}:t>"}], "$slice": -50}}
             }

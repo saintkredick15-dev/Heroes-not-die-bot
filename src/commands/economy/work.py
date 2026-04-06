@@ -15,7 +15,7 @@ from config.constants import Emojis as _E
 from modules.db import get_database
 from repositories.user import get_user
 from services.metrics import inc_global_metric
-from utils.eco_helpers import apply_inflation, make_log
+from utils.eco_helpers import add_daily_earnings_inc, apply_inflation, make_log
 from utils.ui_contract import add_section, gameplay_result_embed, set_surface_footer, surface_embed
 
 db = get_database()
@@ -93,10 +93,13 @@ class WorkCommand(commands.Cog):
             if boost_active:
                 final_earned *= 2
 
+            inc_query = {"wallet": final_earned, "total_earned": final_earned}
+            add_daily_earnings_inc(inc_query, final_earned, timestamp=now)
+
             await db.users.update_one(
                 {"guild_id": interaction.guild.id, "user_id": interaction.user.id},
                 {
-                    "$inc": {"wallet": final_earned, "total_earned": final_earned},
+                    "$inc": inc_query,
                     "$set": {"work_last": int(time.time())},
                     "$push": {"eco_history": {"$each": [make_log(final_earned, "Легка робота")], "$slice": -50}},
                 },
@@ -162,10 +165,13 @@ class WorkCommand(commands.Cog):
                 )
                 res_embed.color = gameplay_result_embed("tmp", "", tone="error").color
 
+            inc_query = {"wallet": final_earned, "total_earned": final_earned}
+            add_daily_earnings_inc(inc_query, final_earned, timestamp=now)
+
             await db.users.update_one(
                 {"guild_id": interaction.guild.id, "user_id": interaction.user.id},
                 {
-                    "$inc": {"wallet": final_earned, "total_earned": final_earned},
+                    "$inc": inc_query,
                     "$set": {"work_last": now},
                     "$push": {"eco_history": {"$each": [make_log(final_earned, f"Робота: {scene['title']}")], "$slice": -50}},
                 },
@@ -324,15 +330,18 @@ class WorkCommand(commands.Cog):
         mission = state["mission"]
         now = int(time.time())
 
+        inc_query = {
+            "wallet": final_earned,
+            "total_earned": final_earned,
+            "week_earned": final_earned,
+            "month_earned": final_earned,
+        }
+        add_daily_earnings_inc(inc_query, final_earned, timestamp=now)
+
         await db.users.update_one(
             {"guild_id": interaction.guild.id, "user_id": interaction.user.id},
             {
-                "$inc": {
-                    "wallet": final_earned,
-                    "total_earned": final_earned,
-                    "week_earned": final_earned,
-                    "month_earned": final_earned,
-                },
+                "$inc": inc_query,
                 "$set": {"work_last": now, "work_started_at": 0},
                 "$push": {
                     "eco_history": {

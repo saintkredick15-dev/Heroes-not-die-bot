@@ -7,6 +7,7 @@ from modules.db import get_database
 from repositories.user import get_user
 from commands.administration.economy_setup_shared import get_eco, normalize_currency_emoji
 from services.metrics import set_global_timestamp
+from utils.eco_helpers import add_daily_earnings_inc
 
 db = get_database()
 
@@ -88,10 +89,12 @@ class SchedulerCog(commands.Cog):
                         bank = u.get("bank", 0)
                         profit = int(bank * (interest_rate / 100))
                         if profit > 0:
+                            inc_query = {"bank": profit, "total_earned": profit}
+                            add_daily_earnings_inc(inc_query, profit, timestamp=now)
                             await db.users.update_one(
                                 {"_id": u["_id"]},
                                 {
-                                    "$inc": {"bank": profit, "total_earned": profit},
+                                    "$inc": inc_query,
                                     "$push": {"eco_history": {"$each": [{"log": f"{Emojis.PLUS.value} **{profit}** | Банківські відсотки | <t:{now}:t>"}], "$slice": -50}}
                                 }
                             )
@@ -121,6 +124,7 @@ async def perform_season_reset(guild: discord.Guild, eco: dict = None, gd: dict 
     """Публічна функція скидання сезону. Викликається з economy_setup або scheduler."""
     guild_id = guild.id
     now = int(time.time())
+    today_str = datetime.datetime.fromtimestamp(now, tz=datetime.timezone.utc).strftime("%Y-%m-%d")
 
     if gd is None:
         gd = await db.guild_settings.find_one({"_id": guild_id}) or {}
@@ -197,6 +201,7 @@ async def perform_season_reset(guild: discord.Guild, eco: dict = None, gd: dict 
                 "voice_minutes_month": 0,
                 "reactions_week": 0,
                 "reactions_month": 0,
+                "economy_daily_earnings": {today_str: start_bonus} if start_bonus > 0 else {},
                 "eco_history": []
             }
         }

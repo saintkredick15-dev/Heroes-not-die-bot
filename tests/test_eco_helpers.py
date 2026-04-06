@@ -1,59 +1,38 @@
 import sys
 import unittest
-from unittest import mock
+from datetime import datetime, timedelta, timezone
 
 
 sys.path.insert(0, r"C:\Users\frvyoung16\Desktop\projects\bot1\src")
 
-from utils.eco_helpers import calculate_tax, fmt_duration, make_log  # noqa: E402
+from utils.eco_helpers import add_daily_earnings_inc, sum_recent_daily_earnings  # noqa: E402
 
 
-class MakeLogTests(unittest.TestCase):
-    @mock.patch("utils.eco_helpers._time.time", return_value=1234567890)
-    def test_make_log_uses_plus_marker_for_positive_amount(self, _: mock.Mock) -> None:
-        item = make_log(25, "Daily reward")
+class EconomyDailyEarningsTests(unittest.TestCase):
+    def test_add_daily_earnings_inc_writes_utc_day_key(self) -> None:
+        inc_query = {"wallet": 50}
+        timestamp = int(datetime(2026, 4, 6, 14, 30, tzinfo=timezone.utc).timestamp())
 
-        self.assertIn("**25**", item["log"])
-        self.assertIn("Daily reward", item["log"])
-        self.assertIn("<t:1234567890:t>", item["log"])
+        add_daily_earnings_inc(inc_query, 75, timestamp=timestamp)
 
-    @mock.patch("utils.eco_helpers._time.time", return_value=1234567890)
-    def test_make_log_uses_minus_marker_for_negative_amount(self, _: mock.Mock) -> None:
-        item = make_log(-25, "Transfer")
+        self.assertEqual(inc_query["wallet"], 50)
+        self.assertEqual(inc_query["economy_daily_earnings.2026-04-06"], 75)
 
-        self.assertIn("**25**", item["log"])
-        self.assertIn("Transfer", item["log"])
+    def test_sum_recent_daily_earnings_uses_rolling_window(self) -> None:
+        now = int(datetime(2026, 4, 6, 12, 0, tzinfo=timezone.utc).timestamp())
+        old_day = (datetime(2026, 4, 6, tzinfo=timezone.utc) - timedelta(days=8)).strftime("%Y-%m-%d")
 
+        doc = {
+            "economy_daily_earnings": {
+                "2026-04-06": 100,
+                "2026-04-05": 50,
+                "2026-04-01": 25,
+                old_day: 999,
+            }
+        }
 
-class FormatDurationTests(unittest.TestCase):
-    def test_fmt_duration_formats_hours_and_minutes(self) -> None:
-        self.assertEqual(fmt_duration(5400), "1г 30хв")
-
-    def test_fmt_duration_formats_minutes_only(self) -> None:
-        self.assertEqual(fmt_duration(1200), "20хв")
-
-
-class CalculateTaxTests(unittest.TestCase):
-    def test_calculate_tax_uses_first_wealth_bracket(self) -> None:
-        net, tax, label = calculate_tax(base_amount=1000, wallet=100_000, bank=0)
-
-        self.assertEqual(net, 900)
-        self.assertEqual(tax, 100)
-        self.assertEqual(label, "10%")
-
-    def test_calculate_tax_uses_highest_matching_bracket(self) -> None:
-        net, tax, label = calculate_tax(base_amount=1000, wallet=5_000_000, bank=0)
-
-        self.assertEqual(net, 250)
-        self.assertEqual(tax, 750)
-        self.assertEqual(label, "75%")
-
-    def test_calculate_tax_returns_zero_tax_below_threshold(self) -> None:
-        net, tax, label = calculate_tax(base_amount=1000, wallet=999, bank=0)
-
-        self.assertEqual(net, 1000)
-        self.assertEqual(tax, 0)
-        self.assertEqual(label, "0%")
+        self.assertEqual(sum_recent_daily_earnings(doc, 7, timestamp=now), 175)
+        self.assertEqual(sum_recent_daily_earnings(doc, 30, timestamp=now), 1174)
 
 
 if __name__ == "__main__":

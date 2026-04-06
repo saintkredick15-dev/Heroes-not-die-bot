@@ -26,7 +26,7 @@ from config.constants import Emojis as _E
 from modules.db import get_database, get_guild_settings, invalidate_user_data
 from repositories.user import get_user
 from services.metrics import inc_global_metric, inc_global_metrics
-from utils.eco_helpers import apply_inflation, check_account_age, fmt_duration, make_log
+from utils.eco_helpers import add_daily_earnings_inc, apply_inflation, check_account_age, fmt_duration, make_log
 from utils.ui_contract import gameplay_result_embed, surface_embed
 
 db = get_database()
@@ -507,10 +507,13 @@ class CrimeCommand(commands.Cog):
                 if boost_active:
                     earned *= 2
 
+                inc_query = {"wallet": earned, "total_earned": earned}
+                add_daily_earnings_inc(inc_query, earned, timestamp=now)
+
                 await db.users.update_one(
                     {"guild_id": interaction.guild.id, "user_id": interaction.user.id},
                     {
-                        "$inc": {"wallet": earned, "total_earned": earned},
+                        "$inc": inc_query,
                         "$set": {"crime_last": int(time.time()), "crime_last_minigame": game_type},
                         "$push": {"eco_history": {"$each": [make_log(earned, f"Крайм: {mission['title']}")], "$slice": -50}},
                     },

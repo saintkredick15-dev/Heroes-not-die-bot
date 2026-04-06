@@ -29,3 +29,14 @@ def normalize_command_restrictions(restrictions: dict | None) -> dict[str, list[
             normalized[command_name] = list(dict.fromkeys(channels))
 
     return normalized
+
+
+def normalize_role_ids(role_ids: list | None) -> list[int]:
+    if not isinstance(role_ids, list):
+        return []
+
+    normalized: list[int] = []
+    for role_id in role_ids:
+        if isinstance(role_id, int) and role_id > 0 and role_id not in normalized:
+            normalized.append(role_id)
+    return normalized

@@ -1,11 +1,60 @@
 import time as _time
+from datetime import datetime, timedelta, timezone
 from config.constants import Emojis
+
+ECONOMY_DAILY_EARNINGS_FIELD = "economy_daily_earnings"
 
 def make_log(amount: int, desc: str) -> dict:
     
     now   = int(_time.time())
     color = Emojis.PLUS.value if amount >= 0 else Emojis.MINUS.value
     return {"log": f"{color} **{abs(amount)}** | {desc} | <t:{now}:t>"}
+
+
+def utc_day_key(timestamp: int | None = None) -> str:
+    raw = _time.time() if timestamp is None else timestamp
+    return datetime.fromtimestamp(raw, tz=timezone.utc).strftime("%Y-%m-%d")
+
+
+def add_daily_earnings_inc(
+    inc_query: dict,
+    amount: int,
+    *,
+    timestamp: int | None = None,
+    field: str = ECONOMY_DAILY_EARNINGS_FIELD,
+) -> None:
+    if amount <= 0:
+        return
+
+    key = f"{field}.{utc_day_key(timestamp)}"
+    inc_query[key] = inc_query.get(key, 0) + int(amount)
+
+
+def sum_recent_daily_earnings(
+    doc: dict,
+    days: int,
+    *,
+    timestamp: int | None = None,
+    field: str = ECONOMY_DAILY_EARNINGS_FIELD,
+) -> int:
+    if days <= 0:
+        return 0
+
+    history = doc.get(field, {})
+    if not isinstance(history, dict):
+        return 0
+
+    raw = _time.time() if timestamp is None else timestamp
+    today = datetime.fromtimestamp(raw, tz=timezone.utc).date()
+    total = 0
+
+    for offset in range(days):
+        day_key = (today - timedelta(days=offset)).isoformat()
+        value = history.get(day_key, 0)
+        if isinstance(value, (int, float)):
+            total += int(value)
+
+    return total
 
 def fmt_duration(seconds: int) -> str:
     # Форматування тривалості кулдауну в людський вигляд

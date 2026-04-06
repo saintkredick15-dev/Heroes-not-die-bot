@@ -13,6 +13,7 @@ from modules.db import get_database, get_guild_settings, get_user_data, invalida
 from repositories.user import get_level_xp, get_user, update_user
 from services.metrics import mark_user_active
 from utils.activity_config import DEFAULT_ACTIVITY, get_activity_config, sync_member_reward_roles
+from utils.eco_helpers import add_daily_earnings_inc
 from utils.ui_contract import surface_embed
 
 db = get_database()
@@ -182,6 +183,7 @@ class ActivityEvents(commands.Cog):
         if "wallet" in update_data:
             inc_data["week_earned"] = earned
             inc_data["month_earned"] = earned
+            add_daily_earnings_inc(inc_data, earned)
 
         await db.users.update_one(
             {"guild_id": message.guild.id, "user_id": message.author.id},
@@ -233,6 +235,7 @@ class ActivityEvents(commands.Cog):
         if "wallet" in update_data:
             inc_data["week_earned"] = earned
             inc_data["month_earned"] = earned
+            add_daily_earnings_inc(inc_data, earned)
 
         await db.users.update_one(
             {"guild_id": reaction.message.guild.id, "user_id": user.id},
@@ -289,6 +292,7 @@ class ActivityEvents(commands.Cog):
                     inc_query["total_earned"] = voice_earn
                     inc_query["week_earned"] = voice_earn
                     inc_query["month_earned"] = voice_earn
+                    add_daily_earnings_inc(inc_query, voice_earn)
 
                 operations.append(
                     UpdateOne(

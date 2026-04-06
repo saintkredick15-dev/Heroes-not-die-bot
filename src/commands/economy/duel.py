@@ -20,7 +20,7 @@ from repositories.user import get_user
 from commands.administration.economy_setup_shared import get_eco, normalize_currency_emoji
 from commands.economy.quests import quest_hook
 from services.metrics import inc_global_metric
-from utils.eco_helpers import make_log
+from utils.eco_helpers import add_daily_earnings_inc, make_log
 from utils.ui_contract import gameplay_result_embed, set_surface_footer, surface_embed
 
 db = get_database()
@@ -275,10 +275,13 @@ class DuelGame:
         winner = self.ch if self.ch_wins >= 3 else self.tg
         loser  = self.tg if winner == self.ch else self.ch
 
+        inc_query = {"wallet": prize, "total_earned": prize}
+        add_daily_earnings_inc(inc_query, prize)
+
         await db.users.update_one(
             {"guild_id": self.guild_id, "user_id": winner.id},
             {
-                "$inc": {"wallet": prize, "total_earned": prize},
+                "$inc": inc_query,
                 "$push": {"eco_history": {"$each": [add_history(prize, f"Дуель: перемога над {loser.display_name}")], "$slice": -50}}
             }
         )

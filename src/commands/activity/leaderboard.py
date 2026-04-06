@@ -6,6 +6,7 @@ from discord.ext import commands
 from config.constants import Emojis
 from modules.db import get_database
 from repositories.user import get_level_xp
+from utils.eco_helpers import sum_recent_daily_earnings
 from utils.ui_contract import set_surface_footer, surface_embed
 
 db = get_database()
@@ -32,6 +33,14 @@ def _period_stat(doc: dict, field: str, mode: str) -> int:
     if mode == "month":
         return doc.get(f"{field}_month", 0)
     return doc.get(field, 0)
+
+
+def _eco_period_value(doc: dict, mode: str) -> int:
+    if mode == "week":
+        return doc.get("_eco_week_earned", sum_recent_daily_earnings(doc, 7))
+    if mode == "month":
+        return doc.get("_eco_month_earned", sum_recent_daily_earnings(doc, 30))
+    return doc.get("wallet", 0) + doc.get("bank", 0)
 
 def make_xp_bar(xp: int, needed: int, length: int = 8) -> str:
     if needed <= 0:
@@ -151,7 +160,7 @@ async def fetch_eco_leaderboard(guild: discord.Guild) -> list[tuple[int, dict, d
     raw: list[tuple[int, dict, discord.Member]] = []
     async for doc in cursor:
         member = guild.get_member(doc.get("user_id", 0))
-        if not member:
+        if not member or member.bot:
             continue
         total_wealth = doc.get("wallet", 0) + doc.get("bank", 0)
         raw.append((total_wealth, doc, member))
@@ -190,20 +199,20 @@ def build_eco_embed(
         total = wallet + bank
 
         if mode == "week":
-            earned = doc.get("week_earned", 0)
-            line = f"{badge} **{name}** - `{earned:,}` {curr} in 7d"
+            earned = _eco_period_value(doc, "week")
+            line = f"{badge} **{name}** - `{earned:,}` {curr} за 7 днів"
             if wallet > 0 and bank > 0:
                 line += f"\n  {EMOJI_COIN} `{wallet:,}`  {EMOJI_BANK} `{bank:,}`"
             else:
-                line += f"\n  Total now: `{total:,}` {curr}"
+                line += f"\n  Всього зараз: `{total:,}` {curr}"
             lines.append(line)
         elif mode == "month":
-            earned = doc.get("month_earned", 0)
-            line = f"{badge} **{name}** - `{earned:,}` {curr} in 30d"
+            earned = _eco_period_value(doc, "month")
+            line = f"{badge} **{name}** - `{earned:,}` {curr} за 30 днів"
             if wallet > 0 and bank > 0:
                 line += f"\n  {EMOJI_COIN} `{wallet:,}`  {EMOJI_BANK} `{bank:,}`"
             else:
-                line += f"\n  Total now: `{total:,}` {curr}"
+                line += f"\n  Всього зараз: `{total:,}` {curr}"
             lines.append(line)
         else:
             line = f"{badge} **{name}** - `{total:,}` {curr}"
@@ -215,16 +224,14 @@ def build_eco_embed(
 
     if author_rank and author_data:
         if mode == "week":
-            a_val = author_data.get("week_earned", 0)
-            footer_text = f"You are #{author_rank} - {a_val:,} {curr_name} in 7d"
+            a_val = _eco_period_value(author_data, "week")
+            footer_text = f"Ти #{author_rank} — {a_val:,} {curr_name} за 7 днів"
         elif mode == "month":
-            a_val = author_data.get("month_earned", 0)
+            a_val = _eco_period_value(author_data, "month")
             footer_text = f"Ти #{author_rank} — {a_val:,} {curr_name} за 30 днів"
         else:
             a_val = author_data.get("wallet", 0) + author_data.get("bank", 0)
             footer_text = f"Ти #{author_rank} — {a_val:,} {curr_name}"
-        if mode == "week":
-            footer_text = f"Ти #{author_rank} — {a_val:,} {curr_name} за 7 днів"
         set_surface_footer(embed, "gameplay", footer_text)
     else:
         set_surface_footer(embed, "gameplay", f"Сторінка {page + 1}/{total_pages}")
@@ -265,28 +272,34 @@ def build_history_embed(
     return embed
 
 async def fetch_eco_week(guild: discord.Guild):
-    """Top by week_earned."""
-    cursor = db.users.find({"guild_id": guild.id}).sort("week_earned", -1).limit(200)
-    results = []
-    rank = 0
+    """Top by rolling 7-day earnings."""
+    cursor = db.users.find({"guild_id": guild.id}).limit(300)
+    raw: list[tuple[int, dict, discord.Member]] = []
     async for doc in cursor:
         member = guild.get_member(doc.get("user_id", 0))
         if not member or member.bot:
             continue
-        rank += 1
+        earned = sum_recent_daily_earnings(doc, 7)
+        raw.append((earned, {**doc, "_eco_week_earned": earned}, member))
+    raw.sort(key=lambda item: item[0], reverse=True)
+    results = []
+    for rank, (_, doc, member) in enumerate(raw, start=1):
         results.append((rank, doc, member))
     return results
 
 async def fetch_eco_month(guild: discord.Guild):
-    """Top by month_earned."""
-    cursor = db.users.find({"guild_id": guild.id}).sort("month_earned", -1).limit(200)
-    results = []
-    rank = 0
+    """Top by rolling 30-day earnings."""
+    cursor = db.users.find({"guild_id": guild.id}).limit(300)
+    raw: list[tuple[int, dict, discord.Member]] = []
     async for doc in cursor:
         member = guild.get_member(doc.get("user_id", 0))
         if not member or member.bot:
             continue
-        rank += 1
+        earned = sum_recent_daily_earnings(doc, 30)
+        raw.append((earned, {**doc, "_eco_month_earned": earned}, member))
+    raw.sort(key=lambda item: item[0], reverse=True)
+    results = []
+    for rank, (_, doc, member) in enumerate(raw, start=1):
         results.append((rank, doc, member))
     return results
 

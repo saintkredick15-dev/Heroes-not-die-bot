@@ -22,6 +22,7 @@ DEFAULT_USER: dict = {
     "daily_last": 0,
     "work_last": 0,
     "total_earned": 0,
+    "economy_daily_earnings": {},
     "levelup_notify": True,  
     "eco_history": [] 
 }

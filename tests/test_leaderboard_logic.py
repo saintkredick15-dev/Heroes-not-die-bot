@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, r"C:\Users\frvyoung16\Desktop\projects\bot1\src")
 
-from commands.activity.leaderboard import build_xp_embed  # noqa: E402
+from commands.activity.leaderboard import build_eco_embed, build_xp_embed  # noqa: E402
 
 
 class LeaderboardPeriodTests(unittest.TestCase):
@@ -54,6 +54,55 @@ class LeaderboardPeriodTests(unittest.TestCase):
         embed = build_xp_embed(entries, 0, 1, None, 3, doc, mode="month")
 
         self.assertEqual(embed.footer.text, "Ти #3 — рівень 9 — +345 XP за 30 днів")
+
+    def test_eco_week_mode_uses_rolling_period_value(self) -> None:
+        member = SimpleNamespace(display_name="Kredick")
+        doc = {
+            "_eco_week_earned": 321,
+            "wallet": 100,
+            "bank": 50,
+        }
+        entries = [(1, doc, member)]
+
+        embed = build_eco_embed(
+            entries,
+            0,
+            1,
+            None,
+            1,
+            doc,
+            {"currency_emoji": "$", "currency_name": "Coin"},
+            mode="week",
+        )
+
+        self.assertIn("321", embed.description)
+        self.assertIn("за 7 днів", embed.description)
+        self.assertNotIn("in 7d", embed.description)
+        self.assertEqual(embed.footer.text, "Ти #1 — 321 Coin за 7 днів")
+
+    def test_eco_month_mode_uses_rolling_period_value(self) -> None:
+        member = SimpleNamespace(display_name="Kredick")
+        doc = {
+            "_eco_month_earned": 987,
+            "wallet": 200,
+            "bank": 300,
+        }
+        entries = [(2, doc, member)]
+
+        embed = build_eco_embed(
+            entries,
+            0,
+            1,
+            None,
+            2,
+            doc,
+            {"currency_emoji": "$", "currency_name": "Coin"},
+            mode="month",
+        )
+
+        self.assertIn("987", embed.description)
+        self.assertIn("за 30 днів", embed.description)
+        self.assertEqual(embed.footer.text, "Ти #2 — 987 Coin за 30 днів")
 
 
 if __name__ == "__main__":

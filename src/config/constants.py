@@ -145,5 +145,7 @@ class Emojis(Enum):
     ROLE = "<:role_masks:1485727278116900946>"
     EVENT = "<:event_star:1485728236091740180>"
     CLIPBOARD = "<:clipboard:1485728386453340331>"
+    JOYSTICK = "<:joystick:1490647369962881034>"
+    STAR_SHINE = "<:star_shine:1490648705932595410>"
     TRANSFER = "<:transfer:1487154828168659025>"
     PIN = "<:pin:1487155574939455609>"
