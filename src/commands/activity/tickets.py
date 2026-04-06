@@ -3,11 +3,12 @@
 - одна команда /ticket для адмін-налаштувань
 - claim для staff workflow
 - close через modal із причиною
-- transcript .txt у лог-канал під час закриття
+- transcript txt/html у лог-канал під час закриття
 - DM opener-у з підсумком закриття
 """
 
 import asyncio
+import html
 import io
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -38,6 +39,7 @@ E_CLIPBOARD = "<:clipboard:1485728386453340331>"
 EMBED_COLOR = 0x1A1A2E
 TICKET_CARD_COLOR = 0xF2F3F5
 TRANSCRIPT_MAX_BYTES = 7_500_000
+TRANSCRIPT_FORMATS = ("txt", "html", "both")
 
 
 async def get_config(guild_id: int) -> dict:
@@ -46,6 +48,12 @@ async def get_config(guild_id: int) -> dict:
 
 async def update_config(guild_id: int, data: dict):
     await collection.update_one({"_id": guild_id}, {"$set": data}, upsert=True)
+
+
+def normalize_transcript_format(value: str | None) -> str:
+    if value in TRANSCRIPT_FORMATS:
+        return value
+    return "both"
 
 
 async def next_ticket_id(guild_id: int) -> int:
@@ -125,6 +133,7 @@ class TicketWizardState:
     panel_desc: str = "Натисніть кнопку нижче, щоб зв'язатися з адміністрацією."
     panel_buttons: list[dict] = field(default_factory=list)
     panel_channel_id: int | None = None
+    transcript_format: str = "both"
 
     @classmethod
     def from_config(cls, config: dict) -> "TicketWizardState":
@@ -136,6 +145,7 @@ class TicketWizardState:
             panel_desc=str(config.get("panel_desc") or "Натисніть кнопку нижче, щоб зв'язатися з адміністрацією."),
             panel_buttons=_load_panel_buttons(config),
             panel_channel_id=config.get("panel_channel_id"),
+            transcript_format=normalize_transcript_format(config.get("transcript_format")),
         )
 
     def as_config_patch(self) -> dict:
@@ -147,6 +157,7 @@ class TicketWizardState:
             "panel_desc": self.panel_desc,
             "panel_buttons": [dict(button) for button in self.panel_buttons],
             "panel_channel_id": self.panel_channel_id,
+            "transcript_format": normalize_transcript_format(self.transcript_format),
         }
 
 
@@ -163,7 +174,36 @@ def _truncate_transcript(raw: str) -> bytes:
     return notice + data[:allowed]
 
 
-async def _build_transcript_text(channel: discord.TextChannel) -> str:
+async def _collect_transcript_entries(channel: discord.TextChannel) -> list[dict]:
+    entries: list[dict] = []
+    async for message in channel.history(limit=None, oldest_first=True):
+        avatar_url = None
+        try:
+            avatar_url = message.author.display_avatar.url
+        except Exception:
+            avatar_url = None
+
+        entries.append(
+            {
+                "created_at": message.created_at,
+                "author_display": getattr(message.author, "display_name", str(message.author)),
+                "author_full": str(message.author),
+                "author_id": getattr(message.author, "id", None),
+                "avatar_url": avatar_url,
+                "content": _safe_text(message.content),
+                "attachments": [
+                    {"filename": attachment.filename, "url": attachment.url}
+                    for attachment in message.attachments
+                ],
+                "embeds_count": len(message.embeds),
+                "stickers_count": len(message.stickers),
+                "message_type": getattr(message.type, "name", str(message.type)),
+            }
+        )
+    return entries
+
+
+def _build_transcript_text(channel: discord.TextChannel, entries: list[dict]) -> str:
     lines = [
         f"Ticket transcript: #{channel.name}",
         f"Guild ID: {channel.guild.id}",
@@ -172,37 +212,242 @@ async def _build_transcript_text(channel: discord.TextChannel) -> str:
         "-" * 72,
     ]
 
-    async for message in channel.history(limit=None, oldest_first=True):
-        created = _fmt_dt(message.created_at)
-        author = f"{message.author} ({message.author.id})"
+    for entry in entries:
+        created = _fmt_dt(entry["created_at"])
+        author = f"{entry['author_full']} ({entry['author_id']})"
         lines.append(f"[{created}] {author}")
 
-        content = _safe_text(message.content)
-        if content:
-            lines.append(content)
+        if entry["content"]:
+            lines.append(entry["content"])
         else:
             lines.append("[без тексту]")
 
-        if message.attachments:
+        if entry["attachments"]:
             lines.append("Attachments:")
-            for attachment in message.attachments:
-                lines.append(f"- {attachment.filename}: {attachment.url}")
+            for attachment in entry["attachments"]:
+                lines.append(f"- {attachment['filename']}: {attachment['url']}")
 
-        if message.embeds:
-            lines.append(f"[Embeds: {len(message.embeds)}]")
+        if entry["embeds_count"]:
+            lines.append(f"[Embeds: {entry['embeds_count']}]")
 
-        if message.stickers:
-            lines.append(f"[Stickers: {len(message.stickers)}]")
+        if entry["stickers_count"]:
+            lines.append(f"[Stickers: {entry['stickers_count']}]")
+
+        if entry["message_type"] not in {"default", "reply"}:
+            lines.append(f"[Message type: {entry['message_type']}]")
 
         lines.append("")
 
     return "\n".join(lines)
 
 
+def _html_escape_with_breaks(value: str | None) -> str:
+    if not value:
+        return ""
+    return html.escape(value).replace("\n", "<br>")
+
+
+def _render_transcript_html(
+    *,
+    guild: discord.Guild,
+    channel: discord.TextChannel,
+    ticket_id: int | str,
+    opened_by: discord.Member | None,
+    closed_by: discord.Member,
+    opened_at: datetime | None,
+    closed_at: datetime,
+    claimed_by: discord.Member | None,
+    reason: str,
+    entries: list[dict],
+) -> str:
+    meta_rows = [
+        ("Ticket ID", str(ticket_id)),
+        ("Guild", guild.name),
+        ("Channel", f"#{channel.name}"),
+        ("Opened by", opened_by.display_name if opened_by else "Невідомо"),
+        ("Claimed by", claimed_by.display_name if claimed_by else "Не взято"),
+        ("Closed by", closed_by.display_name),
+        ("Opened at", _fmt_dt(opened_at)),
+        ("Closed at", _fmt_dt(closed_at)),
+        ("Reason", reason),
+    ]
+
+    message_blocks: list[str] = []
+    for entry in entries:
+        content_html = _html_escape_with_breaks(entry["content"])
+        attachment_html = ""
+        if entry["attachments"]:
+            items = "".join(
+                f'<li><a href="{html.escape(item["url"], quote=True)}" target="_blank" rel="noopener noreferrer">{html.escape(item["filename"])}</a></li>'
+                for item in entry["attachments"]
+            )
+            attachment_html = f'<div class="attachments"><div class="label">Attachments</div><ul>{items}</ul></div>'
+
+        marker_bits: list[str] = []
+        if entry["embeds_count"]:
+            marker_bits.append(f"Embeds: {entry['embeds_count']}")
+        if entry["stickers_count"]:
+            marker_bits.append(f"Stickers: {entry['stickers_count']}")
+        if entry["message_type"] not in {"default", "reply"}:
+            marker_bits.append(f"Type: {entry['message_type']}")
+        markers_html = "".join(f'<span class="chip">{html.escape(bit)}</span>' for bit in marker_bits)
+
+        body_html = content_html or '<span class="empty">[без тексту]</span>'
+        avatar_html = (
+            f'<img class="avatar" src="{html.escape(entry["avatar_url"], quote=True)}" alt="avatar" />'
+            if entry["avatar_url"]
+            else '<div class="avatar avatar-fallback"></div>'
+        )
+        message_blocks.append(
+            f"""
+            <article class="message">
+              {avatar_html}
+              <div class="message-body">
+                <div class="message-head">
+                  <span class="author">{html.escape(entry["author_display"])}</span>
+                  <span class="author-meta">{html.escape(entry["author_full"])}</span>
+                  <span class="timestamp">{html.escape(_fmt_dt(entry["created_at"]))}</span>
+                </div>
+                <div class="content">{body_html}</div>
+                {attachment_html}
+                <div class="markers">{markers_html}</div>
+              </div>
+            </article>
+            """
+        )
+
+    meta_html = "".join(
+        f'<div class="meta-row"><span class="meta-key">{html.escape(key)}</span><span class="meta-value">{html.escape(value)}</span></div>'
+        for key, value in meta_rows
+    )
+
+    return f"""<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ticket #{html.escape(str(ticket_id))} Transcript</title>
+  <style>
+    :root {{
+      color-scheme: dark;
+      --bg: #12141a;
+      --panel: #1b1f27;
+      --panel-soft: #232833;
+      --border: #313847;
+      --text: #f3f4f6;
+      --muted: #9ca3af;
+      --accent: #8ab4ff;
+      --good: #22c55e;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      background: linear-gradient(180deg, #101218 0%, #171b22 100%);
+      color: var(--text);
+      font-family: Inter, "Segoe UI", system-ui, sans-serif;
+      line-height: 1.5;
+    }}
+    .wrap {{ max-width: 1100px; margin: 0 auto; padding: 32px 20px 48px; }}
+    .hero, .meta, .timeline {{ background: rgba(27, 31, 39, 0.96); border: 1px solid var(--border); border-radius: 20px; }}
+    .hero {{ padding: 28px; margin-bottom: 20px; }}
+    .eyebrow {{ color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }}
+    h1 {{ margin: 10px 0 8px; font-size: 34px; line-height: 1.1; }}
+    .sub {{ color: var(--muted); margin: 0; }}
+    .meta {{ padding: 18px 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 18px; margin-bottom: 20px; }}
+    .meta-row {{ display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; background: rgba(255,255,255,0.02); border-radius: 14px; }}
+    .meta-key {{ color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }}
+    .meta-value {{ font-size: 14px; word-break: break-word; }}
+    .timeline {{ padding: 18px; }}
+    .timeline-title {{ margin: 0 0 14px; font-size: 18px; }}
+    .message {{ display: grid; grid-template-columns: 44px 1fr; gap: 14px; padding: 14px 10px; border-top: 1px solid rgba(255,255,255,0.05); }}
+    .message:first-of-type {{ border-top: 0; }}
+    .avatar {{ width: 44px; height: 44px; border-radius: 999px; object-fit: cover; background: #2d3340; }}
+    .avatar-fallback {{ border: 1px solid rgba(255,255,255,0.08); }}
+    .message-head {{ display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; margin-bottom: 6px; }}
+    .author {{ font-weight: 700; }}
+    .author-meta, .timestamp {{ color: var(--muted); font-size: 13px; }}
+    .content {{ white-space: normal; word-break: break-word; }}
+    .attachments {{ margin-top: 10px; padding: 10px 12px; background: var(--panel-soft); border-radius: 12px; }}
+    .attachments .label {{ color: var(--muted); font-size: 12px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .08em; }}
+    .attachments ul {{ margin: 0; padding-left: 18px; }}
+    .attachments a {{ color: var(--accent); text-decoration: none; }}
+    .attachments a:hover {{ text-decoration: underline; }}
+    .markers {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }}
+    .chip {{ padding: 5px 9px; border-radius: 999px; background: rgba(138,180,255,0.12); color: var(--accent); font-size: 12px; }}
+    .empty {{ color: var(--muted); font-style: italic; }}
+    @media (max-width: 720px) {{
+      .wrap {{ padding: 20px 14px 36px; }}
+      h1 {{ font-size: 28px; }}
+      .message {{ grid-template-columns: 1fr; }}
+      .avatar {{ width: 36px; height: 36px; }}
+    }}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <div class="eyebrow">Ticket Transcript</div>
+      <h1>#{html.escape(channel.name)} • Ticket #{html.escape(str(ticket_id))}</h1>
+      <p class="sub">{html.escape(guild.name)} • Архів переписки після закриття тікета</p>
+    </section>
+    <section class="meta">
+      {meta_html}
+    </section>
+    <section class="timeline">
+      <h2 class="timeline-title">Повідомлення</h2>
+      {''.join(message_blocks) if message_blocks else '<p class="empty">У цьому тікеті немає повідомлень.</p>'}
+    </section>
+  </main>
+</body>
+</html>"""
+
+
 def _build_transcript_file(ticket_id: int | str, transcript_text: str) -> discord.File:
     payload = _truncate_transcript(transcript_text)
     filename = f"ticket-{ticket_id}-transcript.txt"
     return discord.File(io.BytesIO(payload), filename=filename)
+
+
+def _truncate_html_transcript(html_text: str, transcript_text: str) -> bytes:
+    data = html_text.encode("utf-8")
+    if len(data) <= TRANSCRIPT_MAX_BYTES:
+        return data
+
+    notice = "HTML transcript обрізано, бо файл перевищив ліміт Discord."
+    escaped_text = html.escape(transcript_text)
+    prefix = f"""<!DOCTYPE html>
+<html lang="uk">
+<head><meta charset="utf-8"><title>Transcript truncated</title></head>
+<body style="font-family:Inter,Segoe UI,sans-serif;background:#111827;color:#f3f4f6;padding:24px;">
+  <h1>Transcript truncated</h1>
+  <p>{html.escape(notice)}</p>
+  <pre style="white-space:pre-wrap;word-break:break-word;background:#1f2937;padding:16px;border-radius:12px;">"""
+    suffix = "</pre></body></html>"
+    prefix_bytes = prefix.encode("utf-8")
+    suffix_bytes = suffix.encode("utf-8")
+    allowed = max(0, TRANSCRIPT_MAX_BYTES - len(prefix_bytes) - len(suffix_bytes))
+    return prefix_bytes + escaped_text.encode("utf-8")[:allowed] + suffix_bytes.encode("utf-8")
+
+
+def _build_transcript_html_file(ticket_id: int | str, transcript_html: str, transcript_text: str) -> discord.File:
+    payload = _truncate_html_transcript(transcript_html, transcript_text)
+    filename = f"ticket-{ticket_id}-transcript.html"
+    return discord.File(io.BytesIO(payload), filename=filename)
+
+
+def _build_transcript_files(
+    ticket_id: int | str,
+    transcript_format: str,
+    transcript_text: str,
+    transcript_html: str,
+) -> list[discord.File]:
+    normalized = normalize_transcript_format(transcript_format)
+    files: list[discord.File] = []
+    if normalized in {"txt", "both"}:
+        files.append(_build_transcript_file(ticket_id, transcript_text))
+    if normalized in {"html", "both"}:
+        files.append(_build_transcript_html_file(ticket_id, transcript_html, transcript_text))
+    return files
 
 
 def _build_close_embed(
@@ -268,20 +513,37 @@ async def _do_close_ticket(interaction: discord.Interaction, ticket_data: dict, 
         reason=reason,
     )
 
-    transcript_text = await _build_transcript_text(channel)
-
     config = await get_config(guild.id)
     log_ch_id = config.get("log_channel_id")
+    transcript_format = normalize_transcript_format(config.get("transcript_format"))
     transcript_logged = False
+    transcript_issue = False
     if log_ch_id:
         log_ch = guild.get_channel(log_ch_id)
         if log_ch:
             try:
-                transcript_file = _build_transcript_file(ticket_id, transcript_text)
-                await log_ch.send(embed=embed, file=transcript_file)
+                transcript_entries = await _collect_transcript_entries(channel)
+                transcript_text = _build_transcript_text(channel, transcript_entries)
+                transcript_html = _render_transcript_html(
+                    guild=guild,
+                    channel=channel,
+                    ticket_id=ticket_id,
+                    opened_by=opened_by,
+                    closed_by=closed_by,
+                    opened_at=opened_at,
+                    closed_at=closed_at,
+                    claimed_by=claimed_by,
+                    reason=reason,
+                    entries=transcript_entries,
+                )
+                transcript_files = _build_transcript_files(ticket_id, transcript_format, transcript_text, transcript_html)
+                await log_ch.send(embed=embed, files=transcript_files)
                 transcript_logged = True
-            except (discord.Forbidden, discord.HTTPException):
+            except Exception:
+                transcript_issue = True
                 log.warning(f"Failed to send ticket transcript to log channel {log_ch_id} in guild {guild.id}")
+        else:
+            transcript_issue = True
 
     if opened_by:
         try:
@@ -292,6 +554,10 @@ async def _do_close_ticket(interaction: discord.Interaction, ticket_data: dict, 
     notice = "Тікет буде закрито через 5 секунд."
     if transcript_logged:
         notice += " Підсумок і транскрипт надіслано в лог-канал."
+    elif log_ch_id:
+        notice += " Не вдалося надіслати transcript у лог-канал."
+    elif transcript_issue:
+        notice += " Не вдалося надіслати transcript у лог-канал."
     await interaction.response.send_message(notice, ephemeral=True)
     await inc_global_metric("tickets_closed_total")
 
@@ -619,6 +885,24 @@ class TicketLogChannelSelect(discord.ui.ChannelSelect):
         await interaction.response.edit_message(embed=new_view.build_embed(interaction.guild), view=new_view)
 
 
+class TicketTranscriptFormatSelect(discord.ui.Select):
+    def __init__(self, state: TicketWizardState):
+        current = normalize_transcript_format(state.transcript_format)
+        options = [
+            discord.SelectOption(label="TXT only", value="txt", description="Лише plain-text transcript", default=current == "txt"),
+            discord.SelectOption(label="HTML only", value="html", description="Лише HTML transcript", default=current == "html"),
+            discord.SelectOption(label="TXT + HTML", value="both", description="Надсилати обидва файли", default=current == "both"),
+        ]
+        super().__init__(placeholder="Формат transcript", min_values=1, max_values=1, row=2, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        view: "TicketWizardView" = self.view
+        view.state.transcript_format = normalize_transcript_format(self.values[0])
+        await update_config(interaction.guild.id, view.state.as_config_patch())
+        new_view = TicketWizardView(view.state, view.step)
+        await interaction.response.edit_message(embed=new_view.build_embed(interaction.guild), view=new_view)
+
+
 class TicketSupportRoleSelect(discord.ui.RoleSelect):
     def __init__(self, state: TicketWizardState):
         defaults = [discord.Object(id=role_id) for role_id in state.support_role_ids[:25]]
@@ -790,6 +1074,7 @@ class TicketWizardView(discord.ui.View):
         if self.step == "basic":
             self.add_item(TicketCategorySelect(self.state))
             self.add_item(TicketLogChannelSelect(self.state))
+            self.add_item(TicketTranscriptFormatSelect(self.state))
         elif self.step == "team":
             self.add_item(TicketSupportRoleSelect(self.state))
             self.add_item(TicketRoleIdButton())
@@ -820,6 +1105,11 @@ class TicketWizardView(discord.ui.View):
         log_label = f"<#{self.state.log_channel_id}>" if self.state.log_channel_id else "Не налаштовано"
         panel_channel = f"<#{self.state.panel_channel_id}>" if self.state.panel_channel_id else "Поточний канал"
         roles_label = ", ".join(f"<@&{role_id}>" for role_id in self.state.support_role_ids) if self.state.support_role_ids else "Не налаштовано"
+        transcript_label = {
+            "txt": "txt",
+            "html": "html",
+            "both": "txt + html",
+        }.get(normalize_transcript_format(self.state.transcript_format), "txt + html")
 
         add_section(
             embed,
@@ -827,6 +1117,7 @@ class TicketWizardView(discord.ui.View):
             [
                 compact_kv(f"{E_TICKET} Категорія", category_label),
                 compact_kv(f"{E_CLIPBOARD} Лог-канал", log_label),
+                compact_kv("Формат transcript", transcript_label),
                 compact_kv(f"{E_SUPPORTROLE} Ролі підтримки", roles_label),
                 compact_kv("Кнопки панелі", str(len(self.state.panel_buttons) or 1)),
                 compact_kv("Канал публікації", panel_channel),
@@ -834,7 +1125,7 @@ class TicketWizardView(discord.ui.View):
         )
 
         if self.step == "basic":
-            add_section(embed, "Що налаштовується", ["Категорія для нових тікетів.", "Канал, куди надсилається підсумок закриття і транскрипт."])
+            add_section(embed, "Що налаштовується", ["Категорія для нових тікетів.", "Канал, куди надсилається підсумок закриття і transcript.", "Формат archive transcript: txt, html або обидва."])
         elif self.step == "team":
             add_section(embed, "Що налаштовується", ["Ролі, які можуть брати і закривати тікети.", "За потреби роль можна додати вручну через ID."])
         elif self.step == "panel":

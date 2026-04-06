@@ -69,11 +69,11 @@ MODULES = {
     "tickets": {
         "emoji": E_TICKET,
         "label": "Тікети",
-        "desc": "Панель підтримки, claim, close summary та transcript.",
+        "desc": "Панель підтримки, claim, close summary та transcript у txt/html.",
         "commands": [
-            ("`/ticket_setup`", "Налаштування панелі, категорії, ролей та лог-каналу."),
+            ("`/ticket_setup`", "Налаштування панелі, категорії, ролей, лог-каналу та transcript format."),
             ("`Claim / Close`", "Основні дії staff усередині тікет-каналу."),
-            ("`Transcript .txt`", "Летить у лог-канал під час закриття тікета."),
+            ("`Transcript txt/html`", "Під час закриття тікета летить у лог-канал у вибраному форматі."),
             ("`/export`", "Клонування повідомлень між каналами."),
         ],
     },
