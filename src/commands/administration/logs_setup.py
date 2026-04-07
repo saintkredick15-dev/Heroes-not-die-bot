@@ -1,6 +1,8 @@
 """
 logs_setup.py — Багаторівнева панель налаштування логів (Smart Panel V14).
 """
+from datetime import datetime, timedelta, timezone
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -68,6 +70,22 @@ async def _get(guild_id: int) -> dict:
 async def _set(guild_id: int, key: str, value):
     await _col.update_one({"_id": guild_id}, {"$set": {key: value}}, upsert=True)
 
+
+def _fmt_discord_timestamp(ts: float) -> str:
+    stamp = int(ts)
+    return f"<t:{stamp}:f> • <t:{stamp}:R>"
+
+
+def _stats_publication_state(settings: dict) -> tuple[str, str]:
+    interval = max(1, min(30, int(settings.get("stats_interval_days", 7) or 7)))
+    last_post_ts = settings.get("stats_last_post")
+    if not last_post_ts:
+        return "Ще не публікувався", f"Після першого повного інтервалу ({interval} дн.)"
+
+    last_post = datetime.fromtimestamp(last_post_ts, tz=timezone.utc)
+    next_post = last_post + timedelta(days=interval)
+    return _fmt_discord_timestamp(last_post.timestamp()), _fmt_discord_timestamp(next_post.timestamp())
+
 def _ch_name(guild: discord.Guild, ch_id: int | None) -> str:
     if not ch_id:
         return f"{E_CROSS} не вказано"
@@ -88,6 +106,9 @@ def _build_embed(guild: discord.Guild, settings: dict, category: str) -> discord
         if category == "stats":
             interval = settings.get("stats_interval_days", 7)
             embed.add_field(name="Інтервал публікації", value=f"**{interval} днів**", inline=False)
+            last_post, next_post = _stats_publication_state(settings)
+            embed.add_field(name="Останній звіт", value=last_post, inline=False)
+            embed.add_field(name="Наступний звіт", value=next_post, inline=False)
 
     elif category == "whitelist":
         embed.description = CAT_DESCRIPTIONS["whitelist"]

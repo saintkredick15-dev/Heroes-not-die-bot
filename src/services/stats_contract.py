@@ -10,6 +10,8 @@ ANALYTICS_FIELDS = (
     "voice_minutes",
     "joins",
     "leaves",
+    "tickets_opened",
+    "tickets_closed",
     "warns",
     "mutes",
     "bans",
@@ -43,6 +45,27 @@ def normalize_stats(doc: dict[str, Any] | None) -> dict[str, int]:
     payload["net_members"] = payload["joins"] - payload["leaves"]
     payload["mod_actions_total"] = payload["warns"] + payload["mutes"] + payload["bans"] + payload["unbans"]
     return payload
+
+
+async def aggregate_guild_analytics_lifetime(
+    guild_id: int,
+    *,
+    collection,
+) -> dict[str, int]:
+    group_stage = {"_id": None}
+    for field in ANALYTICS_FIELDS:
+        group_stage[field] = {"$sum": f"${field}"}
+
+    pipeline = [
+        {"$match": {"guild_id": guild_id}},
+        {"$group": group_stage},
+    ]
+
+    result: dict[str, Any] | None = None
+    async for doc in collection.aggregate(pipeline):
+        result = doc
+        break
+    return normalize_stats(result)
 
 
 async def aggregate_guild_analytics(

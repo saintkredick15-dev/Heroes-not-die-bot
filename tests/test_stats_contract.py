@@ -10,6 +10,7 @@ sys.path.insert(0, r"C:\Users\frvyoung16\Desktop\projects\bot1\src")
 from events.stats import BotStats  # noqa: E402
 from services.stats_contract import (  # noqa: E402
     aggregate_guild_analytics,
+    aggregate_guild_analytics_lifetime,
     analytics_window_start,
     build_site_stats_snapshot,
 )
@@ -66,6 +67,21 @@ class StatsContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["warns"], 0)
         self.assertEqual(result["economy_given"], 0)
         self.assertEqual(result["mod_actions_total"], 2)
+        self.assertEqual(result["tickets_opened"], 0)
+        self.assertEqual(result["tickets_closed"], 0)
+
+    async def test_aggregate_guild_analytics_lifetime_sums_all_documents(self) -> None:
+        collection = _FakeAnalyticsCollection(
+            [{"messages": 7, "leaves": 4, "tickets_opened": 4, "tickets_closed": 2}]
+        )
+
+        result = await aggregate_guild_analytics_lifetime(555, collection=collection)
+
+        self.assertEqual(collection.pipeline[0]["$match"], {"guild_id": 555})
+        self.assertEqual(result["messages"], 7)
+        self.assertEqual(result["leaves"], 4)
+        self.assertEqual(result["tickets_opened"], 4)
+        self.assertEqual(result["tickets_closed"], 2)
 
     def test_build_site_stats_snapshot_uses_stable_shape(self) -> None:
         now = datetime(2026, 4, 1, 14, 30, tzinfo=timezone.utc)

@@ -20,11 +20,13 @@ from discord.ext import commands
 from modules.db import get_database
 from modules.logger import Logger
 from services.metrics import inc_global_metric
+from services.stats_contract import analytics_day_key
 from utils.ui_contract import add_section, compact_kv, set_surface_footer, surface_embed
 
 log = Logger("Tickets")
 db = get_database()
 collection = db.ticket_config
+_col_analytics = db.guild_analytics
 
 E_TICKET = "<:ticket:1485608010192519300>"
 E_CLOSED = "<:close:1485598320935174317>"
@@ -48,6 +50,14 @@ async def get_config(guild_id: int) -> dict:
 
 async def update_config(guild_id: int, data: dict):
     await collection.update_one({"_id": guild_id}, {"$set": data}, upsert=True)
+
+
+async def _inc_ticket_analytics(guild_id: int, fields: dict[str, int]) -> None:
+    await _col_analytics.update_one(
+        {"guild_id": guild_id, "date": analytics_day_key()},
+        {"$inc": fields},
+        upsert=True,
+    )
 
 
 def normalize_transcript_format(value: str | None) -> str:
@@ -571,6 +581,7 @@ async def _do_close_ticket(interaction: discord.Interaction, ticket_data: dict, 
 
     if deleted:
         await db.active_tickets.delete_one({"channel_id": channel.id})
+        await _inc_ticket_analytics(guild.id, {"tickets_closed": 1})
 
 
 class CloseReasonModal(discord.ui.Modal, title="Закрити тікет"):
@@ -825,6 +836,7 @@ async def create_ticket_routine(interaction: discord.Interaction):
         }
     )
     await inc_global_metric("tickets_opened_total")
+    await _inc_ticket_analytics(guild.id, {"tickets_opened": 1})
 
     await interaction.response.send_message(f"{E_OPENED} Тікет #{ticket_id}: {channel.mention}", ephemeral=True)
 

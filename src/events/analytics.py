@@ -14,7 +14,7 @@ from discord.ext import commands, tasks
 
 from config.constants import Emojis
 from modules.db import get_database
-from services.stats_contract import aggregate_guild_analytics, analytics_day_key
+from services.stats_contract import aggregate_guild_analytics, aggregate_guild_analytics_lifetime, analytics_day_key
 
 db = get_database()
 _col_settings = db.guild_settings
@@ -29,6 +29,7 @@ E_MUTE = Emojis.MUTE.value
 E_BAN = Emojis.BAN.value
 E_STATS = Emojis.STATS.value
 E_HAMMER = Emojis.HAMMER.value
+E_TICKET = Emojis.TICKET.value
 
 async def _inc_analytics(guild_id: int, fields: dict[str, int]) -> None:
     await _col_analytics.update_one(
@@ -43,50 +44,75 @@ def _timeout_is_active(member: discord.Member) -> bool:
     return until is not None and until > discord.utils.utcnow()
 
 
-def _summary_line(*, messages: int, voice_hours: float, net_members: int, warns: int, mutes: int, bans: int) -> str:
+def _summary_line(
+    *,
+    messages: int,
+    voice_hours: float,
+    mod_actions_total: int,
+    economy: int,
+    tickets_opened: int,
+    tickets_closed: int,
+) -> str:
     summary_bits = [f"Чат: **{messages:,}**", f"Войс: **{voice_hours:.1f} год**"]
-    if net_members:
-        direction = "зріс" if net_members > 0 else "просів"
-        summary_bits.append(f"Сервер {direction} на **{net_members:+d}**")
-    mod_total = warns + mutes + bans
-    if mod_total:
-        summary_bits.append(f"Модерація: **{mod_total}** дій")
+    summary_bits.append(f"Модерація: **{mod_actions_total}**")
+    summary_bits.append(f"Економіка: **{economy:,}**")
+    summary_bits.append(f"Тікети: **{tickets_opened}/{tickets_closed}**")
     return " • ".join(summary_bits)
 
 
 async def _build_stats_embed(guild: discord.Guild, days: int) -> discord.Embed:
+    now = datetime.now(timezone.utc)
     result = await aggregate_guild_analytics(guild.id, days, collection=_col_analytics)
+    lifetime = await aggregate_guild_analytics_lifetime(guild.id, collection=_col_analytics)
 
     messages = result["messages"]
+    reactions = result["reactions"]
     voice_hours = round(result["voice_minutes"] / 60, 1)
     joins = result["joins"]
     leaves = result["leaves"]
     net_members = result["net_members"]
+    tickets_opened = result["tickets_opened"]
+    tickets_closed = result["tickets_closed"]
     warns = result["warns"]
     mutes = result["mutes"]
     bans = result["bans"]
     unbans = result["unbans"]
+    mod_actions_total = result["mod_actions_total"]
     economy = result["economy_given"]
+    hypothetical_members = max(0, guild.member_count + lifetime["leaves"])
+    period_start = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    next_report = now + timedelta(days=days)
 
     embed = discord.Embed(
         title=f"{E_STATS} Статистика сервера за {days} днів",
         description=_summary_line(
             messages=messages,
             voice_hours=voice_hours,
-            net_members=net_members,
-            warns=warns,
-            mutes=mutes,
-            bans=bans,
+            mod_actions_total=mod_actions_total,
+            economy=economy,
+            tickets_opened=tickets_opened,
+            tickets_closed=tickets_closed,
         ),
         color=0x1A1A2E,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=now,
     )
     embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
+    embed.add_field(
+        name="Період",
+        value=f"<t:{int(period_start.timestamp())}:d> — <t:{int(now.timestamp())}:d>",
+        inline=False,
+    )
+    embed.add_field(
+        name="Наступний звіт",
+        value=f"<t:{int(next_report.timestamp())}:f> • <t:{int(next_report.timestamp())}:R>",
+        inline=False,
+    )
 
     embed.add_field(
         name=f"{E_CHAT} Активність",
         value=(
             f"Повідомлень: **{messages:,}**\n"
+            f"Реакцій: **{reactions:,}**\n"
             f"Голосом: **{voice_hours:.1f} год**"
         ),
         inline=True,
@@ -96,13 +122,17 @@ async def _build_stats_embed(guild: discord.Guild, days: int) -> discord.Embed:
         value=(
             f"Прийшло: **{joins}**\n"
             f"Пішло: **{leaves}**\n"
-            f"Нетто: **{net_members:+d}**"
+            f"Нетто: **{net_members:+d}**\n"
+            f"Якби ніхто не пішов: **{hypothetical_members:,}**"
         ),
         inline=True,
     )
     embed.add_field(
         name=f"{E_COINS} Економіка",
-        value=f"Нараховано: **{economy:,}**",
+        value=(
+            f"Нараховано: **{economy:,}**\n"
+            f"Періодичний snapshot без reset-ів"
+        ),
         inline=True,
     )
     embed.add_field(
@@ -110,12 +140,21 @@ async def _build_stats_embed(guild: discord.Guild, days: int) -> discord.Embed:
         value=(
             f"{E_WARN} Попереджень: **{warns}**\n"
             f"{E_MUTE} Тайм-аутів: **{mutes}**\n"
-            f"{E_BAN} Банів: **{bans}**"
-            + (f"\nРозбанів: **{unbans}**" if unbans else "")
+            f"{E_BAN} Банів: **{bans}**\n"
+            f"Розбанів: **{unbans}**\n"
+            f"Всього дій: **{mod_actions_total}**"
         ),
-        inline=False,
+        inline=True,
     )
-    embed.set_footer(text="Автоматичний звіт сервера")
+    embed.add_field(
+        name=f"{E_TICKET} Tickets",
+        value=(
+            f"Відкрито: **{tickets_opened}**\n"
+            f"Закрито: **{tickets_closed}**"
+        ),
+        inline=True,
+    )
+    embed.set_footer(text="Автоматичний періодичний snapshot сервера")
     return embed
 
 
