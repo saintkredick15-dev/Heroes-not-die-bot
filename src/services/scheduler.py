@@ -120,7 +120,7 @@ class SchedulerCog(commands.Cog):
         await perform_season_reset(guild, eco=eco, gd=gd)
 
 
-async def perform_season_reset(guild: discord.Guild, eco: dict = None, gd: dict = None):
+async def perform_season_reset(guild: discord.Guild, eco: dict = None, gd: dict = None) -> bool:
     """Публічна функція скидання сезону. Викликається з economy_setup або scheduler."""
     guild_id = guild.id
     now = int(time.time())
@@ -145,6 +145,9 @@ async def perform_season_reset(guild: discord.Guild, eco: dict = None, gd: dict 
         total = u.get("wallet", 0) + u.get("bank", 0)
         if total > 0:
             top3_data.append({"user_id": u["user_id"], "earned": total})
+
+    if not top3_data:
+        return False
 
     # 2. Зберегти у season_history
     history = gd.get("season_history", [])
@@ -243,6 +246,8 @@ async def perform_season_reset(guild: discord.Guild, eco: dict = None, gd: dict 
             await channel.send(embed=embed)
         except Exception:
             pass
+
+    return True
 
 
 async def setup(bot):

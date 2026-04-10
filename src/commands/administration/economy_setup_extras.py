@@ -154,7 +154,7 @@ class AuctionChannelSelect(discord.ui.ChannelSelect):
         )
 
 
-class AuctionConfigModal(discord.ui.Modal, title=f"{E_AUCTION} Налаштування Аукціону"):
+class AuctionConfigModal(discord.ui.Modal, title="Аукціон: антиснайп"):
     anti_snipe = discord.ui.TextInput(label="Захист від снайпу (секунди, 0=вимк)", max_length=4)
 
     def __init__(self, main_view, eco: dict):

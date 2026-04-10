@@ -52,7 +52,7 @@ parse_duration = _shared.parse_duration
 save_eco = _shared.save_eco
 normalize_currency_emoji = _shared.normalize_currency_emoji
 
-class GeneralModal(discord.ui.Modal, title=f"{E_SETTING} Загальні налаштування"):
+class GeneralModal(discord.ui.Modal, title="Валюта та ядро"):
     currency_name  = discord.ui.TextInput(label="Назва валюти", max_length=30)
 
     def __init__(self, main_view, eco: dict):
@@ -158,7 +158,7 @@ class WorkCooldownModal(discord.ui.Modal, title=f"{E_CLOCK} Work — Кулда�
             view=SetupCategoryView(self.main_view, "work")
         )
 
-class WorkEventModal(discord.ui.Modal, title=f"{E_RANDOM} Work — Налаштування події"):
+class WorkEventModal(discord.ui.Modal, title="Подія та ризик"):
     chance  = discord.ui.TextInput(label="Шанс події (%)", max_length=5)
     stake   = discord.ui.TextInput(label="Ставка події (% від заробленого)", max_length=5)
     timer   = discord.ui.TextInput(label="Час на хід у міні-грі (секунди)", max_length=4)
@@ -188,7 +188,7 @@ class WorkEventModal(discord.ui.Modal, title=f"{E_RANDOM} Work — Налашт�
             view=SetupCategoryView(self.main_view, "work")
         )
 
-class DailyAmountModal(discord.ui.Modal, title=f"{E_DAILY} Щоденна нагорода — сума"):
+class DailyAmountModal(discord.ui.Modal, title="Щоденна: сума"):
     amount  = discord.ui.TextInput(label="Базова сума", max_length=10)
     streak  = discord.ui.TextInput(label="Бонус за серію на день", max_length=10)
 
@@ -215,7 +215,7 @@ class DailyAmountModal(discord.ui.Modal, title=f"{E_DAILY} Щоденна наг
             view=SetupCategoryView(self.main_view, "daily")
         )
 
-class DailyCooldownModal(discord.ui.Modal, title=f"{E_CLOCK} Щоденна нагорода — кулдаун"):
+class DailyCooldownModal(discord.ui.Modal, title="Щоденна: кулдаун"):
     cooldown = discord.ui.TextInput(label="КД (напр. 24h або 1440m)", max_length=10)
 
     def __init__(self, main_view, eco: dict):
@@ -273,7 +273,7 @@ class BankModal(discord.ui.Modal, title=f"{E_BANK} Банк"):
             view=SetupCategoryView(self.main_view, "bank")
         )
 
-class RobModal(discord.ui.Modal, title=f"{E_ROB} Пограбування Основне"):
+class RobModal(discord.ui.Modal, title="Пограбування: основне"):
     chance    = discord.ui.TextInput(label="Шанс успіху (%)", max_length=5)
     fine      = discord.ui.TextInput(label="Штраф при провалі (%)", max_length=5)
     min_bal   = discord.ui.TextInput(label="Мін. баланс жертви (%)", max_length=5)
@@ -306,7 +306,7 @@ class RobModal(discord.ui.Modal, title=f"{E_ROB} Пограбування Осн
             view=SetupCategoryView(self.main_view, "rob")
         )
 
-class RobAdvancedModal(discord.ui.Modal, title=f"{E_ROB} Пограбування Додатково"):
+class RobAdvancedModal(discord.ui.Modal, title="Пограбування: додаткове"):
     pct_min   = discord.ui.TextInput(label="Мін. % вкраденого", max_length=5)
     pct_max   = discord.ui.TextInput(label="Макс. % вкраденого", max_length=5)
     cooldown  = discord.ui.TextInput(label="Кулдаун (напр. 1h)", max_length=10)
@@ -522,7 +522,7 @@ class SetupCategoryView(discord.ui.View):
 
             self._add("Валюта та ядро", discord.ButtonStyle.secondary, self._general_cb)
             self._add("Перекази", discord.ButtonStyle.secondary, self._transfer_cb)
-            self._add("Інфляція та твіни", discord.ButtonStyle.secondary, self._inflation_cb)
+            self._add("Інфляція та твіки", discord.ButtonStyle.secondary, self._inflation_cb)
             
             f_enabled = eco.get("fund_enabled", False)
             fb = discord.ui.Button(label="Фонд: ВКЛ" if f_enabled else "Фонд: ВИКЛ", style=discord.ButtonStyle.success if f_enabled else discord.ButtonStyle.secondary)
@@ -721,7 +721,7 @@ class SetupCategoryView(discord.ui.View):
     async def _work_cd_cb(self, i):   await i.response.send_modal(WorkCooldownModal(self.main_view, self.main_view.eco))
     async def _work_event_cb(self, i): await i.response.send_modal(WorkEventModal(self.main_view, self.main_view.eco))
     async def _work_stages_cb(self, i):
-        class WorkStagesModal(discord.ui.Modal, title=f"{E_WORK} Work — Етапи складної"):
+        class WorkStagesModal(discord.ui.Modal, title="Складна робота: етапи"):
             stages = discord.ui.TextInput(label="Кількість етапів (1-5)", max_length=2)
             def __init__(self, mv, eco_v):
                 super().__init__()
@@ -809,7 +809,13 @@ class SetupCategoryView(discord.ui.View):
         from services.scheduler import perform_season_reset
         await interaction.response.defer(ephemeral=True)
         try:
-            await perform_season_reset(interaction.guild)
+            reset_done = await perform_season_reset(interaction.guild)
+            if not reset_done:
+                await interaction.followup.send(
+                    f"{E_CROSS} Сезон не можна скинути: у користувачів немає валюти на балансі.",
+                    ephemeral=True
+                )
+                return
             ctx = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
             self.main_view.eco = get_eco(ctx)
             await interaction.followup.send(
@@ -882,7 +888,7 @@ class TransferModal(discord.ui.Modal, title=f"{E_TRANSFER} Перекази"):
             view=SetupCategoryView(self.main_view, "general")
         )
 
-class InflationModal(discord.ui.Modal, title=f"{E_STATS} Інфляція та Твінки"):
+class InflationModal(discord.ui.Modal, title="Інфляція та твіки"):
     inf_lim = discord.ui.TextInput(label="Ліміт Інфляції (х, напр. 3.0)", max_length=5)
     age_min = discord.ui.TextInput(label="Мін. вік акаунта (днів, 0=вимк)", max_length=4)
 

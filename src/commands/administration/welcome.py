@@ -81,7 +81,7 @@ class TextModal(discord.ui.Modal):
         self.mode = mode
         self.view_ref = view
         self.text_input = discord.ui.TextInput(
-            label="Доступні змінні: {user_mention}, {server_name}",
+            label="Змінні: {user_mention}, {server_name}",
             style=discord.TextStyle.paragraph,
             placeholder="Введіть текст повідомлення...",
             default=current_text,

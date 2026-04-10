@@ -42,6 +42,26 @@ def _eco_period_value(doc: dict, mode: str) -> int:
         return doc.get("_eco_month_earned", sum_recent_daily_earnings(doc, 30))
     return doc.get("wallet", 0) + doc.get("bank", 0)
 
+
+def _normalize_history_entries(history_entries: list[dict]) -> list[dict]:
+    normalized: list[dict] = []
+    for entry in history_entries:
+        top3 = entry.get("top3", [])
+        if not isinstance(top3, list):
+            continue
+        valid_top3 = [
+            item for item in top3
+            if isinstance(item, dict) and item.get("user_id") and item.get("earned", 0) > 0
+        ]
+        if not valid_top3:
+            continue
+        normalized.append({
+            "season": entry.get("season", 1),
+            "date": entry.get("date", 0),
+            "top3": valid_top3[:3],
+        })
+    return normalized
+
 def make_xp_bar(xp: int, needed: int, length: int = 8) -> str:
     if needed <= 0:
         return "█" * length
@@ -489,7 +509,7 @@ class EcoLeaderboardView(discord.ui.View):
     async def history_btn(self, interaction: discord.Interaction, _):
         await interaction.response.defer()
         gd = await db.guild_settings.find_one({"_id": self.guild.id}) or {}
-        history = gd.get("season_history", [])
+        history = _normalize_history_entries(gd.get("season_history", []))
         history_copy = list(history)
         history_copy.reverse()
         self.history_entries = history_copy
