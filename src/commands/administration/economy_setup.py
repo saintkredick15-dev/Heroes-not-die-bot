@@ -2,13 +2,20 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from commands.administration.economy_setup_extras import (
-    AuctionAddLotModal,
+    AuctionActiveAdminView,
+    AuctionAuditView,
     AuctionChannelSelect,
-    AuctionConfigModal,
+    AuctionLotTypeView,
     AuctionManageView,
+    AuctionPolicyModal,
     SeasonAnnounceChannelSelect,
     SeasonRolePositionSelect,
     ShopRolesView,
+    _build_audit_embed,
+    _build_queue_embed,
+    _load_auction_context,
+    _render_auction_admin,
+    _show_active_admin_view,
     build_shop_roles_embed,
 )
 from commands.administration import economy_setup_shared as _shared
@@ -26,6 +33,7 @@ E_FLAME = _shared.E_FLAME
 E_HELP = _shared.E_HELP
 E_INCOME = _shared.E_INCOME
 E_LEFT = _shared.E_LEFT
+E_PLUS = _shared.E_PLUS
 E_MINUS = _shared.E_MINUS
 E_RANDOM = _shared.E_RANDOM
 E_ROB = _shared.E_ROB
@@ -375,7 +383,6 @@ class GamblingModal(discord.ui.Modal, title=f"{E_SLOTS} Гемблінг"):
     max_rounds = discord.ui.TextInput(label="Ліміт раундів дуелі", max_length=3)
     casino_rtp = discord.ui.TextInput(label="Casino RTP % (0-100, 95=стандарт)", max_length=3)
     daily_cap  = discord.ui.TextInput(label="Ліміт виграшу/день (0=вимк)", max_length=10)
-    cooldown   = discord.ui.TextInput(label="Кулдаун між ставками сек (0=вимк)", max_length=6)
 
     def __init__(self, main_view, eco: dict):
         super().__init__()
@@ -385,7 +392,6 @@ class GamblingModal(discord.ui.Modal, title=f"{E_SLOTS} Гемблінг"):
         self.max_rounds.default = str(eco.get("duel_max_rounds", 9))
         self.casino_rtp.default = str(eco.get("casino_rtp", 95))
         self.daily_cap.default  = str(eco.get("gambling_daily_cap", 0))
-        self.cooldown.default   = str(eco.get("gambling_cooldown", 0))
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
@@ -395,7 +401,31 @@ class GamblingModal(discord.ui.Modal, title=f"{E_SLOTS} Гемблінг"):
                 "economy.duel_max_rounds":    int(self.max_rounds.value),
                 "economy.casino_rtp":         max(0, min(100, int(self.casino_rtp.value))),
                 "economy.gambling_daily_cap": int(self.daily_cap.value),
-                "economy.gambling_cooldown":  max(0, int(self.cooldown.value)),
+            }
+        except ValueError:
+            await interaction.response.send_message(f"{E_CROSS} Лише числа!", ephemeral=True)
+            return
+        await save_eco(interaction.guild.id, updates)
+        ctx = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
+        self.main_view.eco = get_eco(ctx)
+        await interaction.response.edit_message(
+            embed=build_category_embed(self.main_view.eco, "gambling"),
+            view=SetupCategoryView(self.main_view, "gambling")
+        )
+
+
+class GamblingCooldownModal(discord.ui.Modal, title="КД між ставками"):
+    cooldown = discord.ui.TextInput(label="Кулдаун між ставками, сек (0=вимк)", max_length=6)
+
+    def __init__(self, main_view, eco: dict):
+        super().__init__()
+        self.main_view = main_view
+        self.cooldown.default = str(eco.get("gambling_cooldown", 0))
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            updates = {
+                "economy.gambling_cooldown": max(0, int(self.cooldown.value)),
             }
         except ValueError:
             await interaction.response.send_message(f"{E_CROSS} Лише числа!", ephemeral=True)
@@ -463,6 +493,8 @@ class CategorySelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         cat = self.values[0]
         main_view = self.view
+        if cat == "auction":
+            return await _render_auction_admin(interaction, main_view)
         embed = build_category_embed(main_view.eco, cat)
         cat_view = SetupCategoryView(main_view, cat)
         await interaction.response.edit_message(embed=embed, view=cat_view)
@@ -598,6 +630,7 @@ class SetupCategoryView(discord.ui.View):
             self.add_item(b)
             
             self._add("Ставки, RTP і ліміти", discord.ButtonStyle.secondary, self._gambling_cb)
+            self._add("КД між ставками", discord.ButtonStyle.secondary, self._gambling_cooldown_cb)
             
             draw_refund   = eco.get("duel_draw_refund", True)
             draw_style    = discord.ButtonStyle.success if draw_refund else discord.ButtonStyle.secondary
@@ -650,15 +683,23 @@ class SetupCategoryView(discord.ui.View):
 
         elif category == "auction":
             self.add_item(AuctionChannelSelect(self.main_view))
-            self._add("Захист від снайпу", discord.ButtonStyle.secondary, self._auction_config_cb)
-            
-            add_lot_btn = discord.ui.Button(label="Додати лот", style=discord.ButtonStyle.primary, emoji=discord.PartialEmoji.from_str(_E.PLUS.value))
+            self._add("Політика ставок", discord.ButtonStyle.secondary, self._auction_config_cb)
+
+            add_lot_btn = discord.ui.Button(label="Додати лот", style=discord.ButtonStyle.secondary, emoji=discord.PartialEmoji.from_str(E_PLUS))
             add_lot_btn.callback = self._auction_add_lot_cb
             self.add_item(add_lot_btn)
-            
+
             manage_lot_btn = discord.ui.Button(label="Черга лотів", style=discord.ButtonStyle.secondary, emoji=discord.PartialEmoji.from_str(E_CLIPBOARD))
             manage_lot_btn.callback = self._auction_manage_cb
             self.add_item(manage_lot_btn)
+
+            active_btn = discord.ui.Button(label="Активний аукціон", style=discord.ButtonStyle.secondary, emoji=discord.PartialEmoji.from_str(E_AUCTION), row=1)
+            active_btn.callback = self._auction_active_cb
+            self.add_item(active_btn)
+
+            audit_btn = discord.ui.Button(label="Історія / audit", style=discord.ButtonStyle.secondary, emoji=discord.PartialEmoji.from_str(E_CLIPBOARD), row=1)
+            audit_btn.callback = self._auction_audit_cb
+            self.add_item(audit_btn)
 
         back = discord.ui.Button(
             label="Назад",
@@ -748,6 +789,7 @@ class SetupCategoryView(discord.ui.View):
     async def _rob_adv_cb(self, i):   await i.response.send_modal(RobAdvancedModal(self.main_view, self.main_view.eco))
     async def _crime_cb(self, i):     await i.response.send_modal(CrimeModal(self.main_view, self.main_view.eco))
     async def _gambling_cb(self, i):  await i.response.send_modal(GamblingModal(self.main_view, self.main_view.eco))
+    async def _gambling_cooldown_cb(self, i): await i.response.send_modal(GamblingCooldownModal(self.main_view, self.main_view.eco))
     async def _shop_cb(self, i):      await i.response.send_modal(ShopPricesModal(self.main_view, self.main_view.eco))
     async def _lootboxes_cb(self, i): await i.response.send_modal(LootboxesModal(self.main_view, self.main_view.eco))
     
@@ -787,22 +829,35 @@ class SetupCategoryView(discord.ui.View):
 
     async def _quests_cb(self, i):    await i.response.send_modal(QuestsModal(self.main_view, self.main_view.eco))
     async def _season_cb(self, i):    await i.response.send_modal(SeasonModal(self.main_view, self.main_view.eco))
-    async def _auction_config_cb(self, i): await i.response.send_modal(AuctionConfigModal(self.main_view, self.main_view.eco))
-    async def _auction_add_lot_cb(self, i): await i.response.send_modal(AuctionAddLotModal(self.main_view))
+    async def _auction_config_cb(self, i): await i.response.send_modal(AuctionPolicyModal(self.main_view, self.main_view.eco))
+    async def _auction_add_lot_cb(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(
+            embed=discord.Embed(
+                title=f"{E_AUCTION} Додати лот",
+                description="Оберіть тип лота. Для ролі відкриється окремий picker, для текстового лота — звичайна форма.",
+                color=EMBED_COLOR,
+            ),
+            view=AuctionLotTypeView(self.main_view),
+        )
     
     async def _auction_manage_cb(self, interaction: discord.Interaction):
-        ctx = await db.guild_settings.find_one({"_id": interaction.guild.id}) or {}
-        queue = ctx.get("auction_queue", [])
+        queue, active_doc, _ = await _load_auction_context(interaction.guild.id, self.main_view.eco)
         
         if not queue:
             return await interaction.response.send_message(f"{E_CROSS} Черга лотів порожня. Додайте спочатку лоти.", ephemeral=True)
-            
-        embed = discord.Embed(
-            title=f"{E_CLIPBOARD} Керування чергою Аукціону",
-            description=f"В черзі зараз лотів: **{len(queue)}**\nВиберіть лот у списку нижче, щоб запустити його або видалити.",
-            color=EMBED_COLOR
+
+        embed = _build_queue_embed(self.main_view.eco, interaction.guild, queue, active_doc)
+        await interaction.response.edit_message(embed=embed, view=AuctionManageView(self.main_view, queue, active_doc))
+
+    async def _auction_active_cb(self, interaction: discord.Interaction):
+        await _show_active_admin_view(interaction, self.main_view)
+
+    async def _auction_audit_cb(self, interaction: discord.Interaction):
+        _, active_doc, history = await _load_auction_context(interaction.guild.id, self.main_view.eco)
+        await interaction.response.edit_message(
+            embed=_build_audit_embed(self.main_view.eco, interaction.guild, active_doc, history),
+            view=AuctionAuditView(self.main_view),
         )
-        await interaction.response.edit_message(embed=embed, view=AuctionManageView(self.main_view, queue))
 
     async def _season_reset_now(self, interaction: discord.Interaction):
         

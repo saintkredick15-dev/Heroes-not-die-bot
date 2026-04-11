@@ -14,6 +14,7 @@ try:
     matplotlib.use("Agg")
     import matplotlib.dates as mdates
     import matplotlib.pyplot as plt
+    from matplotlib.ticker import MaxNLocator
 
     HAS_MATPLOTLIB = True
 except ImportError:
@@ -323,21 +324,39 @@ class DevStatsCommand(commands.Cog):
                     timestamps.insert(0, timestamps[0] - timedelta(hours=12))
                     totals.insert(0, max(0, int(totals[0] * 0.9)))
 
-                plt.style.use("dark_background")
                 fig, ax = plt.subplots(figsize=(8, 4))
-                ax.plot(timestamps, totals, color="#5865F2", marker="o", linestyle="-", linewidth=2, markersize=4)
-                ax.fill_between(timestamps, totals, alpha=0.2, color="#5865F2")
-                ax.set_title("Грошова маса в обороті", color="white")
-                ax.set_ylabel("Монети", color="lightgray")
+                fig.patch.set_facecolor("#FFFFFF")
+                ax.set_facecolor("#FFFFFF")
+                ax.plot(
+                    timestamps,
+                    totals,
+                    color="#4F46E5",
+                    marker="o",
+                    linestyle="-",
+                    linewidth=2.6,
+                    markersize=5,
+                    markerfacecolor="#4F46E5",
+                    markeredgecolor="#FFFFFF",
+                    markeredgewidth=1.2,
+                )
+                ax.fill_between(timestamps, totals, alpha=0.14, color="#818CF8")
+                ax.set_title("Грошова маса в обороті", color="#111827", fontsize=12, fontweight="bold", pad=12)
+                ax.set_ylabel("Монети", color="#4B5563")
                 ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d %H:%M"))
-                plt.xticks(rotation=45)
-                ax.grid(True, linestyle="--", alpha=0.3)
-                for spine in ax.spines.values():
-                    spine.set_visible(False)
+                ax.yaxis.set_major_locator(MaxNLocator(nbins=5, integer=True))
+                ax.tick_params(axis="x", colors="#6B7280", labelsize=8, rotation=30)
+                ax.tick_params(axis="y", colors="#6B7280", labelsize=8)
+                ax.grid(True, linestyle="--", linewidth=0.8, alpha=0.45, color="#D1D5DB")
+                ax.set_axisbelow(True)
+                ax.spines["top"].set_visible(False)
+                ax.spines["right"].set_visible(False)
+                ax.spines["left"].set_color("#E5E7EB")
+                ax.spines["bottom"].set_color("#E5E7EB")
+                ax.margins(x=0.03)
                 plt.tight_layout()
 
                 buf = io.BytesIO()
-                plt.savefig(buf, format="png", facecolor="#2b2d31", edgecolor="none")
+                plt.savefig(buf, format="png", facecolor="#FFFFFF", edgecolor="none", dpi=160)
                 buf.seek(0)
                 plt.close(fig)
 

@@ -33,9 +33,13 @@ EXCLUDED_RESTRICTION_COMMANDS = {
 
 PERSONAL_ONLY_COMMANDS = {
     "avatar",
+    "auction",
     "daily",
+    "faq",
+    "help",
     "meme",
     "profile",
+    "warnings",
 }
 
 

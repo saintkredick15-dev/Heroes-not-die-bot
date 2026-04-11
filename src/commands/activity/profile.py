@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import discord
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 from discord import app_commands
 from discord.ext import commands
 
@@ -76,15 +77,37 @@ class ProfileCommands(commands.Cog):
             values = [history.get(day.strftime("%Y-%m-%d"), 0) for day in days]
 
             fig, ax = plt.subplots(figsize=(8, 4))
-            ax.plot(labels, values, marker="o", linestyle="-", color="royalblue", linewidth=2)
-            ax.set_title("Активність (XP за останні 7 днів)", fontsize=11)
-            ax.set_xlabel("День тижня")
-            ax.set_ylabel("Отримано XP")
-            ax.grid(True, color="darkgray", alpha=0.5)
+            fig.patch.set_facecolor("#FFFFFF")
+            ax.set_facecolor("#FFFFFF")
+            ax.plot(
+                labels,
+                values,
+                marker="o",
+                linestyle="-",
+                color="#2563EB",
+                linewidth=2.6,
+                markersize=5,
+                markerfacecolor="#2563EB",
+                markeredgecolor="#FFFFFF",
+                markeredgewidth=1.2,
+            )
+            ax.fill_between(labels, values, color="#93C5FD", alpha=0.2)
+            ax.set_title("Активність за 7 днів", fontsize=12, color="#111827", fontweight="bold", pad=12)
+            ax.set_ylabel("Отримано XP", color="#4B5563")
+            ax.yaxis.set_major_locator(MaxNLocator(nbins=5, integer=True))
+            ax.tick_params(axis="x", colors="#6B7280", labelsize=9)
+            ax.tick_params(axis="y", colors="#6B7280", labelsize=8)
+            ax.grid(True, linestyle="--", linewidth=0.8, color="#D1D5DB", alpha=0.45)
+            ax.set_axisbelow(True)
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.spines["left"].set_color("#E5E7EB")
+            ax.spines["bottom"].set_color("#E5E7EB")
+            ax.margins(x=0.03)
             plt.tight_layout()
 
             buf = io.BytesIO()
-            plt.savefig(buf, format="png")
+            plt.savefig(buf, format="png", facecolor="#FFFFFF", edgecolor="none", dpi=160)
             plt.close(fig)
             buf.seek(0)
 

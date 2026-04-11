@@ -124,6 +124,8 @@ DEFAULT_ECO = {
     "season_history": [],
     "auction_channel_id": 0,
     "auction_anti_snipe_seconds": 30,
+    "auction_min_increment": 100,
+    "auction_step_presets": [100, 1000, 5000],
     "fund_enabled": False,
     "fund_goal": 1000000,
     "fund_current": 0,
@@ -292,6 +294,7 @@ def build_main_embed(eco: dict) -> discord.Embed:
             compact_kv("Ролі магазину", f"`{shop_roles}`"),
             compact_kv("Аукціон", auction_channel),
             compact_kv("Захист від снайпу", f"`{eco.get('auction_anti_snipe_seconds', 30)}с`"),
+            compact_kv("Мін. крок ставки", f"`{eco.get('auction_min_increment', 100):,}` {curr}"),
         ],
     )
     return embed
@@ -388,6 +391,7 @@ def build_category_embed(eco: dict, category: str) -> discord.Embed:
         gamb_str = f"{E_CHECK} Увімкнено" if eco["gambling_enabled"] else f"{E_CROSS} Вимкнено"
         duel_timer = eco.get("duel_timer", 15)
         duel_max = eco.get("duel_max_rounds", 9)
+        gambling_cd = eco.get("gambling_cooldown", 0)
         duel_en = f"{E_CHECK} Увімкнено" if eco.get("duel_enabled", True) else f"{E_CROSS} Вимк."
         draw_refund = eco.get("duel_draw_refund", True)
         draw_str = f"{E_CHECK} Повертаються" if draw_refund else f"{E_CROSS} Згорають"
@@ -396,6 +400,7 @@ def build_category_embed(eco: dict, category: str) -> discord.Embed:
         embed.description = (
             f"{E_SLOTS} **Казино:** {gamb_str} • **Макс. ставка:** `{eco['gambling_max_bet']:,}` {curr}\n"
             f"**RTP:** `{rtp_str}` • **Ліміт/день:** `{cap_str}`\n"
+            f"{E_CLOCK} **КД між ставками:** `{gambling_cd}с`\n"
             f"{E_SWORDS} **Дуелі:** {duel_en}\n"
             f"{E_CLOCK} Таймер ходу: `{duel_timer}с`\n"
             f"{E_SWORDS} Ліміт раундів: `{duel_max}`\n"
@@ -468,9 +473,15 @@ def build_category_embed(eco: dict, category: str) -> discord.Embed:
     elif category == "auction":
         auc_channel = f"<#{eco['auction_channel_id']}>" if eco.get("auction_channel_id", 0) > 0 else f"{E_CROSS} Не встановлено"
         snipe_sec = eco.get("auction_anti_snipe_seconds", 30)
+        min_increment = eco.get("auction_min_increment", 100)
+        step_presets = eco.get("auction_step_presets", [100, 1000, 5000])
+        steps_str = ", ".join(f"`+{int(step):,}`" for step in step_presets if isinstance(step, int) or str(step).isdigit()) or "`+100`, `+1,000`, `+5,000`"
         embed.description = (
             f"**Канал аукціону:** {auc_channel}\n"
-            f"**Таймер захисту від снайпу:** `{snipe_sec}с`"
+            f"**Антиснайп:** `{snipe_sec}с`\n"
+            f"**Мінімальний крок:** `{min_increment:,}` {curr}\n"
+            f"**Кнопки підвищення:** {steps_str}\n\n"
+            "Лоти додаються в чергу окремо, а запуск у канал робиться вручну через керування чергою."
         )
     elif category == "games":
         enabled = eco.get("enabled_minigames", ["math", "higher_lower", "shell", "dice", "odd_emoji", "unscramble", "trivia", "typing", "guess", "reaction"])

@@ -73,6 +73,53 @@ AUTOMOD_PRESETS = {
 
 PRESET_MAP = {"economy": ECONOMY_PRESETS, "automod": AUTOMOD_PRESETS}
 
+PRESET_META = {
+    "economy": {
+        "casual": {
+            "description": "Щедріші нагороди, вищі ставки й швидкий старт.",
+            "fit": "Підійде лайтовим серверам, де важлива легка економіка й швидкий фан.",
+        },
+        "balanced": {
+            "description": "Нейтральний дефолт без перекосу в жорсткість чи халяву.",
+            "fit": "Підійде більшості серверів як базовий стартовий режим.",
+        },
+        "grindy": {
+            "description": "Повільніший прогрес, менше халяви й більше фарму.",
+            "fit": "Підійде серверам, де прогрес має відчуватись довшим і важчим.",
+        },
+        "community": {
+            "description": "Акцент на квести, сезон і спільні системи сервера.",
+            "fit": "Підійде активним ком'юніті, де важлива групова участь, а не тільки особистий фарм.",
+        },
+        "competitive": {
+            "description": "Жорсткіша економіка з акцентом на ризик і конкуренцію.",
+            "fit": "Підійде серверам, де хочеться напруги, лідерборду й боротьби за позиції.",
+        },
+        "creator": {
+            "description": "Більше руху, фонду й квестів, без сезону як основного стрижня.",
+            "fit": "Підійде creator/community серверам, де економіка підтримує активність навколо контенту.",
+        },
+        "roleplay": {
+            "description": "Помірна економіка з банком, сезоном і довшими циклами.",
+            "fit": "Підійде roleplay або лорним серверам, де важливі темп, статус і довша дистанція прогресу.",
+        },
+    },
+    "automod": {
+        "relaxed": {
+            "description": "М'який фільтр без зайвого тиску на звичайний чат.",
+            "fit": "Підійде дружнім серверам, де не хочеться агресивного автомоду.",
+        },
+        "balanced": {
+            "description": "Помірний контроль спаму, лінків і шуму.",
+            "fit": "Підійде більшості серверів як базовий адекватний режим автомоду.",
+        },
+        "strict": {
+            "description": "Жорсткий антиспам і швидка реакція на токсичний шум.",
+            "fit": "Підійде великим або проблемним серверам із високим ризиком сміття.",
+        },
+    },
+}
+
 AUTOMOD_DEFAULTS = {key: False for key in AUTOMOD_MODULES}
 for values in AUTOMOD_SETTINGS.values():
     for setting_key, meta in values.items():
@@ -163,6 +210,18 @@ def _build_diff_lines(current: dict, patch: dict, limit: int = 5) -> list[str]:
     if len(lines) > limit:
         lines = lines[:limit] + [f"+{len(lines) - limit} змін"]
     return lines or ["Ефективних змін значень не виявлено."]
+
+
+def _preset_lines(module: str) -> list[str]:
+    presets = PRESET_MAP.get(module, {})
+    meta_map = PRESET_META.get(module, {})
+    if not presets:
+        return [f"{E_CROSS} Немає пресетів"]
+    lines = []
+    for name in presets:
+        desc = meta_map.get(name, {}).get("description")
+        lines.append(f"`{name}` — {desc}" if desc else f"`{name}`")
+    return lines
 
 
 def _export_payload(module: str, payload: dict) -> dict:
@@ -594,8 +653,7 @@ def _build_embed(guild: discord.Guild, payloads: dict[str, dict], module: str | 
         restricted = [f"`/{name}`" for name, channels in payloads[module].get("command_restrictions", {}).items() if channels]
         add_section(embed, "Обмеження", [_trim_preview(restricted, limit=5)])
 
-    presets = ", ".join(f"`{name}`" for name in PRESET_MAP.get(module, {})) or f"{E_CROSS} Немає пресетів"
-    add_section(embed, "Пресети", [presets])
+    add_section(embed, "Пресети", _preset_lines(module))
     set_surface_footer(embed, "admin", "Імпорт приймає лише часткові JSON-патчі.")
     return embed
 
@@ -619,7 +677,11 @@ class ModuleSelect(discord.ui.Select):
 
 class PresetSelect(discord.ui.Select):
     def __init__(self, module: str):
-        options = [discord.SelectOption(label=name, value=name) for name in PRESET_MAP[module]]
+        options = []
+        meta_map = PRESET_META.get(module, {})
+        for name in PRESET_MAP[module]:
+            description = meta_map.get(name, {}).get("description", "")
+            options.append(discord.SelectOption(label=name, value=name, description=description[:100] if description else None))
         super().__init__(placeholder="Застосувати пресет...", min_values=1, max_values=1, options=options, row=1)
         self.module = module
 

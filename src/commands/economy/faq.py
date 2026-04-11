@@ -104,6 +104,30 @@ FAQ_DATA = {
             "**Що важливо знати:**\n"
             "Кнопка `Інфо` показує поточний стан кімнати, а `Оновити` в цій картці перечитує його після змін."
         )
+    },
+    "presets_config": {
+        "title": f"{E_INFO} Presets / Config",
+        "desc": (
+            "`/config` — це швидкий центр керування модулями сервера: пресети, імпорт, експорт і базові редактори.\n\n"
+            "**Що таке пресети:**\n"
+            "Пресет — це готовий стартовий набір значень. Він не магічний і не фінальний: це нормальна база, від якої вже можна підкрутити цифри під свій сервер.\n\n"
+            "**Economy presets:**\n"
+            "• `balanced` — найкращий дефолт для більшості серверів\n"
+            "• `casual` — щедріше, швидше, легше для старту\n"
+            "• `grindy` — повільніший і жорсткіший прогрес\n"
+            "• `community` — більше акценту на квестах, сезоні й спільних системах\n"
+            "• `competitive` — більше ризику, тиску й боротьби за лідерборд\n"
+            "• `creator` — підходить серверам навколо контенту й активності спільноти\n"
+            "• `roleplay` — довший темп, банк, сезон і більш атмосферний ритм прогресу\n\n"
+            "**Automod presets:**\n"
+            "• `relaxed` — м'який режим без зайвого тиску\n"
+            "• `balanced` — нормальний базовий режим для більшості серверів\n"
+            "• `strict` — жорсткий режим для великих або проблемних серверів\n\n"
+            "**Що брати, якщо не знаєте:**\n"
+            "Для економіки — `balanced`.\n"
+            "Для автомоду — `balanced`.\n"
+            "Після цього вже дивіться по фактичній поведінці сервера, а не по теорії."
+        )
     }
 }
 
@@ -116,6 +140,7 @@ class FaqSelect(discord.ui.Select):
             discord.SelectOption(label="Tickets", description="ticket_setup, claim, close, transcript", value="tickets", emoji=discord.PartialEmoji.from_str(E_ROLE)),
             discord.SelectOption(label="Moderation", description="warn, warnings, warns, unwarn", value="moderation", emoji=discord.PartialEmoji.from_str(Emojis.HAMMER.value)),
             discord.SelectOption(label="Voice Rooms", description="room-setup і приватні voice-room канали", value="voice_rooms", emoji=discord.PartialEmoji.from_str(E_BANK)),
+            discord.SelectOption(label="Presets / Config", description="що таке пресети і який стартовий режим обрати", value="presets_config", emoji=discord.PartialEmoji.from_str(E_INFO)),
         ]
         super().__init__(placeholder="Виберіть розділ для навчання...", options=options)
 
@@ -147,7 +172,7 @@ class FaqCommand(commands.Cog):
             title=f"{E_INFO} Навчання та FAQ по боту",
             description=(
                 "Тут зібрані короткі пояснення по основних системах бота.\n\n"
-                "У селекті нижче є Economy, XP / Levels, Tickets, Moderation і Voice Rooms. "
+                "У селекті нижче є Economy, XP / Levels, Tickets, Moderation, Voice Rooms і Presets / Config. "
                 "Кожен розділ коротко пояснює, де це налаштовується, як цим користуватись і що важливо знати."
             ),
             color=COLOR
