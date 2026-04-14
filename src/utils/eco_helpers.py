@@ -64,6 +64,20 @@ def fmt_duration(seconds: int) -> str:
     if h: return f"{h}г"
     return f"{m}хв"
 
+def fmt_duration(seconds: int) -> str:
+    seconds = max(0, int(seconds))
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    parts = []
+    if h:
+        parts.append(f"{h}г")
+    if m:
+        parts.append(f"{m}хв")
+    if s and not h:
+        parts.append(f"{s}с")
+    return " ".join(parts) or "0с"
+
+
 def calculate_tax(base_amount: int, wallet: int, bank: int) -> tuple[int, int, str]:
     # Рахуємо податок на багатство, щоб багатії не фармили занадто багато
     from config.constants import EcoOptions

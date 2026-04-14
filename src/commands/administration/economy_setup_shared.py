@@ -65,6 +65,7 @@ DEFAULT_ECO = {
     "daily_amount": 200,
     "daily_streak_bonus": 50,
     "daily_cooldown": 86400,
+    "daily_cooldown_unit": "seconds",
     "captcha_enabled": False,
     "crime_enabled": True,
     "crime_cooldown": 28800,
@@ -134,6 +135,8 @@ DEFAULT_ECO = {
     "enabled_minigames": ["math", "higher_lower", "shell", "dice", "odd_emoji", "unscramble", "trivia", "typing", "guess", "reaction"],
 }
 
+LEGACY_DAILY_COOLDOWN_HOURS = {1, 2, 3, 4, 6, 8, 12, 24, 36, 48, 72, 96, 120, 144, 168}
+
 
 def parse_duration(value: str) -> int:
     import re
@@ -195,9 +198,40 @@ def normalize_currency_emoji(value) -> str:
     return CANONICAL_COIN
 
 
+def fmt_duration(seconds: int) -> str:
+    seconds = max(0, int(seconds))
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    parts = []
+    if h:
+        parts.append(f"{h}г")
+    if m:
+        parts.append(f"{m}хв")
+    if s and not h:
+        parts.append(f"{s}с")
+    return " ".join(parts) or "0с"
+
+
+def normalize_daily_cooldown_seconds(eco: dict) -> int:
+    raw = int(eco.get("daily_cooldown", DEFAULT_ECO["daily_cooldown"]) or DEFAULT_ECO["daily_cooldown"])
+    unit = str(eco.get("daily_cooldown_unit") or "").strip().lower()
+
+    if unit == "hours":
+        return max(1, raw) * 3600
+    if unit == "seconds":
+        return max(1, raw)
+
+    # Narrow fallback for old hour-based configs that existed before second-based setup.
+    if raw in LEGACY_DAILY_COOLDOWN_HOURS:
+        return raw * 3600
+    return max(1, raw)
+
+
 def get_eco(settings: dict) -> dict:
     eco = {**DEFAULT_ECO, **settings.get("economy", {})}
     eco["currency_emoji"] = normalize_currency_emoji(eco.get("currency_emoji"))
+    eco["daily_cooldown"] = normalize_daily_cooldown_seconds(eco)
+    eco["daily_cooldown_unit"] = "seconds"
     return eco
 
 
@@ -208,9 +242,15 @@ async def save_eco(guild_id: int, updates: dict):
     for key, value in list(normalized_updates.items()):
         if key.endswith("currency_emoji"):
             normalized_updates[key] = normalize_currency_emoji(value)
+        elif key == "economy.daily_cooldown":
+            normalized_updates[key] = max(1, int(value))
+            normalized_updates["economy.daily_cooldown_unit"] = "seconds"
         elif key == "economy" and isinstance(value, dict):
             normalized_economy = dict(value)
             normalized_economy["currency_emoji"] = normalize_currency_emoji(normalized_economy.get("currency_emoji"))
+            if "daily_cooldown" in normalized_economy:
+                normalized_economy["daily_cooldown"] = max(1, int(normalized_economy["daily_cooldown"]))
+                normalized_economy["daily_cooldown_unit"] = "seconds"
             normalized_updates[key] = normalized_economy
 
     await db.guild_settings.update_one({"_id": guild_id}, {"$set": normalized_updates}, upsert=True)

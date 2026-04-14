@@ -29,6 +29,7 @@ E_COLOR = "<:palette:1485608515409285140>"
 E_BG = "<:svgviewerpngoutput20260324T19312:1486069946634207292>"
 E_CROSS = "<:close:1485598320935174317>"
 E_COPY = "<:copy:1486419992109908039>"
+GOODBYE_SUPPRESS_SECONDS = 90
 
 
 async def get_greetings_settings(guild_id: int) -> dict:
@@ -409,6 +410,11 @@ class GreetingsSettings(commands.Cog):
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member):
         if not member.bot:
+            joined_at = member.joined_at
+            if joined_at is not None:
+                lifetime = (discord.utils.utcnow() - joined_at).total_seconds()
+                if lifetime < GOODBYE_SUPPRESS_SECONDS:
+                    return
             await self._process_greeting(member, "goodbye")
 
     @commands.Cog.listener()
