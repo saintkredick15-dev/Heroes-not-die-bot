@@ -4,12 +4,13 @@ from discord.ext import commands
 import time
 import random
 import string
+from pathlib import Path
 from io import BytesIO
 
 try:
-    from captcha.image import ImageCaptcha
+    from PIL import Image, ImageDraw, ImageFilter, ImageFont
 except ImportError:
-    ImageCaptcha = None
+    Image = ImageDraw = ImageFilter = ImageFont = None
 
 from commands.administration.economy_setup_shared import get_eco, normalize_currency_emoji
 from config.constants import Emojis as _E
@@ -40,6 +41,87 @@ def _daily_cooldown_seconds(eco: dict) -> int:
     raw = int(eco.get("daily_cooldown", 86400) or 86400)
     # Legacy configs could store hours; current config stores seconds.
     return raw * 3600 if 0 < raw <= 168 else raw
+
+
+def _captcha_runtime_available() -> bool:
+    return all(part is not None for part in (Image, ImageDraw, ImageFilter, ImageFont))
+
+
+def _load_captcha_font(size: int):
+    font_candidates = [
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+        Path("/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf"),
+        Path("C:/Windows/Fonts/arialbd.ttf"),
+        Path("C:/Windows/Fonts/ARIALBD.TTF"),
+    ]
+    for candidate in font_candidates:
+        try:
+            if candidate.exists():
+                return ImageFont.truetype(str(candidate), size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def _generate_captcha_image(text: str) -> bytes:
+    if not _captcha_runtime_available():
+        raise RuntimeError("Captcha runtime unavailable")
+
+    width, height = 300, 110
+    image = Image.new("RGBA", (width, height), (248, 249, 251, 255))
+    draw = ImageDraw.Draw(image)
+
+    for _ in range(8):
+        draw.line(
+            (
+                random.randint(0, width),
+                random.randint(0, height),
+                random.randint(0, width),
+                random.randint(0, height),
+            ),
+            fill=(210, 214, 220, 255),
+            width=random.randint(1, 3),
+        )
+
+    for _ in range(140):
+        x = random.randint(0, width - 1)
+        y = random.randint(0, height - 1)
+        image.putpixel(
+            (x, y),
+            (
+                random.randint(175, 230),
+                random.randint(175, 230),
+                random.randint(175, 230),
+                255,
+            ),
+        )
+
+    font = _load_captcha_font(42)
+    char_gap = 46
+    start_x = 28
+    base_y = 24
+    for index, char in enumerate(text):
+        char_layer = Image.new("RGBA", (70, 80), (255, 255, 255, 0))
+        char_draw = ImageDraw.Draw(char_layer)
+        char_draw.text((12, 10), char, font=font, fill=(28, 31, 36, 255))
+        rotated = char_layer.rotate(
+            random.randint(-18, 18),
+            resample=Image.Resampling.BICUBIC,
+            expand=True,
+        )
+        image.alpha_composite(
+            rotated,
+            (
+                start_x + index * char_gap + random.randint(-3, 3),
+                base_y + random.randint(-6, 6),
+            ),
+        )
+
+    image = image.convert("RGB").filter(ImageFilter.GaussianBlur(radius=0.35))
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    buffer.seek(0)
+    return buffer.read()
 
 class CaptchaModal(discord.ui.Modal, title="Перевірка на людяність"):
     captcha_input = discord.ui.TextInput(
@@ -166,14 +248,18 @@ class DailyCommand(commands.Cog):
                 await interaction.response.send_message(f"{E_HOURGLASS} Ти вже отримав свою щоденну нагороду! Повертайся через **{time_str}**.", ephemeral=True)
                 return
 
-            if eco.get("captcha_enabled", False) and ImageCaptcha:
+            if eco.get("captcha_enabled", False):
+                if not _captcha_runtime_available():
+                    await interaction.response.send_message(
+                        f"{E_WARN} Капча увімкнена, але captcha-runtime недоступний. Daily не буде видано, доки staff не виправить генератор.",
+                        ephemeral=True,
+                    )
+                    return
+
                 chars = string.ascii_uppercase + string.digits
                 captcha_text = ''.join(random.choices(chars, k=5))
-                
-                image = ImageCaptcha(width=280, height=90, font_sizes=(42, 50, 56))
-                data = image.generate(captcha_text)
-                image_bytes = data.read()
-                
+
+                image_bytes = _generate_captcha_image(captcha_text)
                 file = discord.File(fp=BytesIO(image_bytes), filename="captcha.png")
                 embed = surface_embed(
                     "gameplay",
