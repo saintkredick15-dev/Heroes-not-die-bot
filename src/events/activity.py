@@ -12,6 +12,7 @@ from config.constants import Emojis
 from modules.db import get_database, get_guild_settings, get_user_data, invalidate_user_data
 from repositories.user import get_level_xp, get_user, update_user
 from services.metrics import mark_user_active
+from services.stats_contract import analytics_day_key
 from utils.activity_config import DEFAULT_ACTIVITY, get_activity_config, sync_member_reward_roles
 from utils.eco_helpers import add_daily_earnings_inc
 from utils.ui_contract import surface_embed
@@ -313,6 +314,11 @@ class ActivityEvents(commands.Cog):
                 await db.users.bulk_write(operations, ordered=False)
                 for member in members_to_process:
                     await invalidate_user_data(guild.id, member.id)
+                await db.guild_analytics.update_one(
+                    {"guild_id": guild.id, "date": analytics_day_key()},
+                    {"$inc": {"voice_minutes": len(members_to_process)}},
+                    upsert=True,
+                )
 
             updated_docs = {
                 doc["user_id"]: doc

@@ -15,6 +15,7 @@ from discord.ext import commands, tasks
 from config.constants import Emojis
 from modules.db import get_database
 from services.stats_contract import aggregate_guild_analytics, aggregate_guild_analytics_lifetime, analytics_day_key
+from utils.eco_helpers import sum_recent_daily_earnings
 
 db = get_database()
 _col_settings = db.guild_settings
@@ -37,6 +38,13 @@ async def _inc_analytics(guild_id: int, fields: dict[str, int]) -> None:
         {"$inc": fields},
         upsert=True,
     )
+
+
+async def _sum_period_economy(guild_id: int, days: int) -> int:
+    total = 0
+    async for doc in db.users.find({"guild_id": guild_id}, {"economy_daily_earnings": 1}):
+        total += sum_recent_daily_earnings(doc, days)
+    return total
 
 
 def _timeout_is_active(member: discord.Member) -> bool:
@@ -78,7 +86,7 @@ async def _build_stats_embed(guild: discord.Guild, days: int) -> discord.Embed:
     bans = result["bans"]
     unbans = result["unbans"]
     mod_actions_total = result["mod_actions_total"]
-    economy = result["economy_given"]
+    economy = await _sum_period_economy(guild.id, days)
     hypothetical_members = max(0, guild.member_count + lifetime["leaves"])
     period_start = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
     next_report = now + timedelta(days=days)
